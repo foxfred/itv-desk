@@ -116,7 +116,7 @@ if "--update-only" in sys.argv:
         L.append('if exist "' + real_internal + '" (rd /s /q "' + real_internal + '")')
         L.append('if exist "' + real_internal + '" (echo [updater] _internal locked retry >> "' + log_path + '" & ping 127.0.0.1 -n 4 > nul & rd /s /q "' + real_internal + '")')
         L.append('xcopy "' + _os.path.join(main_root, "_internal") + '" "' + real_internal + '" /e /i /y /q >> "' + log_path + '" 2>&1')
-        L.append('for /d %%d in ("' + main_root + '\\*") do (if not "%%~nxd"=="_internal" xcopy "%%d" "' + app_dir + '\\%%~nxd" /e /i /y /q >> "' + log_path + '" 2>&1)')
+        L.append('for /d %%d in ("' + main_root + '\\*") do (if not "%%~nxd"=="_internal" (if not exist "' + app_dir + '\\%%~nxd" mkdir "' + app_dir + '\\%%~nxd" & xcopy "%%d" "' + app_dir + '\\%%~nxd\\" /e /i /y /q >> "' + log_path + '" 2>&1))')
         L.append('for %%f in ("' + main_root + '\\*") do (if not "%%~nxf"=="_internal" (echo f | copy /y "%%f" "' + app_dir + '\\" >> "' + log_path + '" 2>&1))')
         for _d in roots:
             if _d is main_root:
@@ -125,9 +125,18 @@ if "--update-only" in sys.argv:
             if _os.path.isdir(mpm):
                 L.append('if not exist "' + real_internal + '\\mpv" mkdir "' + real_internal + '\\mpv"')
                 L.append('xcopy "' + mpm + '" "' + real_internal + '\\mpv" /e /i /y /q >> "' + log_path + '" 2>&1')
+        # 回迁用户数据：备份根下保存的是「原名字原结构」——子目录(如 logos)整目录、
+        # 文件则平铺。逐项精确回迁，子目录目标带尾斜杠保证进目录而非平铺。
         if _os.path.isdir(backup_dir):
-            L.append('for /d %%d in ("' + backup_dir + '\\*") do (echo f | xcopy "%%d" "' + app_dir + '\\" /e /i /y /q >> "' + log_path + '" 2>&1)')
-            L.append('for %%f in ("' + backup_dir + '\\*") do (echo f | copy /y "%%f" "' + app_dir + '\\" >> "' + log_path + '" 2>&1)')
+            for _it in sorted(_os.listdir(backup_dir)):
+                _bs = _os.path.join(backup_dir, _it)
+                if _os.path.isdir(_bs):
+                    # 目录(如 logos/) → xcopy 到 app_dir/<name>/，带尾斜杠，/e 含空子目录
+                    L.append('if not exist "' + app_dir + '\\' + _it + '" mkdir "' + app_dir + '\\' + _it + '"')
+                    L.append('xcopy "' + _bs + '" "' + app_dir + '\\' + _it + '\\" /e /i /y /q >> "' + log_path + '" 2>&1')
+                else:
+                    # 文件 → copy 平铺到根目录
+                    L.append('echo f | copy /y "' + _bs + '" "' + app_dir + '\\" >> "' + log_path + '" 2>&1')
         L.append('rd /s /q "' + tmp_root + '" >nul 2>&1')
         L.append('cd /d "' + app_dir + '"')
         L.append('start "" "' + exe_path + '"')
