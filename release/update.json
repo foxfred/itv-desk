@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "notes": "iTV Desk v1.0.0 首个公开版本",
+  "version": "1.0.1",
+  "notes": "iTV Desk v1.0.1 测试更新链路（版本号高于程序 1.0.0 以触发更新检测）",
   "packages": [
     {
       "name": "itv-desk_1.0.0_core.zip",
