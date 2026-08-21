@@ -246,6 +246,7 @@
                     <span v-if="(row.source_tags || {})[u]" class="src-tag src-tag-channel" :title="(row.source_tags || {})[u]">{{ (row.source_tags || {})[u] }}</span>
                     <span v-if="(row.source_is_fake_live || {})[u]" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
                     <span class="src-url" :title="u">{{ shortUrl(u) }}</span>
+                    <span v-html="sourceMsDisplay(row, u)"></span>
                     <el-button size="small" text type="primary" @click.stop="playSourceInline(row, u)">播放</el-button>
                     <el-button size="small" text type="danger" @click.stop="deleteSourceInline(row, u)">删除</el-button>
                   </div>
@@ -255,6 +256,7 @@
                   <span v-if="(row.source_tags || {})[u]" class="src-tag src-tag-channel" :title="(row.source_tags || {})[u]">{{ (row.source_tags || {})[u] }}</span>
                   <span v-if="(row.source_is_fake_live || {})[u]" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
                     <span class="src-url" :title="u">{{ shortUrl(u) }}</span>
+                    <span v-html="sourceMsDisplay(row, u)"></span>
                     <el-button size="small" text type="primary" @click.stop="playSourceInline(row, u)">播放</el-button>
                     <el-button size="small" text type="danger" @click.stop="deleteSourceInline(row, u)">删除</el-button>
                 </div>
@@ -1356,6 +1358,17 @@ function shortUrl(u) {
     return u.length > 48 ? u.slice(0, 48) + '…' : u
   }
 }
+// 子源延迟/健康信息：从聚合频道的 source_health 读取每个源的独立检测结果
+function sourceHealth(row, u) {
+  return (row.source_health || {})[u] || null
+}
+function sourceMsDisplay(row, u) {
+  const h = sourceHealth(row, u)
+  if (!h) return ''
+  if (h.status === '离线') return '<span class="src-ms src-ms-off">离线</span>'
+  if (h.ms || h.ms === 0) return `<span class="src-ms">${h.ms}ms</span>`
+  return ''
+}
 function standaloneSources(row) {
   const grouped = new Set((row.source_groups || []).flatMap(g => g.urls || []))
   const srcs = (row.sources && row.sources.length) ? row.sources : [row.url]
@@ -2448,6 +2461,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .src-tag-channel { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--el-color-warning); color: var(--el-color-black); }
 .src-tag-fake { background: var(--el-color-danger); color: #fff; }
 .src-url { flex: 1; min-width: 0; font-size: 12px; color: var(--el-text-color-regular); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.src-ms { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--el-color-success); }
+.src-ms-off { color: var(--el-color-danger); }
 .src-empty { padding: 6px 12px 6px 38px; font-size: 12px; color: var(--el-text-color-secondary); }
 .src-empty .src-tag-line { margin: 0; }
 .src-count { cursor: pointer; font-weight: 600; }

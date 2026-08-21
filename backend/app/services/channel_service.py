@@ -438,6 +438,24 @@ class ChannelService:
                         if u and u not in src_set:
                             src_set.append(u)
                 canonical["sources"] = src_set
+                # 合并各成员的分源健康/延迟：source_health = {url: {status,ms,res,quality,code}},
+                # 供前端在聚合频道展开子源时按源显示延迟与状态
+                merged_sh = {}
+                for m in members:
+                    for u, h in (m.get("source_health") or {}).items():
+                        if isinstance(h, dict) and (not merged_sh.get(u) or (h.get("ms") and str(h.get("ms")) != "-")):
+                            merged_sh[u] = h
+                if merged_sh:
+                    canonical["source_health"] = merged_sh
+                # 合并各成员的分源健康/延迟：source_health = {url: {status,ms,res,quality,code}}，
+                # 供前端在聚合频道展开子源时按源显示延迟与状态
+                merged_sh = {}
+                for m in members:
+                    for u, h in (m.get("source_health") or {}).items():
+                        if isinstance(h, dict) and (not merged_sh.get(u) or (h.get("ms") and str(h.get("ms")) != "-")):
+                            merged_sh[u] = h
+                if merged_sh:
+                    canonical["source_health"] = merged_sh
                 # 合并标记：按每个源 URL 保留其 tag / fake-live，写入全局 db，
                 # 让聚合后仍能单独修改每一行的标记。
                 from app.main import tag_db, fake_live_db

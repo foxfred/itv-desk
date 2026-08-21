@@ -1,12 +1,12 @@
 {
-  "version": "1.0.1",
-  "notes": "iTV Desk v1.0.1：全自动内嵌更新器（退出即自动安装并重启，零手动）",
+  "version": "1.0.2",
+  "notes": "iTV Desk v1.0.2：聚合源延迟显示 + 全自动更新",
   "packages": [
     {
-      "name": "itv-desk_1.0.1_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.1_core.zip",
-      "sha256": "e5d79f3b18af48e683da80a168e0fda24a7ea5ae985cc8871a3e5933ef9b9462",
-      "size": 44049207,
+      "name": "itv-desk_1.0.2_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.2_core.zip",
+      "sha256": "5f6da17b459767ef7a32e0a28e101046a61273275c1b0f80910a5c0fe4478ce9",
+      "size": 43980566,
       "role": "main"
     },
     {
