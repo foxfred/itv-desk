@@ -16,6 +16,173 @@ import threading
 import time
 import zipfile
 
+# --update-only 模式：作为内嵌更新器运行，不走正常启动。
+# 必须在 import webview 等重模块之前拦截，避免加载 GUI 依赖。
+if "--update-only" in sys.argv:
+    # ===== 内嵌更新器逻辑（精简版，不依赖 webview/mpv）=====
+
+    _UPD_KEEP_SUFFIXES = (".db", ".json", ".m3u", ".m3u8", ".txt")
+    _UPD_KEEP_DIRS = ("logos",)
+
+    def _upd_find_app_dir():
+        if getattr(sys, "frozen", False):
+            exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+            return exe_dir if os.path.isfile(sys.executable) else None
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def _upd_collect_user_data(app_dir):
+        keep = []
+        try:
+            for name in os.listdir(app_dir):
+                full = os.path.join(app_dir, name)
+                if name == "_internal":
+                    continue
+                if os.path.isdir(full) and name in _UPD_KEEP_DIRS:
+                    keep.append(full)
+                elif os.path.isfile(full) and name.endswith(_UPD_KEEP_SUFFIXES):
+                    keep.append(full)
+        except OSError:
+            pass
+        return keep
+
+    def _upd_backup_data(app_dir):
+        tmp = tempfile.mkdtemp(prefix="itv_backup_")
+        for src in _upd_collect_user_data(app_dir):
+            dst = os.path.join(tmp, os.path.basename(src))
+            try:
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst, symlinks=True)
+                else:
+                    shutil.copy2(src, dst)
+                print(f"[updater] backup {os.path.basename(src)}")
+            except Exception as e:
+                print(f"[updater] backup skip {src}: {e}")
+        return tmp
+
+    def _upd_restore_data(app_dir, backup_dir):
+        if not backup_dir or not os.path.isdir(backup_dir):
+            return
+        for name in os.listdir(backup_dir):
+            src = os.path.join(backup_dir, name)
+            dst = os.path.join(app_dir, name)
+            try:
+                if os.path.isdir(src):
+                    if os.path.isdir(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst, symlinks=True)
+                else:
+                    shutil.copy2(src, dst)
+                print(f"[updater] restore {name}")
+            except Exception as e:
+                print(f"[updater] restore fail {name}: {e}")
+
+    def _upd_apply_main(zip_path, app_dir, exe_name):
+        backup = _upd_backup_data(app_dir)
+        extract_dir = tempfile.mkdtemp(prefix="itv_new_")
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+            print(f"[updater] extracted main {zip_path}")
+        except Exception as e:
+            print(f"[updater] extract fail: {e}")
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            shutil.rmtree(backup, ignore_errors=True)
+            return False
+
+        new_root = extract_dir
+        if os.path.isfile(os.path.join(extract_dir, exe_name)):
+            pass
+        else:
+            found = None
+            for cur, _, files in os.walk(extract_dir):
+                if exe_name in files:
+                    found = cur
+                    break
+            if not found:
+                print(f"[updater] main pkg missing {exe_name}, abort")
+                shutil.rmtree(extract_dir, ignore_errors=True)
+                shutil.rmtree(backup, ignore_errors=True)
+                return False
+            new_root = found
+
+        old_internal = os.path.join(app_dir, "_internal")
+        if os.path.isdir(old_internal):
+            try:
+                shutil.rmtree(old_internal)
+            except Exception as e:
+                print(f"[updater] clean old _internal fail: {e}")
+        new_internal = os.path.join(new_root, "_internal")
+        if os.path.isdir(new_internal):
+            shutil.copytree(new_internal, old_internal, symlinks=True, dirs_exist_ok=True)
+
+        for name in os.listdir(new_root):
+            if name == "_internal":
+                continue
+            src = os.path.join(new_root, name)
+            dst = os.path.join(app_dir, name)
+            try:
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True)
+                else:
+                    if os.path.isfile(dst):
+                        try:
+                            os.remove(dst)
+                        except Exception:
+                            pass
+                    shutil.copy2(src, dst)
+            except Exception as e:
+                print(f"[updater] overwrite {name} fail: {e}")
+
+        _upd_restore_data(app_dir, backup)
+        shutil.rmtree(extract_dir, ignore_errors=True)
+        shutil.rmtree(backup, ignore_errors=True)
+        return True
+
+    def _upd_apply_mpv(zip_path, app_dir):
+        mpv_dir = os.path.join(app_dir, "_internal", "mpv")
+        os.makedirs(mpv_dir, exist_ok=True)
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(mpv_dir)
+            print(f"[updater] extracted mpv to {mpv_dir}")
+            return True
+        except Exception as e:
+            print(f"[updater] mpv extract fail: {e}")
+            return False
+
+    def _run_updater(argv):
+        zip_paths = [os.path.abspath(a) for a in argv if a.endswith(".zip")]
+        if not zip_paths:
+            print("[updater] no zip provided")
+            return 1
+        app_dir = _upd_find_app_dir()
+        if not app_dir:
+            print("[updater] cannot find app dir")
+            return 1
+        print(f"[updater] app dir: {app_dir}")
+        exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "IPTVCore.exe"
+        exe_path = os.path.join(app_dir, exe_name)
+        # 等待旧主进程退出
+        time.sleep(2)
+        main_zip = zip_paths[0]
+        print(f"[updater] main pkg: {main_zip}")
+        if not _upd_apply_main(main_zip, app_dir, exe_name):
+            print("[updater] main apply failed, abort")
+            return 1
+        for zp in zip_paths[1:]:
+            if "mpv" in os.path.basename(zp).lower():
+                print(f"[updater] mpv pkg: {zp}")
+                _upd_apply_mpv(zp, app_dir)
+            else:
+                print(f"[updater] skip unknown pkg: {zp}")
+        if os.path.isfile(exe_path):
+            print(f"[updater] launching new version...")
+            subprocess.Popen([exe_path], cwd=app_dir)
+        print("[updater] done")
+        return 0
+
+    sys.exit(_run_updater(sys.argv))
+
 import webview
 
 # mpv 解码引擎（Phase 5 Track A）。dev 模式同目录 import；frozen 由 PyInstaller 打入。
@@ -838,221 +1005,7 @@ def _save_cache_on_exit(port):
         pass
 
 
-# ===== 内嵌更新器（--update-only 模式）=====
-# 把原 run_updater.py 的逻辑内嵌进 EXE，不再依赖外部脚本。
-# 打包态 apply_update 端点会启动 IPTVCore.exe --update-only <zip_paths>，
-# 等主进程退出后由子进程自动应用更新并重启。
-
-# 程序根目录下需要保留的用户数据（按后缀/目录匹配）
-_UPD_KEEP_SUFFIXES = (".db", ".json", ".m3u", ".m3u8", ".txt")
-_UPD_KEEP_DIRS = ("logos",)
-
-
-def _upd_find_app_dir():
-    """定位程序根目录（含主程序 exe）。frozen 态即 EXE 所在目录。"""
-    if getattr(sys, "frozen", False):
-        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-        return exe_dir if os.path.isfile(sys.executable) else None
-    here = os.path.dirname(os.path.abspath(__file__))
-    return here
-
-
-def _upd_collect_user_data(app_dir):
-    """收集程序根目录下的用户数据文件/目录（不含 _internal）。"""
-    keep = []
-    try:
-        for name in os.listdir(app_dir):
-            full = os.path.join(app_dir, name)
-            if name == "_internal":
-                continue
-            if os.path.isdir(full) and name in _UPD_KEEP_DIRS:
-                keep.append(full)
-            elif os.path.isfile(full) and name.endswith(_UPD_KEEP_SUFFIXES):
-                keep.append(full)
-    except OSError:
-        pass
-    return keep
-
-
-def _upd_backup_data(app_dir):
-    """把用户数据复制到临时备份目录，返回备份根路径。"""
-    tmp = tempfile.mkdtemp(prefix="itv_backup_")
-    for src in _upd_collect_user_data(app_dir):
-        dst = os.path.join(tmp, os.path.basename(src))
-        try:
-            if os.path.isdir(src):
-                shutil.copytree(src, dst, symlinks=True)
-            else:
-                shutil.copy2(src, dst)
-            print(f"[updater] 备份 {os.path.basename(src)}")
-        except Exception as e:
-            print(f"[updater] 备份跳过 {src}: {e}")
-    return tmp
-
-
-def _upd_restore_data(app_dir, backup_dir):
-    """从备份目录回迁用户数据到程序根目录。"""
-    if not backup_dir or not os.path.isdir(backup_dir):
-        return
-    for name in os.listdir(backup_dir):
-        src = os.path.join(backup_dir, name)
-        dst = os.path.join(app_dir, name)
-        try:
-            if os.path.isdir(src):
-                if os.path.isdir(dst):
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst, symlinks=True)
-            else:
-                shutil.copy2(src, dst)
-            print(f"[updater] 恢复 {name}")
-        except Exception as e:
-            print(f"[updater] 恢复失败 {name}: {e}")
-
-
-def _upd_apply_main(zip_path, app_dir, exe_name):
-    """应用主程序包：备份数据 → 替换 _internal + exe → 回迁数据。"""
-    backup = _upd_backup_data(app_dir)
-    extract_dir = tempfile.mkdtemp(prefix="itv_new_")
-    try:
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(extract_dir)
-        print(f"[updater] 已解压主包 {zip_path}")
-    except Exception as e:
-        print(f"[updater] 解压失败: {e}")
-        shutil.rmtree(extract_dir, ignore_errors=True)
-        shutil.rmtree(backup, ignore_errors=True)
-        return False
-
-    # 定位解压后的程序根（含主 exe）
-    new_root = extract_dir
-    if os.path.isfile(os.path.join(extract_dir, exe_name)):
-        pass
-    else:
-        for cand in [os.path.basename(exe_name).replace(".exe", ""),
-                     "dist/IPTVCore_Folder/IPTVCore"]:
-            if os.path.isfile(os.path.join(extract_dir, cand, exe_name)):
-                new_root = os.path.join(extract_dir, cand)
-                break
-        else:
-            # 兜底：递归找 exe
-            found = None
-            for cur, _, files in os.walk(extract_dir):
-                if exe_name in files:
-                    found = cur
-                    break
-            if not found:
-                print(f"[updater] 主包未找到 {exe_name}，终止")
-                shutil.rmtree(extract_dir, ignore_errors=True)
-                shutil.rmtree(backup, ignore_errors=True)
-                return False
-            new_root = found
-
-    # 替换 _internal
-    old_internal = os.path.join(app_dir, "_internal")
-    if os.path.isdir(old_internal):
-        try:
-            shutil.rmtree(old_internal)
-        except Exception as e:
-            print(f"[updater] 清理旧 _internal 失败: {e}")
-    new_internal = os.path.join(new_root, "_internal")
-    if os.path.isdir(new_internal):
-        shutil.copytree(new_internal, old_internal, symlinks=True, dirs_exist_ok=True)
-
-    # 主程序文件覆盖
-    for name in os.listdir(new_root):
-        if name == "_internal":
-            continue
-        src = os.path.join(new_root, name)
-        dst = os.path.join(app_dir, name)
-        try:
-            if os.path.isdir(src):
-                shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True)
-            else:
-                # 当前运行中的 exe 不能直接覆盖，先删旧再写新
-                if os.path.isfile(dst):
-                    try:
-                        os.remove(dst)
-                    except Exception:
-                        pass
-                shutil.copy2(src, dst)
-        except Exception as e:
-            print(f"[updater] 覆盖 {name} 失败: {e}")
-
-    # 回迁数据
-    _upd_restore_data(app_dir, backup)
-    shutil.rmtree(extract_dir, ignore_errors=True)
-    shutil.rmtree(backup, ignore_errors=True)
-    return True
-
-
-def _upd_apply_mpv(zip_path, app_dir):
-    """应用 mpv 包：解压到 _internal/mpv/。"""
-    mpv_dir = os.path.join(app_dir, "_internal", "mpv")
-    os.makedirs(mpv_dir, exist_ok=True)
-    try:
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(mpv_dir)
-        print(f"[updater] 已解压 mpv 包到 {mpv_dir}")
-        return True
-    except Exception as e:
-        print(f"[updater] mpv 解压失败: {e}")
-        return False
-
-
-def _run_updater_mode(argv):
-    """--update-only 模式：argv 为 [exe, --update-only, zip1, zip2, ...]。
-
-    流程：
-    1. 等待 2 秒确保旧主进程已退出（由调用方启动前延迟）
-    2. 定位程序目录
-    3. 第一个 zip 当 main 包，其余按文件名判断 mpv
-    4. 应用后启动新版本
-    """
-    zip_paths = [os.path.abspath(a) for a in argv if a.endswith(".zip")]
-    if not zip_paths:
-        print("[updater] 未提供 zip 包")
-        return 1
-
-    app_dir = _upd_find_app_dir()
-    if not app_dir:
-        print("[updater] 找不到程序目录")
-        return 1
-    print(f"[updater] 程序目录: {app_dir}")
-
-    exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "IPTVCore.exe"
-    exe_path = os.path.join(app_dir, exe_name)
-
-    # 等待旧主进程退出（apply_update 端点启动子进程后会退出主进程）
-    time.sleep(2)
-
-    # 第一个包当 main
-    main_zip = zip_paths[0]
-    print(f"[updater] 主包: {main_zip}")
-    if not _upd_apply_main(main_zip, app_dir, exe_name):
-        print("[updater] 主包应用失败，终止")
-        return 1
-
-    # 其余包按文件名判断是否 mpv
-    for zp in zip_paths[1:]:
-        if "mpv" in os.path.basename(zp).lower():
-            print(f"[updater] mpv 包: {zp}")
-            _upd_apply_mpv(zp, app_dir)
-        else:
-            print(f"[updater] 跳过未知包: {zp}")
-
-    # 启动新版本
-    if os.path.isfile(exe_path):
-        print(f"[updater] 启动新版本...")
-        subprocess.Popen([exe_path], cwd=app_dir)
-    print("[updater] 更新完成")
-    return 0
-
-
 def main():
-    # --update-only 模式：作为内嵌更新器运行，不走正常启动
-    if "--update-only" in sys.argv:
-        sys.exit(_run_updater_mode(sys.argv))
-
     port = 8000
     # 检测端口是否被占用（如 Web 版 python backend/main.py 仍在运行）
     if _is_port_in_use(port):

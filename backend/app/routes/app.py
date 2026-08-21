@@ -157,6 +157,7 @@ def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
     if not paths:
         raise HTTPException(400, "更新包不存在，请先下载")
     import subprocess
+    import threading
 
     if getattr(sys, "frozen", False):
         # 打包态：EXE 自己作为更新器子进程启动
@@ -176,4 +177,13 @@ def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
         cmd,
         creationflags=0x08000000,  # CREATE_NO_WINDOW
     )
+
+    # 1.5 秒后强制退出主进程（不等前端 window.close，PyWebView 下 window.close 可能无效）
+    def _force_quit():
+        import time
+        time.sleep(1.5)
+        import os
+        os._exit(0)
+
+    threading.Thread(target=_force_quit, daemon=True).start()
     return {"ok": True, "launched": True, "mode": "auto", "packages": len(paths)}
