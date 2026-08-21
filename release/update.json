@@ -1,12 +1,12 @@
 {
-  "version": "1.0.2",
-  "notes": "iTV Desk v1.0.2：聚合源延迟显示 + 全自动更新",
+  "version": "1.0.3",
+  "notes": "iTV Desk v1.0.3：取消聚合源，仅保留去重；新增拆解聚合源还原单源",
   "packages": [
     {
-      "name": "itv-desk_1.0.2_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.2_core.zip",
-      "sha256": "5f6da17b459767ef7a32e0a28e101046a61273275c1b0f80910a5c0fe4478ce9",
-      "size": 43980566,
+      "name": "itv-desk_1.0.3_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.3_core.zip",
+      "sha256": "43a1b4d8b059c37cd93de89fec146fc6781a424b4355cd800eb6a225bc02a53c",
+      "size": 44050661,
       "role": "main"
     },
     {

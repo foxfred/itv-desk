@@ -31,6 +31,8 @@ export const reportHealth = (url, success, error = null, firstFrameMs = null) =>
 
 // #56 智能去重合并
 export const mergeDuplicates = () => request.post('/api/channels/merge-duplicates')
+// 拆解所有聚合源：还原为单源频道（聚合源使离线源无法单独清除）
+export const ungroupAll = () => request.post('/api/channels/ungroup-all')
 // #57 Logo 自动匹配（logosDir 为空则用默认 DATA_DIR/logos）
 export const matchLogos = (logosDir = null) =>
   request.post('/api/channels/match-logos', { logos_dir: logosDir })

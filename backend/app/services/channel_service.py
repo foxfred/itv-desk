@@ -407,7 +407,12 @@ class ChannelService:
         return "".join(out)
 
     def _merge_by_key(self, key_fn):
-        """按 key 函数分组，将同组多个频道合并为单一「多源」频道；返回合并掉的数量。"""
+        """按 key 函数分组去重：同组（key 相同）仅保留首个频道，删除其余重复项。
+
+        只做「去重」，不再把同组频道合并为多源聚合频道——聚合源会使离线源
+        无法单独清除，不适合本软件。移除聚合产生的 sources/source_groups/
+        source_tags/source_health 字段。返回删除的数量。
+        """
         with self.lock:
             groups = {}
             order = []
@@ -428,74 +433,79 @@ class ChannelService:
             merged_removed = 0
             for gk in order:
                 members = groups[gk]
-                if gk[0] == "__uniq__" or len(members) == 1:
+                if gk[0] == "__uniq__":
                     new_pool.extend(members)
                     continue
-                canonical = dict(members[0])
-                src_set = []
-                for m in members:
-                    for u in _normalize_sources(m):
-                        if u and u not in src_set:
-                            src_set.append(u)
-                canonical["sources"] = src_set
-                # 合并各成员的分源健康/延迟：source_health = {url: {status,ms,res,quality,code}},
-                # 供前端在聚合频道展开子源时按源显示延迟与状态
-                merged_sh = {}
-                for m in members:
-                    for u, h in (m.get("source_health") or {}).items():
-                        if isinstance(h, dict) and (not merged_sh.get(u) or (h.get("ms") and str(h.get("ms")) != "-")):
-                            merged_sh[u] = h
-                if merged_sh:
-                    canonical["source_health"] = merged_sh
-                # 合并各成员的分源健康/延迟：source_health = {url: {status,ms,res,quality,code}}，
-                # 供前端在聚合频道展开子源时按源显示延迟与状态
-                merged_sh = {}
-                for m in members:
-                    for u, h in (m.get("source_health") or {}).items():
-                        if isinstance(h, dict) and (not merged_sh.get(u) or (h.get("ms") and str(h.get("ms")) != "-")):
-                            merged_sh[u] = h
-                if merged_sh:
-                    canonical["source_health"] = merged_sh
-                # 合并标记：按每个源 URL 保留其 tag / fake-live，写入全局 db，
-                # 让聚合后仍能单独修改每一行的标记。
-                from app.main import tag_db, fake_live_db
-                st = {}
-                sfl = {}
-                for m in members:
-                    primary_u = m.get("url", "")
-                    if primary_u:
-                        t = (m.get("tag") or "").strip()
-                        if t:
-                            st[primary_u] = t
-                            tag_db[primary_u] = t
-                        if m.get("is_fake_live"):
-                            sfl[primary_u] = True
-                            fake_live_db[primary_u] = True
-                    for u, t in (m.get("source_tags") or {}).items():
-                        if t:
-                            st[u] = t
-                            tag_db[u] = t
-                    for u in (m.get("source_is_fake_live") or {}):
-                        sfl[u] = True
-                        fake_live_db[u] = True
-                canonical["source_tags"] = st
-                canonical["source_is_fake_live"] = sfl
-                # 聚合频道（多源）的标记按每个源独立维护，主行不再同步主源 tag，避免展开后主行与子行重复显示
-                canonical["tag"] = ""
-                canonical["is_fake_live"] = bool(sfl.get(canonical.get("url", ""), False))
-                new_pool.append(canonical)
+                # 去重：同 key 保留首个，其余删除（不做多源聚合）
+                keep = dict(members[0])
+                # 清理历史聚合残留字段，确保频道回到单源结构
+                for _f in ("sources", "source_groups", "source_tags",
+                           "source_is_fake_live", "source_health", "source_is_fake"):
+                    keep.pop(_f, None)
+                new_pool.append(keep)
                 merged_removed += (len(members) - 1)
-                try:
-                    from app.config import Config
-                    Config.save_json(Config.TAG_DB_FILE, tag_db)
-                    Config.save_json(Config.FAKE_LIVE_DB_FILE, fake_live_db)
-                except Exception:
-                    pass
             self.pool = new_pool
             for idx, ch in enumerate(self.pool, 1):
                 ch["id"] = idx
             self._store_rebuild()
             return merged_removed
+
+    def ungroup_all(self):
+        """拆解所有聚合源：把多源/分组的聚合频道还原为每个源一个独立单源频道。
+
+        用户反馈聚合源里各源无法单独检查/清除离线，不适合本软件。
+        本方法把每个聚合频道按 sources（URL 列表）展开为多个单源频道，
+        清理 sources/source_groups/source_tags/source_health 等聚数字段，
+        并把每个源的 tag / fake-live 落到对应展开频道上。
+        返回拆解出的频道数量（多出的行数）。
+        """
+        with self.lock:
+            expanded = []
+            split_count = 0
+            for ch in self.pool:
+                srcs = _normalize_sources(ch)
+                from app.main import tag_db, fake_live_db
+                is_multi = (ch.get("sources") and len(ch.get("sources")) > 1) or bool(ch.get("source_groups"))
+                if not is_multi:
+                    # 单源：仅清理可能的聚合残留字段
+                    for _f in ("sources", "source_groups", "source_tags",
+                               "source_is_fake_live", "source_health", "source_is_fake"):
+                        ch.pop(_f, None)
+                    expanded.append(ch)
+                    continue
+                src_tags = ch.get("source_tags") or {}
+                src_fl = ch.get("source_is_fake_live") or {}
+                base_name = ch.get("name", "")
+                base_group = ch.get("group", "")
+                for i, u in enumerate(srcs):
+                    row = dict(ch)
+                    row["url"] = u
+                    row["sources"] = None
+                    row["source_groups"] = None
+                    row["source_tags"] = None
+                    row["source_is_fake_live"] = None
+                    row["source_health"] = None
+                    row["source_is_fake"] = None
+                    # 多个源时给名称加序号，便于区分；单源沿用原名
+                    row["name"] = base_name if len(srcs) == 1 else f"{base_name} #{i + 1}"
+                    row["group"] = base_group
+                    row["tag"] = (src_tags.get(u) or "").strip()
+                    row["is_fake_live"] = bool(src_fl.get(u)) or bool(ch.get("is_fake_live"))
+                    # 主 url 的行保留该源自己的健康/延迟；其余源无独立检测则归零重置
+                    row.pop("ms", None)
+                    row.pop("res", None)
+                    row.pop("status", None)
+                    if i == 0:
+                        row["ms"] = ch.get("ms")
+                        row["res"] = ch.get("res")
+                        row["status"] = ch.get("status")
+                    expanded.append(row)
+                split_count += (len(srcs) - 1)
+            self.pool = expanded
+            for idx, ch in enumerate(self.pool, 1):
+                ch["id"] = idx
+            self._store_rebuild()
+            return {"split": split_count, "total": len(self.pool)}
 
     def merge_duplicates(self):
         """先按 URL 归一归并，再按频道名归一归并（同组聚合为多源）。返回统计。"""

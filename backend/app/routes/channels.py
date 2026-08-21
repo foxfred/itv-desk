@@ -491,6 +491,23 @@ def merge_duplicates(channel_service=Depends(get_channel_service),
     return {"ok": True, **stats}
 
 
+@router.post("/ungroup-all")
+def ungroup_all(channel_service=Depends(get_channel_service),
+                log=Depends(get_log), settings=Depends(get_settings)):
+    """拆解所有聚合源：把多源聚合频道还原为每个源一个独立单源频道。
+
+    聚合源使离线源无法单独检查/清除，取消合并成源后提供此操作把历史
+    聚合数据恢复为单源列表，方便逐条挑选与删除。
+    """
+    stats = channel_service.ungroup_all()
+    if stats["split"] > 0:
+        _save_cache(channel_service, settings)
+        log(f"拆解聚合源：展开 {stats['split']} 个源，共 {stats['total']} 个频道")
+    else:
+        log("拆解聚合源：无聚合频道需要拆解")
+    return {"ok": True, **stats}
+
+
 @router.post("/match-logos")
 def match_logos(body: MatchLogosReq, channel_service=Depends(get_channel_service),
                 log=Depends(get_log), settings=Depends(get_settings)):

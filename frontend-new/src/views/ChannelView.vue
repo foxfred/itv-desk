@@ -71,6 +71,7 @@
               <el-dropdown-item @click="showGroupTree = !showGroupTree">{{ showGroupTree ? '隐藏分组树' : '显示分组树' }}</el-dropdown-item>
               <el-dropdown-item @click="openDlna()">DLNA 投屏</el-dropdown-item>
               <el-dropdown-item divided @click="doMergeDuplicates">智能去重合并</el-dropdown-item>
+              <el-dropdown-item @click="doUngroupAll">拆解聚合源（还原单源）</el-dropdown-item>
               <el-dropdown-item @click="doMatchLogos">Logo 自动匹配</el-dropdown-item>
               <el-dropdown-item @click="doOnlineLogos">在线台标补全</el-dropdown-item>
               <el-dropdown-item @click="doReclassify">重新自动分组</el-dropdown-item>
@@ -246,7 +247,6 @@
                     <span v-if="(row.source_tags || {})[u]" class="src-tag src-tag-channel" :title="(row.source_tags || {})[u]">{{ (row.source_tags || {})[u] }}</span>
                     <span v-if="(row.source_is_fake_live || {})[u]" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
                     <span class="src-url" :title="u">{{ shortUrl(u) }}</span>
-                    <span v-html="sourceMsDisplay(row, u)"></span>
                     <el-button size="small" text type="primary" @click.stop="playSourceInline(row, u)">播放</el-button>
                     <el-button size="small" text type="danger" @click.stop="deleteSourceInline(row, u)">删除</el-button>
                   </div>
@@ -256,7 +256,6 @@
                   <span v-if="(row.source_tags || {})[u]" class="src-tag src-tag-channel" :title="(row.source_tags || {})[u]">{{ (row.source_tags || {})[u] }}</span>
                   <span v-if="(row.source_is_fake_live || {})[u]" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
                     <span class="src-url" :title="u">{{ shortUrl(u) }}</span>
-                    <span v-html="sourceMsDisplay(row, u)"></span>
                     <el-button size="small" text type="primary" @click.stop="playSourceInline(row, u)">播放</el-button>
                     <el-button size="small" text type="danger" @click.stop="deleteSourceInline(row, u)">删除</el-button>
                 </div>
@@ -1358,17 +1357,6 @@ function shortUrl(u) {
     return u.length > 48 ? u.slice(0, 48) + '…' : u
   }
 }
-// 子源延迟/健康信息：从聚合频道的 source_health 读取每个源的独立检测结果
-function sourceHealth(row, u) {
-  return (row.source_health || {})[u] || null
-}
-function sourceMsDisplay(row, u) {
-  const h = sourceHealth(row, u)
-  if (!h) return ''
-  if (h.status === '离线') return '<span class="src-ms src-ms-off">离线</span>'
-  if (h.ms || h.ms === 0) return `<span class="src-ms">${h.ms}ms</span>`
-  return ''
-}
 function standaloneSources(row) {
   const grouped = new Set((row.source_groups || []).flatMap(g => g.urls || []))
   const srcs = (row.sources && row.sources.length) ? row.sources : [row.url]
@@ -1965,6 +1953,21 @@ async function doMergeDuplicates() {
   }
 }
 
+// 拆解所有聚合源：还原为单源频道（聚合源内离线源无法单独清除）
+async function doUngroupAll() {
+  try {
+    const { data } = await channelApi.ungroupAll()
+    if (data.split > 0) {
+      ElMessage.success(`已拆解 ${data.split} 个聚合源，现有 ${data.total} 个独立频道`)
+    } else {
+      ElMessage.info('没有需要拆解的聚合频道')
+    }
+    store.refresh()
+  } catch (e) {
+    ElMessage.error('拆解聚合源失败: ' + (e.response?.data?.detail || e.message))
+  }
+}
+
 // #57 Logo 自动匹配（默认扫描程序目录下的 logos 文件夹）
 async function doMatchLogos() {
   try {
@@ -2461,8 +2464,6 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .src-tag-channel { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--el-color-warning); color: var(--el-color-black); }
 .src-tag-fake { background: var(--el-color-danger); color: #fff; }
 .src-url { flex: 1; min-width: 0; font-size: 12px; color: var(--el-text-color-regular); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
-.src-ms { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--el-color-success); }
-.src-ms-off { color: var(--el-color-danger); }
 .src-empty { padding: 6px 12px 6px 38px; font-size: 12px; color: var(--el-text-color-secondary); }
 .src-empty .src-tag-line { margin: 0; }
 .src-count { cursor: pointer; font-weight: 600; }
