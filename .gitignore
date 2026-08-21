@@ -60,31 +60,28 @@ Desktop.ini
 # ===== Agent 内部数据（非程序代码）=====
 .workbuddy/
 
-# ===== 运行期/构建残留（不进仓库，避免污染 GIT 备份）=====
+# ===== 运行期/构建残留 =====
 logos/
 logos_online_index.json
 repair_history.jsonl
 build_fresh.py.removed
 IPTVCore.spec
-导出的频道列表*.m3u
+*.m3u
 frontend-new/dist_old_build*/
 
 # ===== 第三方运行时二进制（mpv 引擎，不进 git，靠本地+build 拷贝）=====
 vendor/mpv/
 
-# ===== 内部对比/规划文档（非程序源码，不对外公开）=====
-CGG888_iptvnator_vs_IPTV_Core_对比.md
-IPTVnator_vs_IPTV_Core_对比.md
-iptvnator_功能盘点清单.md
-融合改造计划_IPTV_Core_x_iptvnator.md
-播放器单窗口融合设计方案.md
-融合MPV到窗口里.md
-IPTV_Core_代码分析报告.md
-IPTV_Core_评估报告_20260817.md
-右键菜单增强评估报告.md
-查整理结果_已去重.m3u
-检查整理结果_已去重.m3u
-播放器MPV排查修复报告.md
+# ===== AI 协作 / 内部文档（非程序源码，不对外公开）=====
+AGENTS.md
+delivery_overview.md
+*对比*.md
+*盘点*.md
+*设计方案*.md
+*分析报告*.md
+*评估报告*.md
+*排查修复报告*.md
+*改造计划*.md
 
 # ===== GitHub Release 更新产物（zip 大文件，走 Release 附件不入 git）=====
 release/*.zip
