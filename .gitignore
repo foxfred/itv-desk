@@ -90,3 +90,4 @@ IPTV_Core_评估报告_20260817.md
 release/*.zip
 release/update.json
 update_staging/
+fake_live_tags.json
