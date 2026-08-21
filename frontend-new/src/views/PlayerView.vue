@@ -363,6 +363,7 @@ let healthReported = false   // 每次换台仅上报一次播放结果（成功
 let hls = null
 let flvPlayer = null
 let dashPlayer = null  // P5: DASH (mpd) 播放器实例
+let playingStarted = false  // 原生播放是否已启动（探测兜底时避免重复启动）
 let errorCount = 0
 let errorTimer = null
 let hideTimer = null
@@ -1533,16 +1534,126 @@ function setupHls() {
   }
 
   // ====== 原生 MPEG-TS / 直接视频流 ======
+  // 无扩展名/未知协议的 HTTP 源：先探测 Content-Type，若实为 HLS 清单则用 hls.js
+  // （修复内网 HLS 源如 http://host:1905/xxx 被误判原生播放导致黑屏/有声无图）。
+  if (!/\.(mp4|mkv|avi|mov|wmv|m4v|webm|mp3|m4a|flac|wav)(\?|#|$)/i.test(url)) {
+    probeContentType(src).then((ct) => {
+      if (sid !== playSession) return
+      if (isHlsContentType(ct)) {
+        // HLS：再探测是否为 H.265。若是 → 后端 ffmpeg 转码为 H.264 FLV（flv.js 播）；
+        // 否则直接 hls.js 播放。
+        probeHlsIsH265(url).then((is265) => {
+          if (sid !== playSession) return
+          if (is265) {
+            playH264Proxy(url, src, sid, looksLikeLive)
+          } else {
+            playHls(url, src, sid, looksLikeLive)
+          }
+        })
+        return
+      }
+      nativeFallback(v, url, src, looksLikeLive)
+    })
+    // 兜底：探测失败（超时/被拒）时也尝试原生播放，避免卡死无响应
+    miscTimers.push(setTimeout(() => { if (sid === playSession && !hls && !flvPlayer && !playingStarted) nativeFallback(v, url, src, looksLikeLive) }, 4500))
+    recordHistory()
+    return
+  }
+  nativeFallback(v, url, src, looksLikeLive)
+  recordHistory()
+}
+
+function nativeFallback(v, url, src, looksLikeLive) {
+  if (!v) return
   // 部分 IPTV 源直接返回 TS 或 fMP4 流，浏览器可能支持
-  v.src = url
+  v.src = src
+  playingStarted = true
   v.play().then(() => {
-    // 播放成功后判断是否为直播流
     if (looksLikeLive) isLive.value = true
   }).catch((e) => {
     console.warn('[native] play failed:', e)
   })
+}
 
+// 用 hls.js 播放 HLS 流（供 setupHls 内探测到 Content-Type 为 HLS 时调用）
+function playHls(url, src, sid, looksLive) {
+  const v = videoEl.value
+  playingStarted = true
+  if (!v || typeof Hls === 'undefined' || !Hls.isSupported()) {
+    nativeFallback(v, url, src, false)
+    return
+  }
+  if (hls) { hls.destroy(); hls = null }
+  loading.value = true
+  hls = new Hls({
+    lowLatencyMode: false,
+    backBufferLength: looksLive ? 30 : 90,
+    maxBufferLength: 10,
+    maxMaxBufferLength: 60,
+    liveSyncDurationCount: 3,
+    enableWorker: true,
+    fragLoadingTimeOut: 20000,
+    manifestLoadingTimeOut: 15000,
+    levelLoadingTimeOut: 15000,
+    defaultAudioCodec: undefined,
+    xhrSetup: (x) => { x.withCredentials = false },
+    fetchSetup: (_ctx, init) => { try { init.referrerPolicy = 'no-referrer'; return init } catch { return init } },
+  })
+  hls.loadSource(src)
+  hls.attachMedia(v)
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    if (sid !== playSession) return
+    loading.value = false
+    v.play().catch(() => {})
+  })
+  hls.on(Hls.Events.ERROR, (_evt, data) => {
+    if (sid !== playSession || !hls) return
+    console.warn('[probe-hls] error:', data.type, data.details)
+    if (data.fatal) {
+      // H.265 视频 MSE 不支持等致命错误：提示用户改用 mpv/外部播放器
+      loading.value = false
+      if (!maybeFailover()) {
+        playError.value = true
+        const hint = (data.type || '') + '/' + (data.details || '')
+        if (/codec|decoder|mediasource/i.test(hint)) {
+          lastHlsError.value = '视频编码浏览器不支持（H.265？），请切换 mpv 或外部播放器'
+        } else {
+          lastHlsError.value = hint
+        }
+        reportPlayHealth(false, 'probe-hls:' + hint)
+      }
+    }
+  })
   recordHistory()
+}
+
+// 走后端 h264 转码代理（源为 H.265/HLS → 后端 ffmpeg 实时转 H.264/FLV → flv.js 播放）
+function playH264Proxy(url, src, sid, looksLikeLive) {
+  if (sid !== playSession) return
+  if (typeof flvjs === 'undefined' || !flvjs.isSupported()) {
+    nativeFallback(v, url, src, looksLikeLive)
+    return
+  }
+  const proxyUrl = h264ProxyUrl(url)
+  const flv = flvjs.createPlayer(
+    { type: 'flv', isLive: !!looksLikeLive, url: proxyUrl },
+    { enableStashBuffer: false, stashInitialSize: 128, lazyLoad: false, liveBufferLatencyChasing: !!looksLikeLive }
+  )
+  flv.attachMediaElement(v)
+  flvPlayer = flv
+  playingStarted = true
+  flv.on(flvjs.Events.ERROR, (e, h) => {
+    if (sid !== playSession) return
+    console.warn('[h264-proxy] flv error', e, h)
+    lastHlsError.value = '转码播放失败：' + (h?.msg || e)
+    reportPlayHealth(false, 'h264-proxy:' + e)
+    nativeFallback(v, url, src, looksLikeLive)
+  })
+  flv.load()
+  flv.play().catch((err) => {
+    console.warn('[h264-proxy] play rejected', err)
+  })
+  reportPlayHealth(true, 'h264-proxy')
 }
 
 async function recordHistory() {
@@ -1710,6 +1821,63 @@ function detectProtocol(url) {
   if (lower.endsWith('.ts') || lower.includes('.ts?') || lower.endsWith('.m2ts')) return 'ts'
   if (/\.(mp4|mkv|avi|mov|wmv|m4v|webm|mp3|m4a|flac|wav)(\?|$)/i.test(url)) return 'file'
   return 'native'
+}
+
+// 探测 HTTP(S) 源的真实 Content-Type：用于无扩展名 URL（如内网 HLS 源
+// http://host:port/12345）识别实际协议，避免被误判为原生播放而黑屏/无声。
+// 返回 Promise<string>；失败返回 ''。
+function probeContentType(url, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    let timer = null
+    try {
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+      if (ctrl && timeoutMs) timer = setTimeout(() => ctrl.abort(), timeoutMs)
+      fetch(url, { method: 'GET', cache: 'no-store', redirect: 'follow',
+                   headers: { 'Range': 'bytes=0-1024', 'User-Agent': 'Mozilla/5.0' },
+                   signal: ctrl ? ctrl.signal : undefined })
+        .then((res) => {
+          if (timer) clearTimeout(timer)
+          const ct = (res.headers.get('content-type') || '').toLowerCase()
+          resolve(ct)
+        })
+        .catch(() => { if (timer) clearTimeout(timer); resolve('') })
+    } catch (e) { if (timer) clearTimeout(timer); resolve('') }
+  })
+}
+
+// 判断 Content-Type 是否为 HLS 清单
+function isHlsContentType(ct) {
+  return /mpegurl|mp2t|x-mpegurl|vnd\.apple\.mpegurl/.test(ct || '')
+}
+
+// 探测 HLS 主清单是否 H.265 编码：抓取一小段清单文本，若含 h265/hevc/videocodec=h26
+// 关键字则判为 h265（浏览器 MSE 不支持，需走后端 ffmpeg 转码）。
+// 返回 Promise<boolean>。
+function probeHlsIsH265(url, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    let timer = null
+    try {
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+      if (ctrl && timeoutMs) timer = setTimeout(() => ctrl.abort(), timeoutMs)
+      fetch(url, { method: 'GET', cache: 'no-store',
+                   headers: { 'User-Agent': 'Mozilla/5.0' },
+                   signal: ctrl ? ctrl.signal : undefined })
+        .then((res) => {
+          if (timer) clearTimeout(timer)
+          if (!res.ok) { resolve(false); return }
+          return res.text().then((t) => {
+            const low = (t || '').toLowerCase()
+            resolve(/h265|hevc|videocodec=h26|codecs=.{0,8}hev1/.test(low))
+          })
+        })
+        .catch(() => { if (timer) clearTimeout(timer); resolve(false) })
+    } catch (e) { if (timer) clearTimeout(timer); resolve(false) }
+  })
+}
+
+// 构建 h265 → h264 转码代理 URL（后端 ffmpeg 实时转码，输出 HTTP-FLV）
+function h264ProxyUrl(srcUrl) {
+  return '/api/h264-proxy?url=' + encodeURIComponent(srcUrl)
 }
 
 // 引擎解析：auto 时优先 mpv（全协议原生），mpv 不可用按协议回退 webview

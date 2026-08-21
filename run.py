@@ -105,6 +105,9 @@ if "--update-only" in sys.argv:
         real_internal = _os.path.join(app_dir, "_internal")
         exe_path = _os.path.join(app_dir, exe_name)
         log_path = _os.path.join(app_dir, "update.log")
+        # mpv 引擎备份目录：替换 _internal 前先把现有 mpv 移出，替换后移回，
+        # 避免 core(zip 不含 mpv)替换 _internal 时把 mpv 清掉
+        mpv_bak = _os.path.join(_tf.mkdtemp(prefix="itv_mpvbak_"), "mpv")
         bat = _os.path.join(_tf.gettempdir(), "itv_apply_new.bat")
         L = []
         L.append("@echo off")
@@ -113,9 +116,13 @@ if "--update-only" in sys.argv:
         L.append('echo [updater] apply start > "' + log_path + '"')
         L.append('taskkill /IM "' + exe_name + '" /F >nul 2>&1')
         L.append("timeout /t 2 /nobreak >nul")
+        # 备份现有 mpv 引擎（move 到临时目录），防止 core 包替换 _internal 时被清除
+        L.append('if exist "' + real_internal + '\\mpv" (mkdir "' + mpv_bak + '" & move /y "' + real_internal + '\\mpv" "' + mpv_bak + '" >nul 2>&1 & echo [updater] mpv backed up >> "' + log_path + '")')
         L.append('if exist "' + real_internal + '" (rd /s /q "' + real_internal + '")')
         L.append('if exist "' + real_internal + '" (echo [updater] _internal locked retry >> "' + log_path + '" & ping 127.0.0.1 -n 4 > nul & rd /s /q "' + real_internal + '")')
         L.append('xcopy "' + _os.path.join(main_root, "_internal") + '" "' + real_internal + '" /e /i /y /q >> "' + log_path + '" 2>&1')
+        # 恢复备份的 mpv 引擎（move 回来）
+        L.append('if exist "' + mpv_bak + '" (move /y "' + mpv_bak + '" "' + real_internal + '\\mpv" >nul 2>&1 & echo [updater] mpv restored >> "' + log_path + '")')
         L.append('for /d %%d in ("' + main_root + '\\*") do (if not "%%~nxd"=="_internal" (if not exist "' + app_dir + '\\%%~nxd" mkdir "' + app_dir + '\\%%~nxd" & xcopy "%%d" "' + app_dir + '\\%%~nxd\\" /e /i /y /q >> "' + log_path + '" 2>&1))')
         L.append('for %%f in ("' + main_root + '\\*") do (if not "%%~nxf"=="_internal" (echo f | copy /y "%%f" "' + app_dir + '\\" >> "' + log_path + '" 2>&1))')
         for _d in roots:

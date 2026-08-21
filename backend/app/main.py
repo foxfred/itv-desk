@@ -41,7 +41,7 @@ from app.services.export_service import ExportService
 from app.services.subscription_service import SubscriptionService
 from app.services.dlna_service import DlnaService
 from app.services.scan_service import ScanService
-from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, app as app_routes, scan as scan_router
+from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router
 from app.realtime import publish_event
 
 # ==================== FastAPI 应用 ====================
@@ -263,6 +263,7 @@ app.include_router(subscriptions.router)
 app.include_router(dlna.router)
 app.include_router(stream_proxy.router)
 app.include_router(rtmp_proxy.router)
+app.include_router(h264_proxy.router)
 app.include_router(scan_router.router)
 app.include_router(app_routes.router)
 
