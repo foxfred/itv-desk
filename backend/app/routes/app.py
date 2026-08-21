@@ -67,14 +67,22 @@ def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
     if not latest:
         raise HTTPException(502, "更新清单缺少 version 字段")
     has_update = _ver_tuple(latest) > _ver_tuple(APP_VERSION)
+    # 兼容单包（旧格式 url/package_name/sha256）和多包（packages 数组）
+    packages = manifest.get("packages")
+    if not packages:
+        # 旧单包格式转成 packages 数组
+        packages = [{
+            "name": manifest.get("package_name", ""),
+            "url": manifest.get("url", ""),
+            "sha256": manifest.get("sha256", ""),
+            "role": "main"
+        }]
     return {
         "current": APP_VERSION,
         "latest": latest,
         "has_update": has_update,
         "notes": manifest.get("notes", ""),
-        "url": manifest.get("url", ""),
-        "package_name": manifest.get("package_name", ""),
-        "sha256": manifest.get("sha256", ""),
+        "packages": packages,
     }
 
 
@@ -106,19 +114,24 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir)):
 
 
 class ApplyUpdateReq(BaseModel):
-    zip_path: Optional[str] = None
+    zip_paths: Optional[list] = None  # 多包路径列表
+    zip_path: Optional[str] = None   # 兼容旧单包
 
 
 @router.post("/apply-update")
 def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
-    """退出并安装更新：尽力找到可用 python 启动更新器；否则记录待安装。
+    """退出并安装更新：支持多包（main + mpv）。启动更新器依次应用。
 
-    - 开发态（非 frozen）：直接用本解释器后台启动 run_updater.py（等待后自动覆盖）。
-    - 打包态（frozen）：Python 解释器不可用，写 pending_update.json，提示用户手动
-      运行程序根目录的 run_updater.py。
+    - 开发态（非 frozen）：直接用本解释器后台启动 run_updater.py。
+    - 打包态（frozen）：写 pending_update.json，提示用户手动运行。
     """
-    zip_path = body.zip_path if body else None
-    if not zip_path or not os.path.isfile(zip_path):
+    # 统一成列表
+    paths = []
+    if body.zip_paths:
+        paths = [p for p in body.zip_paths if p and os.path.isfile(p)]
+    if body.zip_path and os.path.isfile(body.zip_path):
+        paths.append(body.zip_path)
+    if not paths:
         raise HTTPException(400, "更新包不存在，请先下载")
     import subprocess
 
@@ -126,33 +139,33 @@ def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
     updater = None
     candidates = []
     if getattr(sys, "frozen", False):
-        # 打包态：更新器应随包放在 _internal 同级？无 python 解释器 → 走待安装标记
         candidates = []
     else:
-        # dev 态：仓库根 run_updater.py
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         candidates = [os.path.join(root, "run_updater.py")]
 
     updater = next((c for c in candidates if os.path.isfile(c)), None)
 
+    # 把路径列表写成 JSON 给更新器读
+    paths_json = json.dumps(paths)
+
     if updater:
-        # 后台带延迟启动，等待主进程退出后更新器再覆盖
         python = sys.executable or "python"
         subprocess.Popen(
             [python, "-c",
-             f"import time; time.sleep(2); import subprocess,sys; "
-             f"subprocess.run([sys.executable, r'{updater}', r'{zip_path}'])",
+             f"import time; time.sleep(2); import subprocess,sys,json; "
+             f"paths=json.loads({json.dumps(paths_json)}); "
+             f"subprocess.run([sys.executable, r'{updater}'] + paths)",
              ],
             creationflags=0x08000000,  # CREATE_NO_WINDOW
         )
-        return {"ok": True, "launched": True, "mode": "auto"}
+        return {"ok": True, "launched": True, "mode": "auto", "packages": len(paths)}
     else:
-        # 打包态：写待安装标记，用户确认退出后手动运行
         try:
             os.makedirs(os.path.join(data_dir, "update_staging"), exist_ok=True)
             with open(os.path.join(data_dir, "update_staging", "pending_update.json"), "w", encoding="utf-8") as f:
-                json.dump({"zip_path": zip_path, "data_dir": data_dir}, f, ensure_ascii=False)
+                json.dump({"zip_paths": paths, "data_dir": data_dir}, f, ensure_ascii=False)
         except Exception:
             pass
-        return {"ok": True, "launched": False, "mode": "manual",
+        return {"ok": True, "launched": False, "mode": "manual", "packages": len(paths),
                 "error": "打包版更新器需手动运行：退出程序后运行程序目录的 run_updater.py"}

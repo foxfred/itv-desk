@@ -381,18 +381,18 @@
                  <template v-if="updateInfo.has_update">
                    <span class="ur-title">发现新版本 v{{ updateInfo.latest }}</span>
                    <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
-                   <p class="ur-sha" v-if="updateInfo.sha256">SHA256: {{ updateInfo.sha256.slice(0, 16) }}…</p>
+                   <p class="ur-sha" v-if="updateInfo.packages.length">共 {{ updateInfo.packages.length }} 个更新包</p>
                    <div class="ur-actions">
-                     <el-button v-if="updateInfo.url" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
+                     <el-button v-if="updateInfo.packages.length" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
                        下载更新包
                      </el-button>
                      <el-button
-                       v-if="downloadPath && !updateInfo.is_installing"
+                       v-if="downloadPaths.length && !updateInfo.is_installing"
                        type="warning" size="small"
                        @click="doInstallUpdate"
                      >退出并安装更新</el-button>
                      <span v-if="updateInfo.is_installing" class="ur-installing">已启动更新器，旧版即将退出…</span>
-                     <span v-if="downloadPath && !updateInfo.is_installing" class="ur-path">已下载至：{{ downloadPath }}</span>
+                     <span v-if="downloadPaths.length && !updateInfo.is_installing" class="ur-path">已下载 {{ downloadPaths.length }} 个包到暂存目录</span>
                    </div>
                  </template>
                  <span v-else class="ur-title">已是最新版本</span>
@@ -440,9 +440,9 @@ const backupUpload = ref(null)
 const curVersion = ref('1.0.0')
 // #58 更新
 const checking = ref(false)
-const updateInfo = reactive({ has_update: false, latest: '', notes: '', url: '', package_name: '', sha256: '', is_installing: false })
+const updateInfo = reactive({ has_update: false, latest: '', notes: '', packages: [], is_installing: false })
 const downloading = ref(false)
-const downloadPath = ref('')
+const downloadPaths = ref([])  // 多包下载路径列表
 // #59 加密备份 / 恢复
 const encPassphrase = ref('')
 const encFile = ref(null)
@@ -660,20 +660,16 @@ async function checkForUpdate() {
   updateInfo.has_update = false
   updateInfo.latest = ''
   updateInfo.notes = ''
-  updateInfo.url = ''
-  updateInfo.package_name = ''
-  updateInfo.sha256 = ''
-  downloadPath.value = ''
+  updateInfo.packages = []
+  downloadPaths.value = []
   try {
     const { data } = await appApi.checkUpdate(form.update_url || null)
     curVersion.value = data.current || curVersion.value
     updateInfo.has_update = data.has_update
     updateInfo.latest = data.latest
     updateInfo.notes = data.notes || ''
-    updateInfo.url = data.url || ''
-    updateInfo.package_name = data.package_name || ''
-    updateInfo.sha256 = data.sha256 || ''
-    if (data.has_update) ElMessage.success(`发现新版本 v${data.latest}`)
+    updateInfo.packages = data.packages || []
+    if (data.has_update) ElMessage.success(`发现新版本 v${data.latest}（共 ${updateInfo.packages.length} 个包）`)
     else ElMessage.info('已是最新版本')
   } catch (e) {
     ElMessage.error('检查更新失败：' + (e.response?.data?.detail || e.message))
@@ -681,30 +677,32 @@ async function checkForUpdate() {
   checking.value = false
 }
 
-// #58 下载更新包到 update_staging（zip，含 mpv）
+// 下载更新包（多包依次下载）
 async function doDownloadUpdate() {
-  if (!updateInfo.url) return
+  if (!updateInfo.packages.length) return
   downloading.value = true
+  downloadPaths.value = []
   try {
-    const { data } = await appApi.downloadUpdate(updateInfo.url, updateInfo.package_name || null)
-    downloadPath.value = data.path
-    ElMessage.success('新版本已下载到暂存目录')
+    for (const pkg of updateInfo.packages) {
+      const { data } = await appApi.downloadUpdate(pkg.url, pkg.name || null)
+      downloadPaths.value.push(data.path)
+    }
+    ElMessage.success(`已下载 ${downloadPaths.value.length} 个更新包到暂存目录`)
   } catch (e) {
     ElMessage.error('下载失败：' + (e.response?.data?.detail || e.message))
   }
   downloading.value = false
 }
 
-// 退出并安装更新：启动更新器（运行更新器需程序已退出，此处由后端常驻进程拉起独立更新器）
+// 退出并安装更新：启动更新器（多包）
 async function doInstallUpdate() {
-  if (!downloadPath.value) return
+  if (!downloadPaths.value.length) return
   ElMessageBox.confirm('即将退出程序并开始安装更新（只替换程序文件，你的频道/设置/台标数据将完整保留）。确定继续？', '安装更新', {
     confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
   }).then(async () => {
-    const { data } = await appApi.applyUpdate(downloadPath.value)
+    const { data } = await appApi.applyUpdate(downloadPaths.value)
     if (data && data.ok && data.launched) {
       updateInfo.is_installing = true
-      // 更新器已后台拉起，主程序随后退出
       setTimeout(() => { try { window.close() } catch (_) {} }, 500)
     } else {
       ElMessage.error((data && data.error) || '未找到更新器')
