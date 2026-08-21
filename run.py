@@ -19,198 +19,129 @@ import zipfile
 # --update-only 模式：作为内嵌更新器运行，不走正常启动。
 # 必须在 import webview 等重模块之前拦截，避免加载 GUI 依赖。
 if "--update-only" in sys.argv:
-    # ===== 内嵌更新器逻辑（精简版，不依赖 webview/mpv）=====
+    import os as _os
+    import shutil as _sh
+    import subprocess as _sp
+    import sys as _sys
+    import tempfile as _tf
+    import time as _time
+    import zipfile as _zf
 
-    _UPD_KEEP_SUFFIXES = (".db", ".json", ".m3u", ".m3u8", ".txt")
-    _UPD_KEEP_DIRS = ("logos",)
+    _KEEP_SUFFIXES = (".db", ".json", ".m3u", ".m3u8", ".txt")
+    _KEEP_DIRS = ("logos",)
 
-    def _upd_find_app_dir():
-        if getattr(sys, "frozen", False):
-            exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-            return exe_dir if os.path.isfile(sys.executable) else None
-        return os.path.dirname(os.path.abspath(__file__))
+    def _find_app_dir():
+        if getattr(_sys, "frozen", False):
+            ed = _os.path.dirname(_os.path.abspath(_sys.executable))
+            return ed if _os.path.isfile(_sys.executable) else None
+        return _os.path.dirname(_os.path.abspath(__file__))
 
-    def _upd_collect_user_data(app_dir):
+    def _collect_user(app_dir):
         keep = []
         try:
-            for name in os.listdir(app_dir):
-                full = os.path.join(app_dir, name)
-                if name == "_internal":
+            for n in _os.listdir(app_dir):
+                full = _os.path.join(app_dir, n)
+                if n == "_internal":
                     continue
-                if os.path.isdir(full) and name in _UPD_KEEP_DIRS:
+                if _os.path.isdir(full) and n in _KEEP_DIRS:
                     keep.append(full)
-                elif os.path.isfile(full) and name.endswith(_UPD_KEEP_SUFFIXES):
+                elif _os.path.isfile(full) and n.endswith(_KEEP_SUFFIXES):
                     keep.append(full)
         except OSError:
             pass
         return keep
 
-    def _upd_backup_data(app_dir):
-        tmp = tempfile.mkdtemp(prefix="itv_backup_")
-        for src in _upd_collect_user_data(app_dir):
-            dst = os.path.join(tmp, os.path.basename(src))
-            try:
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst, symlinks=True)
-                else:
-                    shutil.copy2(src, dst)
-                print(f"[updater] backup {os.path.basename(src)}")
-            except Exception as e:
-                print(f"[updater] backup skip {src}: {e}")
+    def _backup(app_dir):
+        tmp = _tf.mkdtemp(prefix="itv_backup_")
+        for s in _collect_user(app_dir):
+            if _os.path.isfile(s):
+                _sh.copy2(s, _os.path.join(tmp, _os.path.basename(s)))
+            else:
+                _sh.copytree(s, _os.path.join(tmp, _os.path.basename(s)), symlinks=True)
         return tmp
 
-    def _upd_restore_data(app_dir, backup_dir):
-        if not backup_dir or not os.path.isdir(backup_dir):
-            return
-        for name in os.listdir(backup_dir):
-            src = os.path.join(backup_dir, name)
-            dst = os.path.join(app_dir, name)
-            try:
-                if os.path.isdir(src):
-                    if os.path.isdir(dst):
-                        shutil.rmtree(dst)
-                    shutil.copytree(src, dst, symlinks=True)
-                else:
-                    shutil.copy2(src, dst)
-                print(f"[updater] restore {name}")
-            except Exception as e:
-                print(f"[updater] restore fail {name}: {e}")
-
-    def _upd_apply_main(zip_path, app_dir, exe_name):
-        backup = _upd_backup_data(app_dir)
-        extract_dir = tempfile.mkdtemp(prefix="itv_new_")
-        try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(extract_dir)
-            print(f"[updater] extracted main {zip_path}")
-        except Exception as e:
-            print(f"[updater] extract fail: {e}")
-            shutil.rmtree(extract_dir, ignore_errors=True)
-            shutil.rmtree(backup, ignore_errors=True)
-            return False
-
-        new_root = extract_dir
-        if os.path.isfile(os.path.join(extract_dir, exe_name)):
-            pass
-        else:
-            found = None
-            for cur, _, files in os.walk(extract_dir):
-                if exe_name in files:
-                    found = cur
-                    break
-            if not found:
-                print(f"[updater] main pkg missing {exe_name}, abort")
-                shutil.rmtree(extract_dir, ignore_errors=True)
-                shutil.rmtree(backup, ignore_errors=True)
-                return False
-            new_root = found
-
-        old_internal = os.path.join(app_dir, "_internal")
-        new_internal = os.path.join(new_root, "_internal")
-        # Windows 文件占用问题：直接 rmtree 旧 _internal 会因 DLL 句柄未释放而
-        # WinError 32。改用「重命名旧目录 → 放新目录 → 延迟清理旧目录」。
-        old_internal_bak = os.path.join(app_dir, "_internal.old")
-        if os.path.isdir(old_internal_bak):
-            shutil.rmtree(old_internal_bak, ignore_errors=True)
-        if os.path.isdir(old_internal):
-            try:
-                os.rename(old_internal, old_internal_bak)
-                print("[updater] renamed old _internal → _internal.old")
-            except Exception as e:
-                print(f"[updater] rename old _internal fail: {e}, try direct rmtree")
-                shutil.rmtree(old_internal, ignore_errors=True)
-        if os.path.isdir(new_internal):
-            try:
-                os.rename(new_internal, old_internal)
-                print("[updater] moved new _internal into place")
-            except Exception as e:
-                print(f"[updater] move new _internal fail: {e}, fallback copytree")
-                shutil.copytree(new_internal, old_internal, symlinks=True, dirs_exist_ok=True)
-
-        # 主程序文件覆盖：exe 由独立更新器进程写入，本进程不占用，可正常替换
-        for name in os.listdir(new_root):
-            if name == "_internal":
-                continue
-            src = os.path.join(new_root, name)
-            dst = os.path.join(app_dir, name)
-            try:
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst, symlinks=True, dirs_exist_ok=True)
-                else:
-                    if os.path.isfile(dst):
-                        try:
-                            os.remove(dst)
-                        except Exception:
-                            # 仍被占用时改名，避免阻塞主流程
-                            try:
-                                os.rename(dst, dst + ".old")
-                            except Exception:
-                                pass
-                    shutil.copy2(src, dst)
-            except Exception as e:
-                print(f"[updater] overwrite {name} fail: {e}")
-
-        _upd_restore_data(app_dir, backup)
-        # 解压临时目录马上清理；旧 _internal.old 延迟清理（不阻塞，交由系统释放）
-        try:
-            shutil.rmtree(extract_dir, ignore_errors=True)
-        except Exception:
-            pass
-        try:
-            shutil.rmtree(old_internal_bak, ignore_errors=True)
-        except Exception:
-            print("[updater] _internal.old 未立即清理（句柄可能仍占用），新版本已就位，无影响")
-        try:
-            shutil.rmtree(backup, ignore_errors=True)
-        except Exception:
-            pass
-        return True
-
-    def _upd_apply_mpv(zip_path, app_dir):
-        mpv_dir = os.path.join(app_dir, "_internal", "mpv")
-        os.makedirs(mpv_dir, exist_ok=True)
-        try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(mpv_dir)
-            print(f"[updater] extracted mpv to {mpv_dir}")
-            return True
-        except Exception as e:
-            print(f"[updater] mpv extract fail: {e}")
-            return False
+    def _find_exe_root(d, exe_name):
+        if _os.path.isfile(_os.path.join(d, exe_name)):
+            return d
+        for cur, _, files in _os.walk(d):
+            if exe_name in files:
+                return cur
+        return None
 
     def _run_updater(argv):
-        zip_paths = [os.path.abspath(a) for a in argv if a.endswith(".zip")]
-        if not zip_paths:
+        zips = [_os.path.abspath(a) for a in argv if a.endswith(".zip")]
+        if not zips:
             print("[updater] no zip provided")
             return 1
-        app_dir = _upd_find_app_dir()
+        app_dir = _find_app_dir()
         if not app_dir:
             print("[updater] cannot find app dir")
             return 1
-        print(f"[updater] app dir: {app_dir}")
-        exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "IPTVCore.exe"
-        exe_path = os.path.join(app_dir, exe_name)
-        # 等待旧主进程退出并让 Windows 释放 DLL 句柄（os._exit 后句柄未完全释放，
-        # 立即改名/删除 _internal 会 WinError 32）
-        time.sleep(4)
-        main_zip = zip_paths[0]
-        print(f"[updater] main pkg: {main_zip}")
-        if not _upd_apply_main(main_zip, app_dir, exe_name):
-            print("[updater] main apply failed, abort")
+        exe_name = _os.path.basename(_sys.executable) if getattr(_sys, "frozen", False) else "IPTVCore.exe"
+        print("[updater] app dir: " + app_dir)
+
+        tmp_root = _tf.mkdtemp(prefix="itv_stage_")
+        roots = []
+        main_root = None
+        try:
+            for i, zp in enumerate(zips):
+                _d = _tf.mkdtemp(prefix="itv_pkg_", dir=tmp_root)
+                with _zf.ZipFile(zp, "r") as z:
+                    z.extractall(_d)
+                roots.append(_d)
+                print("[updater] extracted " + _os.path.basename(zp))
+                if main_root is None:
+                    main_root = _find_exe_root(_d, exe_name)
+        except Exception as e:
+            print("[updater] extract fail: " + repr(e))
             return 1
-        for zp in zip_paths[1:]:
-            if "mpv" in os.path.basename(zp).lower():
-                print(f"[updater] mpv pkg: {zp}")
-                _upd_apply_mpv(zp, app_dir)
-            else:
-                print(f"[updater] skip unknown pkg: {zp}")
-        if os.path.isfile(exe_path):
-            print(f"[updater] launching new version...")
-            subprocess.Popen([exe_path], cwd=app_dir)
-        print("[updater] done")
+        if not main_root:
+            print("[updater] main pkg missing " + exe_name + ", abort")
+            return 1
+
+        backup_dir = _backup(app_dir)
+        print("[updater] user data backed up")
+
+        real_internal = _os.path.join(app_dir, "_internal")
+        exe_path = _os.path.join(app_dir, exe_name)
+        log_path = _os.path.join(app_dir, "update.log")
+        bat = _os.path.join(_tf.gettempdir(), "itv_apply_new.bat")
+        L = []
+        L.append("@echo off")
+        L.append("rem wait for app to fully exit and release DLL handles")
+        L.append("ping 127.0.0.1 -n 6 > nul")
+        L.append('echo [updater] apply start > "' + log_path + '"')
+        L.append('taskkill /IM "' + exe_name + '" /F >nul 2>&1')
+        L.append("timeout /t 2 /nobreak >nul")
+        L.append('if exist "' + real_internal + '" (rd /s /q "' + real_internal + '")')
+        L.append('if exist "' + real_internal + '" (echo [updater] _internal locked retry >> "' + log_path + '" & ping 127.0.0.1 -n 4 > nul & rd /s /q "' + real_internal + '")')
+        L.append('xcopy "' + _os.path.join(main_root, "_internal") + '" "' + real_internal + '" /e /i /y /q >> "' + log_path + '" 2>&1')
+        L.append('for /d %%d in ("' + main_root + '\\*") do (if not "%%~nxd"=="_internal" xcopy "%%d" "' + app_dir + '\\%%~nxd" /e /i /y /q >> "' + log_path + '" 2>&1)')
+        L.append('for %%f in ("' + main_root + '\\*") do (if not "%%~nxf"=="_internal" (echo f | copy /y "%%f" "' + app_dir + '\\" >> "' + log_path + '" 2>&1))')
+        for _d in roots:
+            if _d is main_root:
+                continue
+            mpm = _os.path.join(_d, "mpv")
+            if _os.path.isdir(mpm):
+                L.append('if not exist "' + real_internal + '\\mpv" mkdir "' + real_internal + '\\mpv"')
+                L.append('xcopy "' + mpm + '" "' + real_internal + '\\mpv" /e /i /y /q >> "' + log_path + '" 2>&1')
+        if _os.path.isdir(backup_dir):
+            L.append('for /d %%d in ("' + backup_dir + '\\*") do (echo f | xcopy "%%d" "' + app_dir + '\\" /e /i /y /q >> "' + log_path + '" 2>&1)')
+            L.append('for %%f in ("' + backup_dir + '\\*") do (echo f | copy /y "%%f" "' + app_dir + '\\" >> "' + log_path + '" 2>&1)')
+        L.append('rd /s /q "' + tmp_root + '" >nul 2>&1')
+        L.append('cd /d "' + app_dir + '"')
+        L.append('start "" "' + exe_path + '"')
+        L.append('del /q /f "%~f0" >nul 2>&1')
+        with open(bat, "w", encoding="gbk") as f:
+            f.write("\n".join(L))
+        print("[updater] apply script: " + bat)
+
+        _sp.Popen(["cmd", "/c", bat], creationflags=0x08000000)
+        print("[updater] apply script launched, exiting")
         return 0
 
-    sys.exit(_run_updater(sys.argv))
+    _sys.exit(_run_updater(_sys.argv))
+
 
 import webview
 
