@@ -371,9 +371,9 @@
                <span class="ver-tag">v{{ curVersion }}</span>
              </el-form-item>
              <el-form-item label="更新清单地址">
-               <el-input v-model="form.update_url" placeholder="如 https://your-host/iptv/update.json"
-                         style="width:360px" />
-               <div class="tip">零服务器方案：自行托管一个 JSON 清单（含 version / url / notes），留空则不检查更新。</div>
+               <el-input v-model="form.update_url" placeholder="如 https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json"
+                         style="width:420px" />
+               <div class="tip">指向 GitHub 仓库 release/update.json（GitHub raw 直链）。程序比对版本后从对应 Release 下载更新包。</div>
              </el-form-item>
              <el-form-item label="检查更新">
                <el-button type="primary" @click="checkForUpdate" :loading="checking">检查更新</el-button>
@@ -381,17 +381,26 @@
                  <template v-if="updateInfo.has_update">
                    <span class="ur-title">发现新版本 v{{ updateInfo.latest }}</span>
                    <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
-                   <el-button v-if="updateInfo.url" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
-                     下载到暂存目录
-                   </el-button>
-                   <span v-if="downloadPath" class="ur-path">已下载至：{{ downloadPath }}</span>
+                   <p class="ur-sha" v-if="updateInfo.sha256">SHA256: {{ updateInfo.sha256.slice(0, 16) }}…</p>
+                   <div class="ur-actions">
+                     <el-button v-if="updateInfo.url" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
+                       下载更新包
+                     </el-button>
+                     <el-button
+                       v-if="downloadPath && !updateInfo.is_installing"
+                       type="warning" size="small"
+                       @click="doInstallUpdate"
+                     >退出并安装更新</el-button>
+                     <span v-if="updateInfo.is_installing" class="ur-installing">已启动更新器，旧版即将退出…</span>
+                     <span v-if="downloadPath && !updateInfo.is_installing" class="ur-path">已下载至：{{ downloadPath }}</span>
+                   </div>
                  </template>
                  <span v-else class="ur-title">已是最新版本</span>
                </div>
              </el-form-item>
              <div class="tip" style="margin-left:100px">
-               清单 JSON 示例：{"version":"7.0.2","url":"https://your-host/IPTVCore.zip","notes":"修复若干问题"}
-                <br/>下载完成后退出程序，将新包覆盖到程序目录即可完成更新。
+               清单 JSON 示例：{"version":"1.0.1","url":"https://github.com/foxfred/itv-desk/releases/download/v1.0.1/itv-desk_1.0.1.zip","notes":"修复若干问题"}
+               <br/>「退出并安装更新」会退出程序并运行更新器（只替换程序本体，你的频道/设置/台标数据保留）。
              </div>
            </el-form>
          </el-tab-pane>
@@ -428,10 +437,10 @@ const importing = ref(false)
 const backupFile = ref(null)
 const backupUpload = ref(null)
 // 应用版本与更新
-const curVersion = ref('7.0.1')
+const curVersion = ref('1.0.0')
 // #58 更新
 const checking = ref(false)
-const updateInfo = reactive({ has_update: false, latest: '', notes: '', url: '', package_name: '' })
+const updateInfo = reactive({ has_update: false, latest: '', notes: '', url: '', package_name: '', sha256: '', is_installing: false })
 const downloading = ref(false)
 const downloadPath = ref('')
 // #59 加密备份 / 恢复
@@ -653,6 +662,7 @@ async function checkForUpdate() {
   updateInfo.notes = ''
   updateInfo.url = ''
   updateInfo.package_name = ''
+  updateInfo.sha256 = ''
   downloadPath.value = ''
   try {
     const { data } = await appApi.checkUpdate(form.update_url || null)
@@ -662,6 +672,7 @@ async function checkForUpdate() {
     updateInfo.notes = data.notes || ''
     updateInfo.url = data.url || ''
     updateInfo.package_name = data.package_name || ''
+    updateInfo.sha256 = data.sha256 || ''
     if (data.has_update) ElMessage.success(`发现新版本 v${data.latest}`)
     else ElMessage.info('已是最新版本')
   } catch (e) {
@@ -670,18 +681,35 @@ async function checkForUpdate() {
   checking.value = false
 }
 
-// #58 下载更新包到暂存目录（手动覆盖替换）
+// #58 下载更新包到 update_staging（zip，含 mpv）
 async function doDownloadUpdate() {
   if (!updateInfo.url) return
   downloading.value = true
   try {
     const { data } = await appApi.downloadUpdate(updateInfo.url, updateInfo.package_name || null)
     downloadPath.value = data.path
-    ElMessage.success('新版本已下载到暂存目录，退出程序后覆盖程序目录即可完成更新')
+    ElMessage.success('新版本已下载到暂存目录')
   } catch (e) {
     ElMessage.error('下载失败：' + (e.response?.data?.detail || e.message))
   }
   downloading.value = false
+}
+
+// 退出并安装更新：启动更新器（运行更新器需程序已退出，此处由后端常驻进程拉起独立更新器）
+async function doInstallUpdate() {
+  if (!downloadPath.value) return
+  ElMessageBox.confirm('即将退出程序并开始安装更新（只替换程序文件，你的频道/设置/台标数据将完整保留）。确定继续？', '安装更新', {
+    confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
+  }).then(async () => {
+    const { data } = await appApi.applyUpdate(downloadPath.value)
+    if (data && data.ok && data.launched) {
+      updateInfo.is_installing = true
+      // 更新器已后台拉起，主程序随后退出
+      setTimeout(() => { try { window.close() } catch (_) {} }, 500)
+    } else {
+      ElMessage.error((data && data.error) || '未找到更新器')
+    }
+  }).catch(() => {})
 }
 
 // #59 加密导出备份

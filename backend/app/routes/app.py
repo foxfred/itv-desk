@@ -6,6 +6,7 @@
 """
 import os
 import json
+import sys
 import urllib.request
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -73,6 +74,7 @@ def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
         "notes": manifest.get("notes", ""),
         "url": manifest.get("url", ""),
         "package_name": manifest.get("package_name", ""),
+        "sha256": manifest.get("sha256", ""),
     }
 
 
@@ -88,9 +90,11 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir)):
     try:
         os.makedirs(os.path.join(data_dir, "update_staging"), exist_ok=True)
         fn = body.filename or os.path.basename(body.url.split("?")[0]) or "update_package"
+        # 防路径穿越：只保留安全文件名
+        fn = os.path.basename(fn)
         dest = os.path.join(data_dir, "update_staging", fn)
         req = urllib.request.Request(body.url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
-        with urllib.request.urlopen(req, timeout=180) as resp, open(dest, "wb") as f:
+        with urllib.request.urlopen(req, timeout=600) as resp, open(dest, "wb") as f:
             while True:
                 chunk = resp.read(1024 * 1024)
                 if not chunk:
@@ -99,3 +103,56 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir)):
         return {"ok": True, "path": dest, "size": os.path.getsize(dest)}
     except Exception as e:
         raise HTTPException(500, f"下载失败: {e}")
+
+
+class ApplyUpdateReq(BaseModel):
+    zip_path: Optional[str] = None
+
+
+@router.post("/apply-update")
+def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
+    """退出并安装更新：尽力找到可用 python 启动更新器；否则记录待安装。
+
+    - 开发态（非 frozen）：直接用本解释器后台启动 run_updater.py（等待后自动覆盖）。
+    - 打包态（frozen）：Python 解释器不可用，写 pending_update.json，提示用户手动
+      运行程序根目录的 run_updater.py。
+    """
+    zip_path = body.zip_path if body else None
+    if not zip_path or not os.path.isfile(zip_path):
+        raise HTTPException(400, "更新包不存在，请先下载")
+    import subprocess
+
+    # 定位仓库根/程序目录的 run_updater.py
+    updater = None
+    candidates = []
+    if getattr(sys, "frozen", False):
+        # 打包态：更新器应随包放在 _internal 同级？无 python 解释器 → 走待安装标记
+        candidates = []
+    else:
+        # dev 态：仓库根 run_updater.py
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        candidates = [os.path.join(root, "run_updater.py")]
+
+    updater = next((c for c in candidates if os.path.isfile(c)), None)
+
+    if updater:
+        # 后台带延迟启动，等待主进程退出后更新器再覆盖
+        python = sys.executable or "python"
+        subprocess.Popen(
+            [python, "-c",
+             f"import time; time.sleep(2); import subprocess,sys; "
+             f"subprocess.run([sys.executable, r'{updater}', r'{zip_path}'])",
+             ],
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+        return {"ok": True, "launched": True, "mode": "auto"}
+    else:
+        # 打包态：写待安装标记，用户确认退出后手动运行
+        try:
+            os.makedirs(os.path.join(data_dir, "update_staging"), exist_ok=True)
+            with open(os.path.join(data_dir, "update_staging", "pending_update.json"), "w", encoding="utf-8") as f:
+                json.dump({"zip_path": zip_path, "data_dir": data_dir}, f, ensure_ascii=False)
+        except Exception:
+            pass
+        return {"ok": True, "launched": False, "mode": "manual",
+                "error": "打包版更新器需手动运行：退出程序后运行程序目录的 run_updater.py"}
