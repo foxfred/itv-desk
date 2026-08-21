@@ -142,10 +142,11 @@ class ApplyUpdateReq(BaseModel):
 
 @router.post("/apply-update")
 def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
-    """退出并安装更新：支持多包（main + mpv）。启动更新器依次应用。
+    """退出并安装更新：支持多包（main + mpv）。全自动应用更新。
 
-    - 开发态（非 frozen）：直接用本解释器后台启动 run_updater.py。
-    - 打包态（frozen）：写 pending_update.json，提示用户手动运行。
+    - 打包态（frozen）：启动 IPTVCore.exe --update-only <zip_paths> 子进程，
+      主进程退出后子进程自动解压替换并重启，零手动。
+    - 开发态（非 frozen）：用本解释器后台启动 run.py --update-only。
     """
     # 统一成列表
     paths = []
@@ -157,37 +158,22 @@ def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
         raise HTTPException(400, "更新包不存在，请先下载")
     import subprocess
 
-    # 定位仓库根/程序目录的 run_updater.py
-    updater = None
-    candidates = []
     if getattr(sys, "frozen", False):
-        candidates = []
+        # 打包态：EXE 自己作为更新器子进程启动
+        exe = sys.executable
+        cmd = [exe, "--update-only"] + paths
     else:
+        # 开发态：用 run.py --update-only
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        candidates = [os.path.join(root, "run_updater.py")]
-
-    updater = next((c for c in candidates if os.path.isfile(c)), None)
-
-    # 把路径列表写成 JSON 给更新器读
-    paths_json = json.dumps(paths)
-
-    if updater:
+        run_py = os.path.join(root, "run.py")
+        if not os.path.isfile(run_py):
+            raise HTTPException(500, "开发态找不到 run.py")
         python = sys.executable or "python"
-        subprocess.Popen(
-            [python, "-c",
-             f"import time; time.sleep(2); import subprocess,sys,json; "
-             f"paths=json.loads({json.dumps(paths_json)}); "
-             f"subprocess.run([sys.executable, r'{updater}'] + paths)",
-             ],
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-        )
-        return {"ok": True, "launched": True, "mode": "auto", "packages": len(paths)}
-    else:
-        try:
-            os.makedirs(os.path.join(data_dir, "update_staging"), exist_ok=True)
-            with open(os.path.join(data_dir, "update_staging", "pending_update.json"), "w", encoding="utf-8") as f:
-                json.dump({"zip_paths": paths, "data_dir": data_dir}, f, ensure_ascii=False)
-        except Exception:
-            pass
-        return {"ok": True, "launched": False, "mode": "manual", "packages": len(paths),
-                "error": "打包版更新器需手动运行：退出程序后运行程序目录的 run_updater.py"}
+        cmd = [python, run_py, "--update-only"] + paths
+
+    # 启动更新器子进程（CREATE_NO_WINDOW），等 2 秒后由更新器接管
+    subprocess.Popen(
+        cmd,
+        creationflags=0x08000000,  # CREATE_NO_WINDOW
+    )
+    return {"ok": True, "launched": True, "mode": "auto", "packages": len(paths)}

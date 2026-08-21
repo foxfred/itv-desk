@@ -391,17 +391,17 @@
                        type="warning" size="small"
                        @click="doInstallUpdate"
                      >退出并安装更新</el-button>
-                     <span v-if="updateInfo.is_installing" class="ur-installing">已启动更新器，旧版即将退出…</span>
+                     <span v-if="updateInfo.is_installing" class="ur-installing">更新器已启动，程序即将退出并自动安装…</span>
                      <span v-if="downloadPaths.length && !updateInfo.is_installing" class="ur-path">已下载 {{ downloadPaths.length }} 个包到暂存目录</span>
                    </div>
                  </template>
                  <span v-else class="ur-title">已是最新版本</span>
                </div>
              </el-form-item>
-             <div class="tip" style="margin-left:100px">
-               清单 JSON 示例：{"version":"1.0.1","url":"https://github.com/foxfred/itv-desk/releases/download/v1.0.1/itv-desk_1.0.1.zip","notes":"修复若干问题"}
-               <br/>「退出并安装更新」会退出程序并运行更新器（只替换程序本体，你的频道/设置/台标数据保留）。
-             </div>
+            <div class="tip" style="margin-left:100px">
+              清单 JSON 示例：{"version":"1.0.1","packages":[{"name":"core.zip","url":"https://github.com/foxfred/itv-desk/raw/master/release/core.zip","sha256":"...","role":"main"}],"notes":"修复若干问题"}
+              <br/>「退出并安装更新」会退出程序并自动安装更新（只替换程序本体，你的频道/设置/台标数据保留），安装完成后自动重启，全程无需手动操作。
+            </div>
            </el-form>
          </el-tab-pane>
        </el-tabs>
@@ -694,18 +694,19 @@ async function doDownloadUpdate() {
   downloading.value = false
 }
 
-// 退出并安装更新：启动更新器（多包）
+// 退出并安装更新：启动内嵌更新器（全自动）
 async function doInstallUpdate() {
   if (!downloadPaths.value.length) return
-  ElMessageBox.confirm('即将退出程序并开始安装更新（只替换程序文件，你的频道/设置/台标数据将完整保留）。确定继续？', '安装更新', {
+  ElMessageBox.confirm('即将退出程序并自动安装更新（只替换程序文件，你的频道/设置/台标数据将完整保留，更新完成后自动重启）。确定继续？', '安装更新', {
     confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
   }).then(async () => {
     const { data } = await appApi.applyUpdate(downloadPaths.value)
     if (data && data.ok && data.launched) {
       updateInfo.is_installing = true
-      setTimeout(() => { try { window.close() } catch (_) {} }, 500)
+      ElMessage.success('更新器已启动，程序即将退出并自动安装…')
+      setTimeout(() => { try { window.close() } catch (_) {} }, 800)
     } else {
-      ElMessage.error((data && data.error) || '未找到更新器')
+      ElMessage.error((data && data.error) || '启动更新器失败')
     }
   }).catch(() => {})
 }
