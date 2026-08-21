@@ -1,12 +1,12 @@
 {
-  "version": "1.0.3",
-  "notes": "iTV Desk v1.0.3：取消聚合源，仅保留去重；新增拆解聚合源还原单源",
+  "version": "1.0.4",
+  "notes": "iTV Desk v1.0.4：新增 H.265/HEVC 源自动转码播放（后端 ffmpeg 实时重编码为 H.264，flv.js 播放，无需手动切引擎）",
   "packages": [
     {
-      "name": "itv-desk_1.0.3_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.3_core.zip",
-      "sha256": "43a1b4d8b059c37cd93de89fec146fc6781a424b4355cd800eb6a225bc02a53c",
-      "size": 44050661,
+      "name": "itv-desk_1.0.4_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.4_core.zip",
+      "sha256": "55927461f08dc7221aedf37f31bf3678f1ece109bd06671ef297d9792270ba9b",
+      "size": 44054704,
       "role": "main"
     },
     {

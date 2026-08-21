@@ -26,6 +26,7 @@
   - 主窗口 = 频道库 / 管理（列表即唯一选源入口）
   - 独立播放窗口 = 可拖 / 缩 / 置顶；Web 内核（hls.js / flv.js）即点即播
   - 可选 mpv 独立窗原生解码（默认关闭）
+  - **H.265 / HEVC 源自动转码**：Chrome / Edge 的 MSE 不支持 H.265 软解。遇到 H.265 的 HLS 源时，程序自动经后端 ffmpeg 实时重编码为 H.264 + AAC 的 HTTP-FLV 流（flv.js 播放），无需手动切换引擎。转码依赖本机 `ffmpeg`（需在系统 PATH，或通过环境变量 `IPTV_FFMPEG` 指定路径）。
 
 ---
 
