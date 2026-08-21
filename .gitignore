@@ -1,0 +1,92 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# ===== 构建产物（PyInstaller --onedir）=====
+build/
+build_removed/
+build_removed_*/
+dist/
+dist_old_build*/
+dist_old_build_*/
+dist/IPTVCore_Folder.prev_*/
+
+# ===== 前端依赖与构建产物 =====
+node_modules/
+frontend-new/dist/
+frontend-new/dist_old/
+frontend-new/dist_prev/
+
+# ===== 日志 =====
+*.log
+app.log*
+
+# ===== 运行期数据（落盘于 DATA_DIR，含个人频道/设置，不进仓库）=====
+*.db
+channel_tags.json
+channels_cache.json
+channel_rules.json
+epg_cache.json
+epg_cache.json.tmp
+epg_history.json
+epg_source.json
+mirror_history.json
+url_history.json
+remote_url_history.json
+column_widths.json
+settings.json
+
+# ===== 临时 / 调试文件 =====
+_p2debug.txt
+tasklist_out.txt
+startup_*.txt
+startup_*.log
+debug*.txt
+*.tmp
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== 操作系统 =====
+Thumbs.db
+Desktop.ini
+
+# ===== Agent 内部数据（非程序代码）=====
+.workbuddy/
+
+# ===== 运行期/构建残留（不进仓库，避免污染 GIT 备份）=====
+logos/
+logos_online_index.json
+repair_history.jsonl
+build_fresh.py.removed
+IPTVCore.spec
+导出的频道列表*.m3u
+frontend-new/dist_old_build*/
+
+# ===== 第三方运行时二进制（mpv 引擎，不进 git，靠本地+build 拷贝）=====
+vendor/mpv/
+
+# ===== 内部对比/规划文档（非程序源码，不对外公开）=====
+CGG888_iptvnator_vs_IPTV_Core_对比.md
+IPTVnator_vs_IPTV_Core_对比.md
+iptvnator_功能盘点清单.md
+融合改造计划_IPTV_Core_x_iptvnator.md
+播放器单窗口融合设计方案.md
+融合MPV到窗口里.md
+IPTV_Core_代码分析报告.md
+IPTV_Core_评估报告_20260817.md
+右键菜单增强评估报告.md
+查整理结果_已去重.m3u
+检查整理结果_已去重.m3u
+播放器MPV排查修复报告.md
+
+# ===== GitHub Release 更新产物（zip 大文件，走 Release 附件不入 git）=====
+release/*.zip
+release/update.json
+update_staging/

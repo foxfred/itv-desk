@@ -1,0 +1,53 @@
+/* ============================================================
+   IPTV Core — 全局语义色彩基座 (semantic-base)
+   作用：为全应用提供统一的「语义色彩 token」与「聚焦环 token」。
+   - 仅定义 --c-* 与 --focus-ring，不改动任何 --el-* 变量，
+     因此不会与任意内置皮肤冲突；内置皮肤仍是 --el-* 的来源。
+   - 对比度目标（WCAG AA）：正文文本 ≥ 4.5:1，占位/弱化 ≥ 3:1。
+   - 暗色模式（.dark）下文本与表面翻转，仍锁定对比度。
+   评估报告 §3 落地：统一语义色阶 / 锁定文本对比度 / 抽象聚焦 token。
+   ============================================================ */
+
+:root {
+  /* 语义主色（默认映射 Element Plus，皮肤可覆盖 --el-*） */
+  --c-primary: var(--el-color-primary, #2563eb);
+  --c-success: var(--el-color-success, #16a34a);
+  --c-warning: var(--el-color-warning, #d97706);
+  --c-danger:  var(--el-color-danger, #dc2626);
+  --c-info:    var(--el-color-info, #64748b);
+
+  /* 次级 / 强调角色（评估报告 §3：引入 secondary / accent） */
+  --c-secondary: #64748b;
+  --c-accent:    var(--el-color-primary, #2563eb);
+
+  /* 文本（亮色模式，WCAG AA 锁定） */
+  --c-text:            #1f2937;  /* ~13:1 on #fff */
+  --c-text-secondary:  #4b5563;  /* ~7.5:1 on #fff */
+  --c-text-muted:      #6b7280;  /* ~4.6:1 on #fff (AA) */
+
+  /* 背景 / 表面 / 边框 */
+  --c-bg:      #f6f7f9;
+  --c-surface: #ffffff;
+  --c-border:  #e5e7eb;
+
+  /* 聚焦环 token：统一键盘可达性高亮（评估报告 §3：抽象 --focus-ring） */
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.45);
+}
+
+/* 暗色模式：文本与表面翻转，仍锁定对比度 */
+.dark {
+  --c-text:            #e5eaf3;
+  --c-text-secondary:  #c0c4cc;
+  --c-text-muted:      #909399;
+  --c-bg:      #0a0a0a;
+  --c-surface: #141414;
+  --c-border:  #363637;
+  --focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.5);
+}
+
+/* 统一聚焦环：键盘聚焦可见（不影响鼠标点击），组件无需各自实现 */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 4px;
+}

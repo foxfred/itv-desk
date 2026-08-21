@@ -1,0 +1,194 @@
+/* ============================================
+   Win7 风格主题 - IPTV Core
+   设计灵感：Windows 7 Aero Glass
+   主色：#2A6FD0 (Win7 Aero 蓝)
+   ============================================ */
+
+:root {
+  --el-color-primary: #2A6FD0;
+  --el-color-primary-light-3: #6298DD;
+  --el-color-primary-light-5: #94B5E6;
+  --el-color-primary-light-7: #BBD2EF;
+  --el-color-primary-light-8: #CFE0F3;
+  --el-color-primary-light-9: #E5EFF8;
+  --el-color-primary-dark-2: #1F56A8;
+
+  --el-color-success: #2E8B57;
+  --el-color-success-light-3: #6BAC8A;
+  --el-color-success-light-5: #97B9AB;
+  --el-color-success-light-7: #BED6CA;
+  --el-color-success-light-8: #D2E2D9;
+  --el-color-success-light-9: #E5F0EA;
+  --el-color-warning: #D4A017;
+  --el-color-warning-light-3: #DFBC5A;
+  --el-color-warning-light-5: #E8CE8B;
+  --el-color-warning-light-7: #F0E0BC;
+  --el-color-warning-light-8: #F4EAD4;
+  --el-color-warning-light-9: #F9F5EA;
+  --el-color-danger: #B22222;
+  --el-color-danger-light-3: #C95555;
+  --el-color-danger-light-5: #D58080;
+  --el-color-danger-light-7: #E2ABAB;
+  --el-color-danger-light-8: #E9C2C2;
+  --el-color-danger-light-9: #F2E0E0;
+  --el-color-info: #6B7B8C;
+  --el-color-info-light-3: #939FAE;
+  --el-color-info-light-5: #AFB8C4;
+  --el-color-info-light-7: #C9CFD8;
+  --el-color-info-light-8: #D8DCE3;
+  --el-color-info-light-9: #E9EBEF;
+
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: #E8EEF5;
+  --el-bg-color-overlay: #FFFFFF;
+  --el-fill-color: #DDE6F0;
+  --el-fill-color-light: #E8EEF5;
+  --el-fill-color-lighter: #F0F4F8;
+  --el-fill-color-extra-light: #F7F9FB;
+  --el-fill-color-blank: #FFFFFF;
+
+  --el-text-color-primary: #1E2A38;
+  --el-text-color-regular: #3A4A5C;
+  --el-text-color-secondary: #6B7B8C;
+  --el-text-color-placeholder: #9AA8B5;
+  --el-text-color-disabled: #BFC8D2;
+
+  --el-border-color: #B8C6D6;
+  --el-border-color-light: #D0DAE5;
+  --el-border-color-lighter: #E0E8F0;
+  --el-border-color-extra-light: #EDF1F5;
+  --el-border-color-dark: #A3B3C5;
+
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 3px;
+  --el-border-radius-round: 14px;
+
+  --el-box-shadow: 0 2px 6px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.05);
+  --el-box-shadow-light: 0 1px 3px rgba(0,0,0,0.08);
+  --el-box-shadow-lighter: 0 1px 2px rgba(0,0,0,0.05);
+  --el-box-shadow-dark: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+* {
+  font-family: "Segoe UI", "Microsoft YaHei", "Tahoma", sans-serif !important;
+}
+
+/* 页面背景 - 浅蓝灰 */
+.main-content, .el-main, .app-content { background: #E8EEF5 !important; }
+
+/* 侧边栏 - Aero 毛玻璃 */
+.sidebar, .el-aside, .app-aside {
+  background: rgba(220, 232, 245, 0.8) !important;
+  backdrop-filter: blur(15px) saturate(140%);
+  -webkit-backdrop-filter: blur(15px) saturate(140%);
+  border-right: 1px solid rgba(168, 190, 216, 0.5) !important;
+}
+
+.el-menu { background: transparent !important; border-right: none !important; }
+.el-menu-item {
+  border-radius: 4px; margin: 1px 6px; height: 34px !important; line-height: 34px !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+}
+.el-menu-item:hover {
+  background: linear-gradient(to bottom, rgba(255,255,255,0.5), rgba(200,220,240,0.4)) !important;
+  border: 1px solid rgba(168, 190, 216, 0.4);
+}
+.el-menu-item.is-active {
+  background: linear-gradient(to bottom, rgba(42,111,208,0.15), rgba(42,111,208,0.08)) !important;
+  color: #1F56A8 !important;
+  border: 1px solid rgba(42,111,208,0.3);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+}
+
+/* 卡片 - Aero 玻璃白 */
+.el-card {
+  border-radius: 6px !important;
+  border: 1px solid #B8C6D6 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* 按钮 - Aero 渐变 */
+.el-button {
+  border-radius: 4px !important; font-weight: 400 !important;
+}
+.el-button--primary {
+  background: linear-gradient(to bottom, #4A8AE0, #2A6FD0) !important;
+  border: 1px solid #1F56A8 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3) !important;
+}
+.el-button--primary:hover {
+  background: linear-gradient(to bottom, #5A9AF0, #3A7FE0) !important;
+}
+.el-button--default {
+  background: linear-gradient(to bottom, #FFFFFF, #E8EEF5) !important;
+  border: 1px solid #B8C6D6 !important;
+  color: #1E2A38 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8) !important;
+}
+.el-button--default:hover {
+  background: linear-gradient(to bottom, #F0F4F8, #DDE6F0) !important;
+  border-color: #2A6FD0 !important;
+}
+
+/* 输入框 */
+.el-input__wrapper {
+  border-radius: 4px !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #B8C6D6 inset, inset 0 1px 2px rgba(0,0,0,0.05) !important;
+}
+.el-input__wrapper:hover { box-shadow: 0 0 0 1px #2A6FD0 inset !important; }
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px #2A6FD0 inset, 0 0 6px rgba(42,111,208,0.2) !important;
+}
+.el-textarea__inner {
+  border-radius: 4px !important; background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #B8C6D6 inset, inset 0 1px 2px rgba(0,0,0,0.05) !important;
+}
+.el-textarea__inner:focus { box-shadow: 0 0 0 1px #2A6FD0 inset, 0 0 6px rgba(42,111,208,0.2) !important; }
+
+/* 表格 */
+.el-table th.el-table__cell {
+  background: linear-gradient(to bottom, #E8EEF5, #DDE6F0) !important;
+  color: #3A4A5C !important; font-weight: 600 !important;
+  border-bottom: 1px solid #B8C6D6 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+}
+.el-table tr:hover > td { background: rgba(42,111,208,0.05) !important; }
+
+/* 标签页 */
+.el-tabs__item { color: #6B7B8C !important; }
+.el-tabs__item.is-active { color: #2A6FD0 !important; text-shadow: 0 1px 0 rgba(255,255,255,0.6); }
+.el-tabs__active-line { background: #2A6FD0 !important; }
+
+/* 开关 */
+.el-switch.is-checked .el-switch__core { background: #2E8B57 !important; border-color: #2E8B57 !important; }
+
+/* 顶部栏 - Aero 玻璃 */
+.app-header, .el-header {
+  background: rgba(220, 232, 245, 0.7) !important;
+  backdrop-filter: blur(15px) saturate(140%);
+  -webkit-backdrop-filter: blur(15px) saturate(140%);
+  border-bottom: 1px solid rgba(168, 190, 216, 0.4) !important;
+}
+
+/* 弹窗 */
+.el-dialog {
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+
+/* 消息 */
+.el-message {
+  border-radius: 6px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 14px; height: 14px; }
+::-webkit-scrollbar-track { background: #E8EEF5; border-radius: 0; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, #C0CCDA, #A3B3C5);
+  border-radius: 4px; border: 2px solid #E8EEF5;
+}
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(to right, #2A6FD0, #1F56A8); }

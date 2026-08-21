@@ -1,0 +1,142 @@
+/* ============================================
+   Win10 风格主题 - IPTV Core
+   设计灵感：Windows 10 Fluent / Metro
+   主色：#0078D4 (Win10 系统蓝)
+   ============================================ */
+
+:root {
+  --el-color-primary: #0078D4;
+  --el-color-primary-light-3: #4DA3E0;
+  --el-color-primary-light-5: #80BCE8;
+  --el-color-primary-light-7: #B3D6F0;
+  --el-color-primary-light-8: #CCE4F5;
+  --el-color-primary-light-9: #E5F1FA;
+  --el-color-primary-dark-2: #005A9E;
+
+  --el-color-success: #00B294;
+  --el-color-success-light-3: #4DC8B6;
+  --el-color-success-light-5: #80DACA;
+  --el-color-success-light-7: #B3E8DE;
+  --el-color-success-light-8: #CCEEE8;
+  --el-color-success-light-9: #E5F5F1;
+  --el-color-warning: #FFB900;
+  --el-color-warning-light-3: #FFCC4D;
+  --el-color-warning-light-5: #FFD980;
+  --el-color-warning-light-7: #FFE5B3;
+  --el-color-warning-light-8: #FFEDCC;
+  --el-color-warning-light-9: #FFF5E5;
+  --el-color-danger: #E81123;
+  --el-color-danger-light-3: #EF5060;
+  --el-color-danger-light-5: #F38898;
+  --el-color-danger-light-7: #F7BBC4;
+  --el-color-danger-light-8: #F9D5DA;
+  --el-color-danger-light-9: #FCEAEC;
+  --el-color-info: #605E5C;
+  --el-color-info-light-3: #8A8886;
+  --el-color-info-light-5: #A8A6A4;
+  --el-color-info-light-7: #C7C5C3;
+  --el-color-info-light-8: #D6D4D2;
+  --el-color-info-light-9: #E5E3E1;
+
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: #F2F2F2;
+  --el-bg-color-overlay: #FFFFFF;
+  --el-fill-color: #F2F2F2;
+  --el-fill-color-light: #F5F5F5;
+  --el-fill-color-lighter: #FAFAFA;
+  --el-fill-color-extra-light: #FDFDFD;
+  --el-fill-color-blank: #FFFFFF;
+
+  --el-text-color-primary: #201F1E;
+  --el-text-color-regular: #323130;
+  --el-text-color-secondary: #605E5C;
+  --el-text-color-placeholder: #8A8886;
+  --el-text-color-disabled: #A6A5A4;
+
+  --el-border-color: #DEDEDE;
+  --el-border-color-light: #EDEDED;
+  --el-border-color-lighter: #F2F2F2;
+  --el-border-color-extra-light: #F7F7F7;
+  --el-border-color-dark: #C8C6C4;
+
+  --el-border-radius-base: 0px;
+  --el-border-radius-small: 0px;
+  --el-border-radius-round: 0px;
+
+  --el-box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+  --el-box-shadow-light: 0 1px 2px rgba(0,0,0,0.04);
+  --el-box-shadow-lighter: 0 1px 1px rgba(0,0,0,0.02);
+  --el-box-shadow-dark: 0 4px 12px rgba(0,0,0,0.10);
+}
+
+* {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif !important;
+}
+
+.main-content, .el-main, .app-content { background: #F2F2F2 !important; }
+
+.sidebar, .el-aside, .app-aside {
+  background: #FFFFFF !important;
+  border-right: 1px solid #EDEDED !important;
+}
+
+.el-menu { background: transparent !important; border-right: none !important; }
+.el-menu-item {
+  border-radius: 0px; margin: 0; height: 40px !important; line-height: 40px !important;
+}
+.el-menu-item:hover { background: rgba(0, 120, 212, 0.06) !important; }
+.el-menu-item.is-active {
+  background: rgba(0, 120, 212, 0.10) !important;
+  color: #0078D4 !important;
+  border-left: 3px solid #0078D4;
+}
+
+.el-card {
+  border-radius: 0px !important;
+  border: 1px solid #DEDEDE !important;
+  box-shadow: none !important;
+  background: #FFFFFF !important;
+}
+
+.el-button { border-radius: 0px !important; font-weight: 400 !important; }
+.el-button--primary { background: #0078D4 !important; border: 1px solid #0078D4 !important; }
+.el-button--primary:hover { background: #005A9E !important; }
+.el-button--default { background: #FFFFFF !important; border: 1px solid #DEDEDE !important; color: #201F1E !important; }
+.el-button--default:hover { background: #F2F2F2 !important; border-color: #0078D4 !important; }
+
+.el-input__wrapper {
+  border-radius: 0px !important; background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #DEDEDE inset !important;
+}
+.el-input__wrapper:hover { box-shadow: 0 0 0 1px #0078D4 inset !important; }
+.el-input__wrapper.is-focus { box-shadow: 0 0 0 2px #0078D4 inset !important; }
+.el-textarea__inner {
+  border-radius: 0px !important; background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #DEDEDE inset !important;
+}
+.el-textarea__inner:focus { box-shadow: 0 0 0 2px #0078D4 inset !important; }
+
+.el-table th.el-table__cell {
+  background: #F2F2F2 !important; color: #605E5C !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid #DEDEDE !important;
+}
+.el-table tr:hover > td { background: rgba(0, 120, 212, 0.04) !important; }
+
+.el-tabs__item { color: #605E5C !important; }
+.el-tabs__item.is-active { color: #0078D4 !important; }
+.el-tabs__active-line { background: #0078D4 !important; }
+
+.el-switch.is-checked .el-switch__core { background: #0078D4 !important; border-color: #0078D4 !important; }
+
+.app-header, .el-header {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #EDEDED !important;
+}
+
+.el-dialog { border-radius: 0px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.12) !important; }
+.el-message { border-radius: 0px !important; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #C8C6C4; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #A8A6A4; }

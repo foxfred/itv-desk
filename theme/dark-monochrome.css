@@ -1,0 +1,186 @@
+/* ============================================
+   极致暗黑 - IPTV Core 暗黑主题
+   设计灵感：Minimal Dark / OLED Black
+   主色：#888888 (中性灰)
+   背景：#000000 (纯黑)
+   ============================================ */
+
+:root {
+  --el-color-primary: #999999;
+  --el-color-primary-light-3: #B3B3B3;
+  --el-color-primary-light-5: #C8C8C8;
+  --el-color-primary-light-7: #DCDCDC;
+  --el-color-primary-light-8: #E8E8E8;
+  --el-color-primary-light-9: #F2F2F2;
+  --el-color-primary-dark-2: #777777;
+
+  --el-color-success: #888888;
+  --el-color-success-light-3: #A8A8A8;
+  --el-color-success-light-5: #C0C0C0;
+  --el-color-success-light-7: #D6D6D6;
+  --el-color-success-light-8: #E2E2E2;
+  --el-color-success-light-9: #EFEFEF;
+  --el-color-warning: #AAAAAA;
+  --el-color-warning-light-3: #C0C0C0;
+  --el-color-warning-light-5: #D2D2D2;
+  --el-color-warning-light-7: #E2E2E2;
+  --el-color-warning-light-8: #EBEBEB;
+  --el-color-warning-light-9: #F4F4F4;
+  --el-color-danger: #AA4444;
+  --el-color-danger-light-3: #C07878;
+  --el-color-danger-light-5: #D2A0A0;
+  --el-color-danger-light-7: #E2C4C4;
+  --el-color-danger-light-8: #EBD4D4;
+  --el-color-danger-light-9: #F4E8E8;
+  --el-color-info: #777777;
+  --el-color-info-light-3: #9A9A9A;
+  --el-color-info-light-5: #B4B4B4;
+  --el-color-info-light-7: #CDCDCD;
+  --el-color-info-light-8: #DBDBDB;
+  --el-color-info-light-9: #EBEBEB;
+
+  --el-bg-color: #0A0A0A;
+  --el-bg-color-page: #000000;
+  --el-bg-color-overlay: #121212;
+  --el-fill-color: #121212;
+  --el-fill-color-light: #1A1A1A;
+  --el-fill-color-lighter: #222222;
+  --el-fill-color-extra-light: #2A2A2A;
+  --el-fill-color-blank: #0A0A0A;
+
+  --el-text-color-primary: #CCCCCC;
+  --el-text-color-regular: #999999;
+  --el-text-color-secondary: #666666;
+  --el-text-color-placeholder: #444444;
+  --el-text-color-disabled: #333333;
+
+  --el-border-color: #222222;
+  --el-border-color-light: #1A1A1A;
+  --el-border-color-lighter: #151515;
+  --el-border-color-extra-light: #0F0F0F;
+  --el-border-color-dark: #333333;
+
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 2px;
+  --el-border-radius-round: 16px;
+
+  --el-box-shadow: 0 2px 8px rgba(0,0,0,0.60);
+  --el-box-shadow-light: 0 1px 4px rgba(0,0,0,0.50);
+  --el-box-shadow-lighter: 0 1px 2px rgba(0,0,0,0.40);
+  --el-box-shadow-dark: 0 4px 20px rgba(0,0,0,0.70);
+}
+
+* {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif !important;
+}
+
+.main-content, .el-main, .app-content { background: #000000 !important; }
+
+.sidebar, .el-aside, .app-aside {
+  background: #050505 !important;
+  border-right: 1px solid #222222 !important;
+}
+
+.el-menu { background: transparent !important; border-right: none !important; }
+.el-menu-item {
+  border-radius: 4px; margin: 1px 6px; height: 36px !important; line-height: 36px !important;
+  color: #999999 !important;
+}
+.el-menu-item:hover { background: rgba(255,255,255,0.05) !important; color: #CCCCCC !important; }
+.el-menu-item.is-active {
+  background: rgba(255,255,255,0.08) !important;
+  color: #FFFFFF !important;
+  border-left: 2px solid #999999;
+}
+
+.el-card {
+  border-radius: 6px !important;
+  border: 1px solid #222222 !important;
+  box-shadow: none !important;
+  background: #0A0A0A !important;
+}
+.el-card__header { border-bottom: 1px solid #222222 !important; }
+
+.el-button { border-radius: 4px !important; font-weight: 500 !important; }
+.el-button--primary {
+  background: #999999 !important; border: none !important;
+  color: #000000 !important;
+}
+.el-button--primary:hover { background: #AAAAAA !important; }
+.el-button--default {
+  background: #121212 !important; color: #999999 !important;
+  border: 1px solid #222222 !important;
+}
+.el-button--default:hover { border-color: #999999 !important; color: #CCCCCC !important; }
+
+.el-input__wrapper {
+  border-radius: 4px !important; background: #050505 !important;
+  box-shadow: 0 0 0 1px #222222 inset !important;
+}
+.el-input__wrapper:hover { box-shadow: 0 0 0 1px #999999 inset !important; }
+.el-input__wrapper.is-focus { box-shadow: 0 0 0 2px #999999 inset !important; }
+.el-input__inner { color: #CCCCCC !important; }
+.el-input__inner::placeholder { color: #444444 !important; }
+.el-textarea__inner {
+  border-radius: 4px !important; background: #050505 !important;
+  box-shadow: 0 0 0 1px #222222 inset !important; color: #CCCCCC !important;
+}
+.el-textarea__inner:focus { box-shadow: 0 0 0 2px #999999 inset !important; }
+
+.el-select__wrapper {
+  border-radius: 4px !important; background: #050505 !important;
+  box-shadow: 0 0 0 1px #222222 inset !important;
+}
+.el-select__wrapper.is-focused { box-shadow: 0 0 0 2px #999999 inset !important; }
+
+.el-table { background: transparent !important; color: #999999 !important; }
+.el-table th.el-table__cell {
+  background: #050505 !important; color: #666666 !important;
+  font-weight: 600 !important; font-size: 12px !important;
+  border-bottom: 1px solid #222222 !important;
+}
+.el-table tr:hover > td { background: rgba(255,255,255,0.03) !important; }
+.el-table td.el-table__cell { border-bottom: 1px solid #121212 !important; }
+
+.el-pagination .el-pager li { background: transparent !important; color: #999999 !important; }
+.el-pagination .el-pager li.is-active { background: #999999 !important; color: #000000 !important; }
+
+.el-tabs__item { color: #666666 !important; }
+.el-tabs__item.is-active { color: #999999 !important; }
+.el-tabs__active-line { background: #999999 !important; }
+
+.app-header, .el-header {
+  background: #050505 !important;
+  border-bottom: 1px solid #222222 !important;
+}
+
+.el-dialog {
+  border-radius: 8px !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.70) !important;
+  background: #0A0A0A !important;
+}
+.el-dialog__title { color: #CCCCCC !important; }
+.el-dialog__header { border-bottom: 1px solid #222222 !important; }
+
+.el-form-item__label { color: #999999 !important; }
+
+.el-checkbox__label { color: #999999 !important; }
+.el-checkbox__input.is-checked .el-checkbox__inner { background: #999999 !important; border-color: #999999 !important; }
+.el-checkbox__inner { background: #050505 !important; border-color: #222222 !important; }
+.el-radio__label { color: #999999 !important; }
+.el-radio__input.is-checked .el-radio__inner { background: #999999 !important; border-color: #999999 !important; }
+.el-radio__inner { background: #050505 !important; border-color: #222222 !important; }
+
+.el-switch.is-checked .el-switch__core { background: #999999 !important; border-color: #999999 !important; }
+.el-switch__core { background: #222222 !important; border-color: #222222 !important; }
+
+.el-message {
+  border-radius: 6px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.60) !important;
+  background: #121212 !important; border: 1px solid #222222 !important;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-thumb { background: #333333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #999999; }

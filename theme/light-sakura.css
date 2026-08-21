@@ -1,0 +1,191 @@
+/* ============================================
+   樱花物语 - IPTV Core 亮色主题
+   设计灵感：Sakura / 春日樱花
+   主色：#E893A8 (樱花粉)
+   背景：#FFF5F7 (暖粉白)
+   ============================================ */
+
+:root {
+  --el-color-primary: #E893A8;
+  --el-color-primary-light-3: #EEB3C2;
+  --el-color-primary-light-5: #F3CBD5;
+  --el-color-primary-light-7: #F7E0E6;
+  --el-color-primary-light-8: #FAEBEF;
+  --el-color-primary-light-9: #FDF5F7;
+  --el-color-primary-dark-2: #D47088;
+
+  --el-color-success: #8BC4A0;
+  --el-color-success-light-3: #A8D4B8;
+  --el-color-success-light-5: #C0E0CC;
+  --el-color-success-light-7: #D6ECD0;
+  --el-color-success-light-8: #E2F2E0;
+  --el-color-success-light-9: #F0F8F0;
+  --el-color-warning: #E8C888;
+  --el-color-warning-light-3: #F0D8A8;
+  --el-color-warning-light-5: #F4E4C0;
+  --el-color-warning-light-7: #F8EED8;
+  --el-color-warning-light-8: #FAF2E4;
+  --el-color-warning-light-9: #FCF8F0;
+  --el-color-danger: #E88888;
+  --el-color-danger-light-3: #F0A8A8;
+  --el-color-danger-light-5: #F4C0C0;
+  --el-color-danger-light-7: #F8D8D8;
+  --el-color-danger-light-8: #FAE4E4;
+  --el-color-danger-light-9: #FCF0F0;
+  --el-color-info: #C8A8B8;
+  --el-color-info-light-3: #D8C0CC;
+  --el-color-info-light-5: #E2D0D8;
+  --el-color-info-light-7: #ECE0E4;
+  --el-color-info-light-8: #F2E8EC;
+  --el-color-info-light-9: #F8F2F4;
+
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: #FFF5F7;
+  --el-bg-color-overlay: #FFFFFF;
+  --el-fill-color: #FFF0F3;
+  --el-fill-color-light: #FFF5F7;
+  --el-fill-color-lighter: #FFF8FA;
+  --el-fill-color-extra-light: #FFFAFB;
+  --el-fill-color-blank: #FFFFFF;
+
+  --el-text-color-primary: #3A2830;
+  --el-text-color-regular: #5A4050;
+  --el-text-color-secondary: #8A7080;
+  --el-text-color-placeholder: #B098A5;
+  --el-text-color-disabled: #D0BCC5;
+
+  --el-border-color: #E8CCD5;
+  --el-border-color-light: #F0DDE3;
+  --el-border-color-lighter: #F5E8EC;
+  --el-border-color-extra-light: #F8F0F3;
+  --el-border-color-dark: #DCB8C5;
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 24px;
+
+  --el-box-shadow: 0 2px 12px rgba(232,147,168,0.10), 0 0 0 1px rgba(232,147,168,0.04);
+  --el-box-shadow-light: 0 1px 4px rgba(232,147,168,0.08);
+  --el-box-shadow-lighter: 0 1px 2px rgba(232,147,168,0.05);
+  --el-box-shadow-dark: 0 4px 20px rgba(232,147,168,0.15);
+}
+
+* {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif !important;
+}
+
+.main-content, .el-main, .app-content { background: #FFF5F7 !important; }
+
+.sidebar, .el-aside, .app-aside {
+  background: #FFF0F3 !important;
+  border-right: 1px solid #F0DDE3 !important;
+}
+
+.el-menu { background: transparent !important; border-right: none !important; }
+.el-menu-item {
+  border-radius: 8px; margin: 2px 8px; height: 40px !important; line-height: 40px !important;
+  color: #5A4050 !important;
+}
+.el-menu-item:hover { background: rgba(232,147,168,0.08) !important; color: #E893A8 !important; }
+.el-menu-item.is-active {
+  background: rgba(232,147,168,0.12) !important;
+  color: #E893A8 !important;
+  font-weight: 600;
+}
+
+.el-card {
+  border-radius: 12px !important;
+  border: 1px solid #E8CCD5 !important;
+  box-shadow: 0 2px 12px rgba(232,147,168,0.08) !important;
+  background: #FFFFFF !important;
+}
+.el-card__header { border-bottom: 1px solid #F0DDE3 !important; }
+
+.el-button { border-radius: 8px !important; font-weight: 500 !important; }
+.el-button--primary {
+  background: #E893A8 !important; border: none !important;
+  box-shadow: 0 2px 8px rgba(232,147,168,0.25) !important;
+  color: #FFFFFF !important;
+}
+.el-button--primary:hover { background: #D47088 !important; }
+.el-button--default {
+  background: #FFFFFF !important; color: #5A4050 !important;
+  border: 1px solid #E8CCD5 !important;
+}
+.el-button--default:hover {
+  background: #FFF5F7 !important;
+  border-color: #E893A8 !important;
+  color: #E893A8 !important;
+}
+
+.el-input__wrapper {
+  border-radius: 8px !important;
+  background: #FFF8FA !important;
+  box-shadow: 0 0 0 1px #E8CCD5 inset !important;
+}
+.el-input__wrapper:hover { box-shadow: 0 0 0 1px #E893A8 inset !important; }
+.el-input__wrapper.is-focus {
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 2px #E893A8 inset, 0 0 8px rgba(232,147,168,0.12) !important;
+}
+.el-textarea__inner {
+  border-radius: 8px !important; background: #FFF8FA !important;
+  box-shadow: 0 0 0 1px #E8CCD5 inset !important;
+}
+.el-textarea__inner:focus { box-shadow: 0 0 0 2px #E893A8 inset !important; }
+
+.el-select__wrapper {
+  border-radius: 8px !important; background: #FFF8FA !important;
+  box-shadow: 0 0 0 1px #E8CCD5 inset !important;
+}
+.el-select__wrapper.is-focused { box-shadow: 0 0 0 2px #E893A8 inset !important; }
+
+.el-table { background: transparent !important; }
+.el-table th.el-table__cell {
+  background: #FFF0F3 !important; color: #8A7080 !important;
+  font-weight: 600 !important; font-size: 12px !important;
+  border-bottom: 1px solid #F0DDE3 !important;
+}
+.el-table tr:hover > td { background: rgba(232,147,168,0.04) !important; }
+.el-table td.el-table__cell { border-bottom: 1px solid #F5E8EC !important; }
+
+.el-pagination .el-pager li {
+  border-radius: 8px !important; margin: 0 2px !important;
+  background: transparent !important; color: #5A4050 !important;
+}
+.el-pagination .el-pager li.is-active { background: #E893A8 !important; color: #FFFFFF !important; }
+
+.el-tabs__item { color: #8A7080 !important; }
+.el-tabs__item.is-active { color: #E893A8 !important; font-weight: 600; }
+.el-tabs__active-line { background: #E893A8 !important; }
+
+.app-header, .el-header {
+  background: #FFF0F3 !important;
+  border-bottom: 1px solid #F0DDE3 !important;
+}
+
+.el-dialog {
+  border-radius: 14px !important;
+  box-shadow: 0 8px 32px rgba(232,147,168,0.15) !important;
+}
+
+.el-form-item__label { color: #5A4050 !important; }
+
+.el-checkbox__label { color: #5A4050 !important; }
+.el-checkbox__input.is-checked .el-checkbox__inner { background: #E893A8 !important; border-color: #E893A8 !important; }
+.el-checkbox__inner { border-color: #E8CCD5 !important; }
+.el-radio__label { color: #5A4050 !important; }
+.el-radio__input.is-checked .el-radio__inner { background: #E893A8 !important; border-color: #E893A8 !important; }
+.el-radio__inner { border-color: #E8CCD5 !important; }
+
+.el-switch.is-checked .el-switch__core { background: #8BC4A0 !important; border-color: #8BC4A0 !important; }
+
+.el-message {
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(232,147,168,0.12) !important;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #FFF5F7; }
+::-webkit-scrollbar-thumb { background: #E8CCD5; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #E893A8; }

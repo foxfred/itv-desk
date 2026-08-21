@@ -1,0 +1,102 @@
+/* ============================================================
+   浅色现代极简 - IPTV Core 亮色主题（评估报告 §3 示范皮肤）
+   设计：Tailwind 风格中性灰 + 单一现代蓝强调色；大量留白、
+   克制边框、清晰层级。所有文本对比度锁定 WCAG AA。
+   语义 token（--c-*）与 --focus-ring 已在 semantic-base.css 统一定义，
+   此处仅补充本皮肤自包含的覆盖值（便于单独导入/复用）。
+   ============================================================ */
+
+:root {
+  /* ---- Element Plus 主色阶（现代蓝 #2563eb）---- */
+  --el-color-primary: #2563eb;
+  --el-color-primary-light-3: #6692f1;
+  --el-color-primary-light-5: #92b1f5;
+  --el-color-primary-light-7: #bed0f9;
+  --el-color-primary-light-8: #d3e0fb;
+  --el-color-primary-light-9: #e9effd;
+  --el-color-primary-dark-2: #1e4fbc;
+
+  /* ---- 语义状态色（高辨识、AA 对比）---- */
+  --el-color-success: #16a34a;
+  --el-color-success-light-3: #5cbf80;
+  --el-color-success-light-5: #8ad1a4;
+  --el-color-success-light-7: #b9e3c9;
+  --el-color-success-light-8: #d0eddb;
+  --el-color-success-light-9: #e8f6ed;
+  --el-color-warning: #d97706;
+  --el-color-warning-light-3: #e4a051;
+  --el-color-warning-light-5: #ecbb82;
+  --el-color-warning-light-7: #f4d6b4;
+  --el-color-warning-light-8: #f7e4cd;
+  --el-color-warning-light-9: #fbf1e6;
+  --el-color-danger: #dc2626;
+  --el-color-danger-light-3: #e66767;
+  --el-color-danger-light-5: #ee9292;
+  --el-color-danger-light-7: #f4bebe;
+  --el-color-danger-light-8: #f8d4d4;
+  --el-color-danger-light-9: #fce9e9;
+  --el-color-info: #64748b;
+  --el-color-info-light-3: #929eae;
+  --el-color-info-light-5: #b2bac5;
+  --el-color-info-light-7: #d0d5dc;
+  --el-color-info-light-8: #e0e3e8;
+  --el-color-info-light-9: #f0f1f3;
+
+  /* ---- 背景 / 表面 / 文本（WCAG AA 锁定）---- */
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f6f7f9;
+  --el-bg-color-overlay: #ffffff;
+
+  --el-text-color-primary: #1f2937;   /* ~13:1 on #fff */
+  --el-text-color-regular: #374151;   /* ~10:1 on #fff */
+  --el-text-color-secondary: #4b5563; /* ~7.5:1 on #fff */
+  --el-text-color-placeholder: #6b7280; /* ~4.6:1 on #fff (AA) */
+
+  --el-border-color: #e5e7eb;
+  --el-border-color-light: #eef0f2;
+  --el-border-color-lighter: #f3f4f6;
+  --el-border-color-extra-light: #f7f8f9;
+  --el-border-color-dark: #d1d5db;
+  --el-border-color-darker: #9ca3af;
+
+  --el-fill-color: #f3f4f6;
+  --el-fill-color-light: #f5f6f8;
+  --el-fill-color-lighter: #f8f9fa;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color-dark: #e5e7eb;
+  --el-fill-color-darker: #d1d5db;
+
+  --el-box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.06), 0 1px 3px 0 rgba(16, 24, 40, 0.1);
+  --el-box-shadow-light: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+
+  /* ---- 语义 token（本皮肤自包含覆盖，便于单独导入）---- */
+  --c-primary: #2563eb;
+  --c-success: #16a34a;
+  --c-warning: #d97706;
+  --c-danger: #dc2626;
+  --c-info: #64748b;
+  --c-secondary: #64748b;
+  --c-accent: #2563eb;
+
+  --c-text: #1f2937;
+  --c-text-secondary: #4b5563;
+  --c-text-muted: #6b7280;
+
+  --c-bg: #f6f7f9;
+  --c-surface: #ffffff;
+  --c-border: #e5e7eb;
+
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.45);
+}
+
+/* 顶栏 / 侧边栏使用更克制的浅灰，强化「极简」观感 */
+.app-header,
+.el-header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e5e7eb;
+}
+.el-aside,
+.app-sidebar {
+  background: #fbfcfd !important;
+  border-right: 1px solid #eef0f2;
+}
