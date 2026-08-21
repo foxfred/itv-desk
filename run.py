@@ -106,15 +106,28 @@ if "--update-only" in sys.argv:
             new_root = found
 
         old_internal = os.path.join(app_dir, "_internal")
+        new_internal = os.path.join(new_root, "_internal")
+        # Windows 文件占用问题：直接 rmtree 旧 _internal 会因 DLL 句柄未释放而
+        # WinError 32。改用「重命名旧目录 → 放新目录 → 延迟清理旧目录」。
+        old_internal_bak = os.path.join(app_dir, "_internal.old")
+        if os.path.isdir(old_internal_bak):
+            shutil.rmtree(old_internal_bak, ignore_errors=True)
         if os.path.isdir(old_internal):
             try:
-                shutil.rmtree(old_internal)
+                os.rename(old_internal, old_internal_bak)
+                print("[updater] renamed old _internal → _internal.old")
             except Exception as e:
-                print(f"[updater] clean old _internal fail: {e}")
-        new_internal = os.path.join(new_root, "_internal")
+                print(f"[updater] rename old _internal fail: {e}, try direct rmtree")
+                shutil.rmtree(old_internal, ignore_errors=True)
         if os.path.isdir(new_internal):
-            shutil.copytree(new_internal, old_internal, symlinks=True, dirs_exist_ok=True)
+            try:
+                os.rename(new_internal, old_internal)
+                print("[updater] moved new _internal into place")
+            except Exception as e:
+                print(f"[updater] move new _internal fail: {e}, fallback copytree")
+                shutil.copytree(new_internal, old_internal, symlinks=True, dirs_exist_ok=True)
 
+        # 主程序文件覆盖：exe 由独立更新器进程写入，本进程不占用，可正常替换
         for name in os.listdir(new_root):
             if name == "_internal":
                 continue
@@ -128,14 +141,29 @@ if "--update-only" in sys.argv:
                         try:
                             os.remove(dst)
                         except Exception:
-                            pass
+                            # 仍被占用时改名，避免阻塞主流程
+                            try:
+                                os.rename(dst, dst + ".old")
+                            except Exception:
+                                pass
                     shutil.copy2(src, dst)
             except Exception as e:
                 print(f"[updater] overwrite {name} fail: {e}")
 
         _upd_restore_data(app_dir, backup)
-        shutil.rmtree(extract_dir, ignore_errors=True)
-        shutil.rmtree(backup, ignore_errors=True)
+        # 解压临时目录马上清理；旧 _internal.old 延迟清理（不阻塞，交由系统释放）
+        try:
+            shutil.rmtree(extract_dir, ignore_errors=True)
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(old_internal_bak, ignore_errors=True)
+        except Exception:
+            print("[updater] _internal.old 未立即清理（句柄可能仍占用），新版本已就位，无影响")
+        try:
+            shutil.rmtree(backup, ignore_errors=True)
+        except Exception:
+            pass
         return True
 
     def _upd_apply_mpv(zip_path, app_dir):
@@ -162,8 +190,9 @@ if "--update-only" in sys.argv:
         print(f"[updater] app dir: {app_dir}")
         exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "IPTVCore.exe"
         exe_path = os.path.join(app_dir, exe_name)
-        # 等待旧主进程退出
-        time.sleep(2)
+        # 等待旧主进程退出并让 Windows 释放 DLL 句柄（os._exit 后句柄未完全释放，
+        # 立即改名/删除 _internal 会 WinError 32）
+        time.sleep(4)
         main_zip = zip_paths[0]
         print(f"[updater] main pkg: {main_zip}")
         if not _upd_apply_main(main_zip, app_dir, exe_name):
