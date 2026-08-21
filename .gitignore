@@ -83,8 +83,8 @@ delivery_overview.md
 *排查修复报告*.md
 *改造计划*.md
 
-# ===== GitHub Release 更新产物（zip 大文件，走 Release 附件不入 git）=====
+# ===== GitHub Release 更新产物（zip 走 Release 附件不入 git，update.json 入 git 供 raw 拉取）=====
 release/*.zip
-release/update.json
+release/*.tmp
 update_staging/
 fake_live_tags.json

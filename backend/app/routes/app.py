@@ -54,9 +54,9 @@ class CheckUpdateReq(BaseModel):
 
 @router.post("/check-update")
 def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
-    url = (body.url if body else None) or settings.get("update_url", "")
-    if not url:
-        raise HTTPException(400, "未配置 update_url，请在「设置 / 更新」中填写更新清单地址")
+    # 内置默认更新清单地址（用户可在设置页覆盖）
+    DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json"
+    url = (body.url if body else None) or settings.get("update_url", "") or DEFAULT_UPDATE_URL
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
         with urllib.request.urlopen(req, timeout=20) as resp:

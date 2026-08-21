@@ -130,8 +130,8 @@ class Config:
         "mirror_history": ["不使用加速", "ghp.ci", "ghproxy.com", "ghproxy.net", "kkgithub.com", "raw.fastgit.org"],
         "mirror": "不使用加速",
         "proxy": "",
-        # 应用自更新（零服务器：由用户自行托管更新清单/包的可选地址）
-        "update_url": "",
+        # 应用自更新（内置 GitHub raw 更新清单地址，开箱即用，用户可在设置页修改）
+        "update_url": "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json",
         # 检查
         "check_timeout": 1.5,
         "check_threads": 40,
