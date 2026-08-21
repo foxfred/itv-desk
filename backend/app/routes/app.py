@@ -52,14 +52,37 @@ class CheckUpdateReq(BaseModel):
     url: Optional[str] = None
 
 
+def _build_opener(settings=None):
+    """构建 urllib opener，支持代理（从 settings.proxy 或环境变量读）。"""
+    proxies = {}
+    if settings:
+        p = settings.get("proxy", "")
+        if p and p != "不使用加速":
+            # 支持 http://host:port 或 host:port 格式
+            if not p.startswith("http"):
+                p = "http://" + p
+            proxies = {"http": p, "https": p}
+    if not proxies:
+        # 回退环境变量
+        for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+            v = os.environ.get(k)
+            if v:
+                proxies[k.lower().replace("_proxy", "")] = v
+    if proxies:
+        handler = urllib.request.ProxyHandler(proxies)
+        return urllib.request.build_opener(handler)
+    return urllib.request.build_opener()
+
+
 @router.post("/check-update")
 def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
     # 内置默认更新清单地址（用户可在设置页覆盖）
     DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json"
     url = (body.url if body else None) or settings.get("update_url", "") or DEFAULT_UPDATE_URL
     try:
+        opener = _build_opener(settings)
         req = urllib.request.Request(url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with opener.open(req, timeout=20) as resp:
             manifest = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         raise HTTPException(502, f"获取更新清单失败: {e}")
@@ -70,7 +93,6 @@ def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
     # 兼容单包（旧格式 url/package_name/sha256）和多包（packages 数组）
     packages = manifest.get("packages")
     if not packages:
-        # 旧单包格式转成 packages 数组
         packages = [{
             "name": manifest.get("package_name", ""),
             "url": manifest.get("url", ""),
@@ -92,17 +114,17 @@ class DownloadUpdateReq(BaseModel):
 
 
 @router.post("/download-update")
-def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir)):
+def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), settings=Depends(get_settings)):
     if not body.url:
         raise HTTPException(400, "缺少下载地址")
     try:
         os.makedirs(os.path.join(data_dir, "update_staging"), exist_ok=True)
         fn = body.filename or os.path.basename(body.url.split("?")[0]) or "update_package"
-        # 防路径穿越：只保留安全文件名
         fn = os.path.basename(fn)
         dest = os.path.join(data_dir, "update_staging", fn)
+        opener = _build_opener(settings)
         req = urllib.request.Request(body.url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
-        with urllib.request.urlopen(req, timeout=600) as resp, open(dest, "wb") as f:
+        with opener.open(req, timeout=600) as resp, open(dest, "wb") as f:
             while True:
                 chunk = resp.read(1024 * 1024)
                 if not chunk:

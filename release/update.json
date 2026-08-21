@@ -1,12 +1,12 @@
 {
   "version": "1.0.1",
-  "notes": "iTV Desk v1.0.1 测试更新链路（版本号高于程序 1.0.0 以触发更新检测）",
+  "notes": "iTV Desk v1.0.1 测试更新链路（含代理支持）",
   "packages": [
     {
       "name": "itv-desk_1.0.0_core.zip",
       "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.0_core.zip",
-      "sha256": "4fa398c7b6639a85e2acbb8531d22d5137c2f6b53290e6c6862e2f80e3dcb929",
-      "size": 44666491,
+      "sha256": "b8fd2a43a4d77367564baa4775c141f3eb8bb9afd465f94b3b988839974e9df9",
+      "size": 44667175,
       "role": "main"
     },
     {
