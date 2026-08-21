@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
-  "url": "https://github.com/foxfred/itv-desk/releases/download/v1.0.0/itv-desk_1.0.0.zip",
-  "sha256": "d1798da755b84f2174f97206308fa31c842b73c64ce6b509300fee13c251683e",
-  "notes": "iTV Desk v1.0.0 首个公开版本（mpv 引擎需单独下载）",
-  "package_name": "itv-desk_1.0.0.zip",
-  "mpv_note": "mpv 引擎不在此包内，如需使用请从 release 附件下载 mpv.zip 解压到程序 _internal/mpv/ 目录"
+  "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.0_core.zip",
+  "sha256": "8bd45d45922b4aceb8520d74441bf9aa50eb12aa126dc5706fdb8a5eeebd6a31",
+  "notes": "iTV Desk v1.0.0 核心包（不含 mpv 引擎和台标 logos）",
+  "package_name": "itv-desk_1.0.0_core.zip",
+  "mpv_note": "mpv 引擎不在此包内，如需使用请单独下载 mpv.exe 放到 _internal/mpv/ 目录"
 }
