@@ -942,10 +942,16 @@ def _free_port():
 def _clear_webview_cache():
     """清除 WebView2 缓存，强制加载最新前端 build 文件。
 
+    根因：WebView2 有独立的磁盘 HTTP 缓存层，即使后端返回
+    Cache-Control: no-cache，WebView2 仍可能跳过校验、直接返回
+    磁盘缓存里的旧文件（同文件名不同内容 → 404）。
+
     pywebview 每次启动在 %TEMP% 下创建 tmp*.tmp 临时目录，
-    里面会建 EBWebView 子目录存放 WebView2 缓存。前端 build 更新后，
-    旧的 index.html / JS 仍被 WebView2 缓存，导致显示旧界面。
-    需要扫描 %TEMP% 下所有 tmp*.tmp 目录，删除其 EBWebView 子目录。
+    里面会建 EBWebView 子目录存放 WebView2 缓存（含 HTTP 层缓存）。
+    前端 build 更新后，旧 index.html/JS 仍被 WebView2 缓存。
+
+    修复策略：删除整个 tmp*.tmp 目录（pywebview 下次启动会自动重建）。
+    只删含 EBWebView 子目录的 tmp*.tmp，不误删其他程序的临时目录。
     """
     try:
         tmp_dir = os.environ.get('TEMP') or os.environ.get('TMP') or tempfile.gettempdir()
@@ -958,9 +964,9 @@ def _clear_webview_cache():
             candidate = os.path.join(tmp_dir, name)
             if not os.path.isdir(candidate):
                 continue
-            eb = os.path.join(candidate, 'EBWebView')
-            if os.path.isdir(eb):
-                shutil.rmtree(eb, ignore_errors=True)
+            # 只清理含 EBWebView 的目录（pywebview 专属），避免误删其他程序临时目录
+            if os.path.isdir(os.path.join(candidate, 'EBWebView')):
+                shutil.rmtree(candidate, ignore_errors=True)
                 cleaned += 1
         if cleaned:
             print(f"[cache] 已清除 {cleaned} 个 WebView2 缓存目录 (根: {tmp_dir})")

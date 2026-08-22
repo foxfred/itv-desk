@@ -450,16 +450,21 @@ if _FRONTEND_DIST:
         return Response(status_code=204)
 
     # Vite 构建的 assets 目录
+    # 关键：用 no-store 而非 no-cache——no-cache 允许浏览器把文件存进磁盘缓存再校验，
+    # WebView2 经常不校验直接返回缓存内容（同文件名不同内容的旧版），导致前端永远 404。
+    # no-store 强制每次请求都从服务端重新读取磁盘文件。
     assets_dir = os.path.join(_FRONTEND_DIST, "assets")
     if os.path.isdir(assets_dir):
-        class NoCacheStaticFiles(StaticFiles):
+        class NoStoreStaticFiles(StaticFiles):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
             async def get_response(self, path, scope):
                 resp = await super().get_response(path, scope)
-                resp.headers.setdefault("Cache-Control", "no-cache")
+                resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                resp.headers["Pragma"] = "no-cache"
+                resp.headers["Expires"] = "0"
                 return resp
-        app.mount("/assets", NoCacheStaticFiles(directory=assets_dir), name="assets")
+        app.mount("/assets", NoStoreStaticFiles(directory=assets_dir), name="assets")
 
     # 主题 CSS 文件
     themes_dir = os.path.join(_FRONTEND_DIST, "themes")
