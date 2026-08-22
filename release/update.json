@@ -1,12 +1,12 @@
 {
-  "version": "1.0.6",
-  "notes": "iTV Desk v1.0.6：彻底修复 WebView2 页面级缓存导致显示旧界面问题（窗口 URL 自动注入 UUID 防缓存）；资源 URL 强制 no-store + UUID 参数；新增 Vary 头；含订阅源/扫描网段全部页面。",
+  "version": "1.0.7",
+  "notes": "iTV Desk v1.0.7：三项 bug 修复——①假直播标记与标签列解耦，播放器界面标记后 tag 列正常显示；②死源检测加强，H.265 等格式问题不再被误标死源（新增 decode_fail/decode_unsupported 字段）；③H.265 转码黑屏修复，增加像素格式归一化消除 yuv420p10/444 等格式转码视频流损坏。",
   "packages": [
     {
-      "name": "itv-desk_1.0.6_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.6_core.zip",
-      "sha256": "2b37bdc5641e8e5d0d4bd7ca65ec8ce0be0b10dc7a8f17b4a53ab5e52b2014b7",
-      "size": 44055488,
+      "name": "itv-desk_1.0.7_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.7_core.zip",
+      "sha256": "fa48c62422f78b3558b60730c498f7f86501883676bd0e6d4cef5521fee3eee5",
+      "size": 44056272,
       "role": "main"
     },
     {
