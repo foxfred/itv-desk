@@ -1,12 +1,12 @@
 {
-  "version": "1.0.15",
-  "notes": "iTV Desk v1.0.15：5 项修复——(1) 音量滑块拖动失效：@mousedown 加 .stop.prevent 阻止事件冒泡到窗口拖拽层；(2) 按钮背景变白：:deep(.el-button) 强制 background:transparent !important；(3) 右侧按钮重排：spacer 改为 margin-left:auto 放在置顶按钮上，左右两组按钮分离；(4) 媒体信息弹窗增强：背景更暗(0.97)、字体 13px、间距加大、位置更高(bottom 80px)；(5) 窗口边框：pywebview 5.4.1 frameless=True 只去标题栏，新增 _strip_window_border() 用 Win32 SetWindowLong 去掉 WS_CAPTION|WS_THICKFRAME。",
+  "version": "1.0.16",
+  "notes": "iTV Desk v1.0.16：4 项修复——(1) 500 后端错误：channel_service.py 兼容旧缓存 health 字典缺 decode_fail 字段，改用 .get() 安全访问；(2) 播放器窗口白色边框：_strip_window_border() 修复 hwnd 获取语法错误（原 window._/win32_window 是非法除法），改用 getattr 多路兜底，并在 events.shown 回调中再次去边框（窗口未渲染前 Win32 操作不生效）；(3) 右侧按钮重排：置顶→最小化→迷你→全屏→关闭，margin-left:auto 移到全屏按钮上让全屏靠右；(4) 停止播放图标：VideoCamera 改 CircleClose（红叉），外部播放器图标改 Upload。",
   "packages": [
     {
-      "name": "itv-desk_1.0.15_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.15_core.zip",
-      "sha256": "6eb7f7643ce26102385987f1dc97a668cf89dd067dd1c3645610fcd12db799f6",
-      "size": 44060074,
+      "name": "itv-desk_1.0.16_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.16_core.zip",
+      "sha256": "89b89675777861e254df128666943fb592804786fb45291ad366cc1dbdb1f7ff",
+      "size": 44058455,
       "role": "main"
     },
     {

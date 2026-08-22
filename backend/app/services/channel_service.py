@@ -378,7 +378,9 @@ class ChannelService:
             # 死源 = 连续失败 >= 3（纯粹的网络/可达性失败）
             h["dead"] = h["consecutive_fail"] >= 3
             # 解码不支持 = 源可达但本机解码/转码失败次数超过连续失败次数
-            h["decode_unsupported"] = h["decode_fail"] > 0 and h["decode_fail"] >= h["consecutive_fail"]
+            # 兼容旧缓存：老版本 health 字典没有 decode_fail 字段
+            _decode_fail = h.get("decode_fail", 0)
+            h["decode_unsupported"] = _decode_fail > 0 and _decode_fail >= h["consecutive_fail"]
             return dict(h)
 
     def get_health_summary(self):

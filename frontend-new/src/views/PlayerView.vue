@@ -116,7 +116,7 @@
               <el-icon><VideoPlay v-if="isPaused" /><VideoPause v-else /></el-icon>
             </el-button>
             <el-button v-if="!embedded" size="default" text circle title="停止播放" @click="stopPlay">
-              <el-icon><VideoCamera /></el-icon>
+              <el-icon><CircleClose /></el-icon>
             </el-button>
             <!-- 音量 -->
             <el-button size="default" text circle :type="isMuted ? 'warning' : ''" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
@@ -221,7 +221,7 @@
               </template>
             </el-dropdown>
             <el-button v-if="isNative()" size="default" text circle title="用外部播放器打开" @click="playExternal">
-              <el-icon><VideoCamera /></el-icon>
+              <el-icon><Upload /></el-icon>
             </el-button>
             <el-button v-if="pipSupported" size="default" text circle :type="pipActive ? 'primary' : ''" title="画中画" @click="togglePiP">
               <el-icon><Picture /></el-icon>
@@ -254,17 +254,17 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <el-button size="default" text circle title="全屏" @click="toggleFullscreen">
-              <el-icon><FullScreen /></el-icon>
-            </el-button>
-            <el-button v-if="!embedded" style="margin-left: auto" size="default" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
+            <el-button v-if="!embedded" size="default" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
               <el-icon><Top /></el-icon>
+            </el-button>
+            <el-button v-if="!embedded" size="default" text circle title="最小化窗口" @click="minimizeWindow">
+              <el-icon><Minus /></el-icon>
             </el-button>
             <el-button v-if="!embedded" size="default" text circle :type="miniMode ? 'primary' : ''" :title="miniMode ? '退出迷你模式' : '迷你模式'" @click="toggleMiniMode">
               <el-icon><Minimize /></el-icon>
             </el-button>
-            <el-button v-if="!embedded" size="default" text circle title="最小化窗口" @click="minimizeWindow">
-              <el-icon><Minus /></el-icon>
+            <el-button size="default" text circle title="全屏" style="margin-left: auto" @click="toggleFullscreen">
+              <el-icon><FullScreen /></el-icon>
             </el-button>
             <el-button size="default" text circle type="danger" title="关闭窗口" @click="closePlayer">
               <el-icon><Close /></el-icon>
