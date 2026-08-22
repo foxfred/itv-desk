@@ -20,11 +20,13 @@ def _new_health():
         "success": 0,
         "fail": 0,
         "consecutive_fail": 0,
+        "decode_fail": 0,    # 源可达但解码/转码失败的次数（H.265 等浏览器不支持的格式）
         "last_check": None,
         "last_error": "",
         "last_first_frame_ms": None,
         "score": None,      # 0..1，None=样本不足未知
-        "dead": False,      # 连续失败 >=3 判定为死源
+        "dead": False,      # 连续失败 >=3 判定为死源（解码失败不计入）
+        "decode_unsupported": False,  # 源可达但本机解码器不支持（H.265 等）
     }
 
 
@@ -322,12 +324,19 @@ class ChannelService:
             return [{"group": g, "count": n} for g, n in c.most_common()]
 
     # -------------------- 播放健康度评分 --------------------
+    # 解码/转码类错误前缀：源可达但本机浏览器/转码器无法解码（H.265 等）
+    # 这类失败不计入 consecutive_fail（源没死，是格式不支持）
+    _DECODE_ERROR_PREFIXES = ("h264-proxy:", "probe-hls:")
+
     def update_health(self, channel_id=None, url=None, success=True,
                       error=None, first_frame_ms=None):
         """回写一次播放/检测结果，更新健康度。
 
         - channel_id / url 二选一定位频道（检测用 id，播放上报用 url）；
-        - 维护 success/fail/consecutive_fail，推导 score（成功率）与 dead 标记；
+        - 维护 success/fail/consecutive_fail/decode_fail，推导 score（成功率）与 dead 标记；
+        - **关键区分**：error 以 h264-proxy:/probe-hls: 开头 → 源可达但解码失败，
+          计入 decode_fail 但不计入 consecutive_fail，避免 H.265 等被误判死源；
+        - 其余失败 → 正常计入 consecutive_fail，3 次连续失败判死源；
         - health 随频道缓存（channels_cache.json 序列化整池）持久化，无需 SQLite 列。
         返回更新后的 health 字典；未命中返回 None。
         """
@@ -347,20 +356,29 @@ class ChannelService:
             if ch is None:
                 return None
             h = ch.setdefault("health", _new_health())
+            err_str = str(error) if error else ""
             if success:
                 h["success"] += 1
                 h["consecutive_fail"] = 0
             else:
                 h["fail"] += 1
-                h["consecutive_fail"] += 1
+                # 区分：解码/转码失败 vs 源真的不可达
+                if err_str.startswith(self._DECODE_ERROR_PREFIXES):
+                    h["decode_fail"] += 1
+                    # 解码失败不计入 consecutive_fail（源没死）
+                else:
+                    h["consecutive_fail"] += 1
                 if error:
-                    h["last_error"] = str(error)[:200]
+                    h["last_error"] = err_str[:200]
             h["last_check"] = datetime.now(timezone.utc).isoformat()
             if first_frame_ms is not None:
                 h["last_first_frame_ms"] = first_frame_ms
             total = h["success"] + h["fail"]
             h["score"] = (h["success"] / total) if total > 0 else None
+            # 死源 = 连续失败 >= 3（纯粹的网络/可达性失败）
             h["dead"] = h["consecutive_fail"] >= 3
+            # 解码不支持 = 源可达但本机解码/转码失败次数超过连续失败次数
+            h["decode_unsupported"] = h["decode_fail"] > 0 and h["decode_fail"] >= h["consecutive_fail"]
             return dict(h)
 
     def get_health_summary(self):

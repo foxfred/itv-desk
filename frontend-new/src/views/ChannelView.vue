@@ -276,9 +276,8 @@
                 </span>
               </template>
               <template v-else-if="col.key === 'tag'">
-                <el-tag v-if="row.tag" size="small" effect="dark" :type="row.tag === '假直播' ? 'danger' : 'warning'">
-                  {{ row.tag }}
-                </el-tag>
+                <el-tag v-if="row.is_fake_live" size="small" effect="dark" type="danger">假直播</el-tag>
+                <el-tag v-else-if="row.tag" size="small" effect="dark" type="warning">{{ row.tag }}</el-tag>
                 <span v-else class="cell-empty">-</span>
               </template>
               <template v-else>{{ row[col.prop] }}</template>

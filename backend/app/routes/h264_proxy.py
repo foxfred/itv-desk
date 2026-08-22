@@ -61,7 +61,9 @@ def _build_ffmpeg_cmd(src_url: str) -> list[str]:
         "-preset", _PRESET,
         "-tune", "zerolatency",
         "-crf", _CRF,
-        "-pix_fmt", "yuv420p",
+        # 像素格式归一化：部分 H.265 源使用 yuv420p10/444 等，直接喂给 libx264
+        # 会导致视频流损坏（黑屏有声音）；scale 归一化范围 + format 强制转 yuv420p
+        "-vf", "scale=in_range=full:out_range=tv,format=yuv420p",
         # 关键帧间隔：1s（约 25/30 帧），便于首帧快速出画 + 快进也不黑屏太久
         "-g", "30",
         "-keyint_min", "30",

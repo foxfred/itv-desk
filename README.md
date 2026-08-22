@@ -84,6 +84,21 @@ iTV Desk 通过 **GitHub Releases** 分发更新：
 2. 比对版本号，有新版本则从对应 Release 下载更新包（zip）。
 3. 重启后由更新器完成替换；更新器**只替换程序文件，绝不改动你的数据**（`channels.db` / `settings.json` / 台标 / 分组等均保留）。
 
+## 更新日志
+
+### v1.0.7（2026-08-22）
+
+| 修复 | 说明 |
+|---|---|
+| 假直播标记与标签列解耦 | 频道列表「标记」列优先检查 `is_fake_live` 字段（含播放器界面标记的假直播），不再漏显示 |
+| 死源检测不再误杀 H.265 源 | 健康度系统新增 `decode_fail` / `decode_unsupported` 字段；H.265 等格式问题导致的转码失败不再计入连续失败，不会误标死源 |
+| H.265 转码黑屏有声音修复 | H.264 转码代理增加 `scale+format=yuv420p` 像素格式归一化，兼容 yuv420p10/444 等 H.265 格式，消除视频流损坏导致的黑屏 |
+
+### v1.0.6（2026-08-22）
+- 彻底修复 WebView2 页面级缓存导致前端无法更新的问题（主窗口 URL 追加 UUID）
+
+---
+
 ## License（自研部分）
 
 MIT，详见 [LICENSE](https://github.com/foxfred/itv-desk/blob/master/LICENSE)。
