@@ -30,7 +30,7 @@ _PROXY_PATH = "/api/stream-proxy?url="
 
 
 def _is_safe_target(url: str) -> bool:
-    """仅允许 http/https，并拦截 localhost / 内网地址（防 SSRF）。"""
+    """仅允许 http/https。桌面本地应用，允许访问局域网/内网源（用户自建 IPTV 源）。"""
     if not url:
         return False
     try:
@@ -38,14 +38,6 @@ def _is_safe_target(url: str) -> bool:
     except Exception:
         return False
     if p.scheme not in ("http", "https"):
-        return False
-    host = (p.hostname or "").lower()
-    if not host:
-        return False
-    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1") or host.endswith(".localhost"):
-        return False
-    # 粗略拦截私有网段 / 链路本地 / 云元数据地址
-    if _looks_private(host):
         return False
     return True
 

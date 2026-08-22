@@ -1243,7 +1243,7 @@ function reportPlayHealth(success, error = null, firstFrameMs = null) {
   reportHealth(currentUrl.value, success, error, firstFrameMs).catch(() => {})
 }
 
-function setupHls() {
+async function setupHls() {
   const v = videoEl.value
   if (!v || !currentUrl.value) return
   // C3 修复：会话 id——快速换台时旧 setupHls 的异步回调全部作废
@@ -1396,6 +1396,11 @@ function setupHls() {
 
   // ====== HLS (m3u8) ======
   if (isM3u8) {
+    // H.265 HLS 浏览器 MSE 无法硬解，先探测编码；是 H.265 则走后端 ffmpeg 转 FLV
+    if (await probeHlsIsH265(url)) {
+      playH264Proxy(url, src, sid, looksLikeLive)
+      return recordHistory()
+    }
     if (typeof Hls !== 'undefined' && Hls.isSupported()) {
       hls = new Hls({
         // 注意：不要对普通 /live/ 路径强制 LL-HLS 模式（仅真实 LL-HLS 才需要），
@@ -1404,8 +1409,9 @@ function setupHls() {
         backBufferLength: looksLikeLive ? 30 : 90,
         maxBufferLength: looksLikeLive ? 10 : 30,
         maxMaxBufferLength: 60,
-        liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: looksLikeLive ? Infinity : 10,
+        liveSyncDurationCount: looksLikeLive ? 2 : 3,
+        liveMaxLatencyDurationCount: looksLikeLive ? 9 : 10,
+        maxLiveSyncPlaybackRate: 1.5,
         enableWorker: true,
         fragLoadingTimeOut: 20000,
         manifestLoadingTimeOut: 15000,
@@ -1590,7 +1596,9 @@ function playHls(url, src, sid, looksLive) {
     backBufferLength: looksLive ? 30 : 90,
     maxBufferLength: 10,
     maxMaxBufferLength: 60,
-    liveSyncDurationCount: 3,
+    liveSyncDurationCount: looksLive ? 2 : 3,
+    liveMaxLatencyDurationCount: looksLive ? 9 : 10,
+    maxLiveSyncPlaybackRate: 1.5,
     enableWorker: true,
     fragLoadingTimeOut: 20000,
     manifestLoadingTimeOut: 15000,
@@ -1629,15 +1637,24 @@ function playHls(url, src, sid, looksLive) {
 
 // 走后端 h264 转码代理（源为 H.265/HLS → 后端 ffmpeg 实时转 H.264/FLV → flv.js 播放）
 function playH264Proxy(url, src, sid, looksLikeLive) {
+  const v = videoEl.value
   if (sid !== playSession) return
-  if (typeof flvjs === 'undefined' || !flvjs.isSupported()) {
+  if (!v || typeof flvjs === 'undefined' || !flvjs.isSupported()) {
     nativeFallback(v, url, src, looksLikeLive)
     return
   }
   const proxyUrl = h264ProxyUrl(url)
   const flv = flvjs.createPlayer(
     { type: 'flv', isLive: !!looksLikeLive, url: proxyUrl },
-    { enableStashBuffer: false, stashInitialSize: 128, lazyLoad: false, liveBufferLatencyChasing: !!looksLikeLive }
+    {
+      enableStashBuffer: false,
+      stashInitialSize: 128 * 1024,
+      lazyLoad: false,
+      deferLoadAfterSourceOpen: false,
+      autoCleanupSourceBuffer: true,
+      autoCleanupMaxBackwardDuration: 12,
+      autoCleanupMinBackwardDuration: 4,
+    }
   )
   flv.attachMediaElement(v)
   flvPlayer = flv
@@ -1649,11 +1666,14 @@ function playH264Proxy(url, src, sid, looksLikeLive) {
     reportPlayHealth(false, 'h264-proxy:' + e)
     nativeFallback(v, url, src, looksLikeLive)
   })
+  flv.on(flvjs.Events.LOADING_COMPLETE, () => {
+    if (sid !== playSession) return
+    reportPlayHealth(true, 'h264-proxy')
+  })
   flv.load()
   flv.play().catch((err) => {
     console.warn('[h264-proxy] play rejected', err)
   })
-  reportPlayHealth(true, 'h264-proxy')
 }
 
 async function recordHistory() {
@@ -1850,10 +1870,12 @@ function isHlsContentType(ct) {
   return /mpegurl|mp2t|x-mpegurl|vnd\.apple\.mpegurl/.test(ct || '')
 }
 
-// 探测 HLS 主清单是否 H.265 编码：抓取一小段清单文本，若含 h265/hevc/videocodec=h26
-// 关键字则判为 h265（浏览器 MSE 不支持，需走后端 ffmpeg 转码）。
+// 探测 HLS 主清单是否 H.265 编码：URL 自身含 h265/hevc/videocodec=h26 标记直接判定；
+// 否则抓取一小段清单文本，若含相关关键字则判为 h265（浏览器 MSE 不支持，需转码）。
 // 返回 Promise<boolean>。
 function probeHlsIsH265(url, timeoutMs = 5000) {
+  const u = (url || '').toLowerCase()
+  if (/h265|hevc|videocodec=h26|codec=hev1|codecs=hev1/.test(u)) return Promise.resolve(true)
   return new Promise((resolve) => {
     let timer = null
     try {
@@ -1867,7 +1889,7 @@ function probeHlsIsH265(url, timeoutMs = 5000) {
           if (!res.ok) { resolve(false); return }
           return res.text().then((t) => {
             const low = (t || '').toLowerCase()
-            resolve(/h265|hevc|videocodec=h26|codecs=.{0,8}hev1/.test(low))
+            resolve(/h265|hevc|videocodec=h26|codec=hev1|codecs=.{0,8}hev1/.test(low))
           })
         })
         .catch(() => { if (timer) clearTimeout(timer); resolve(false) })

@@ -70,9 +70,7 @@
               <el-dropdown-item @click="showRules = true">规则管理</el-dropdown-item>
               <el-dropdown-item @click="showGroupTree = !showGroupTree">{{ showGroupTree ? '隐藏分组树' : '显示分组树' }}</el-dropdown-item>
               <el-dropdown-item @click="openDlna()">DLNA 投屏</el-dropdown-item>
-              <el-dropdown-item divided @click="doMergeDuplicates">智能去重合并</el-dropdown-item>
-              <el-dropdown-item @click="doUngroupAll">拆解聚合源（还原单源）</el-dropdown-item>
-              <el-dropdown-item @click="doMatchLogos">Logo 自动匹配</el-dropdown-item>
+              <el-dropdown-item divided @click="doMatchLogos">Logo 自动匹配</el-dropdown-item>
               <el-dropdown-item @click="doOnlineLogos">在线台标补全</el-dropdown-item>
               <el-dropdown-item @click="doReclassify">重新自动分组</el-dropdown-item>
               <el-dropdown-item divided @click="showLogs = true">查看日志</el-dropdown-item>
@@ -236,44 +234,10 @@
           ref="tableRef"
           class="channel-table"
         >
-          <el-table-column type="expand" width="40">
-            <template #default="{ row }">
-              <div class="src-expand" v-if="(row.sources && row.sources.length > 1) || (row.source_groups && row.source_groups.length)">
-                <!-- 聚合频道标记按每个源独立显示，主行不再额外显示同一标签，避免与子行重复 -->
-                <template v-for="(g, gi) in (row.source_groups || [])" :key="'g' + gi">
-                  <div class="src-group-name">{{ g.name }}</div>
-                  <div v-for="(u, ui) in g.urls" :key="'gu' + gi + '-' + ui" class="src-row" @dblclick="playSourceInline(row, u)" @contextmenu.stop="onSourceCtx(row, u, $event)">
-                    <span class="src-tag">聚合</span>
-                    <span v-if="(row.source_tags || {})[u]" class="src-tag src-tag-channel" :title="(row.source_tags || {})[u]">{{ (row.source_tags || {})[u] }}</span>
-                    <span v-if="(row.source_is_fake_live || {})[u]" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
-                    <span class="src-url" :title="u">{{ shortUrl(u) }}</span>
-                    <el-button size="small" text type="primary" @click.stop="playSourceInline(row, u)">播放</el-button>
-                    <el-button size="small" text type="danger" @click.stop="deleteSourceInline(row, u)">删除</el-button>
-                  </div>
-                </template>
-                <div v-for="(u, ui) in standaloneSources(row)" :key="'s' + ui" class="src-row" @dblclick="playSourceInline(row, u)" @contextmenu.stop="onSourceCtx(row, u, $event)">
-                  <span class="src-tag src-tag-num">{{ ui + 1 }}</span>
-                  <span v-if="(row.source_tags || {})[u]" class="src-tag src-tag-channel" :title="(row.source_tags || {})[u]">{{ (row.source_tags || {})[u] }}</span>
-                  <span v-if="(row.source_is_fake_live || {})[u]" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
-                    <span class="src-url" :title="u">{{ shortUrl(u) }}</span>
-                    <el-button size="small" text type="primary" @click.stop="playSourceInline(row, u)">播放</el-button>
-                    <el-button size="small" text type="danger" @click.stop="deleteSourceInline(row, u)">删除</el-button>
-                </div>
-              </div>
-              <div v-else class="src-empty">
-                <span v-if="row.tag" class="src-tag-line">
-                  <span class="src-tag-label">标记</span>
-                  <el-tag size="small" type="warning" effect="dark" class="src-tag-value">{{ row.tag }}</el-tag>
-                </span>
-                <span v-if="row.is_fake_live" class="src-tag src-tag-fake" title="被标记为假直播">假直播</span>
-                <span v-if="!row.tag && !row.is_fake_live">单一源（无合并）</span>
-              </div>
-            </template>
-          </el-table-column>
           <el-table-column prop="id" label="#" width="50" sortable="custom" align="center" />
           <el-table-column label="源" width="52" align="center">
             <template #default="{ row }">
-              <el-tag size="small" effect="plain" class="src-count" @click="toggleRowExpand(row)">
+              <el-tag size="small" effect="plain" class="src-count">
                 {{ (row.sources && row.sources.length) || 1 }}
               </el-tag>
             </template>
@@ -310,6 +274,12 @@
                        @error="onLogoError" />
                   <span class="ch-name">{{ row.name }}</span>
                 </span>
+              </template>
+              <template v-else-if="col.key === 'tag'">
+                <el-tag v-if="row.tag" size="small" effect="dark" :type="row.tag === '假直播' ? 'danger' : 'warning'">
+                  {{ row.tag }}
+                </el-tag>
+                <span v-else class="cell-empty">-</span>
               </template>
               <template v-else>{{ row[col.prop] }}</template>
             </template>
@@ -405,9 +375,6 @@
           <div class="ctx-item ctx-danger" @click="ctxTagClear">清除标记</div>
         </div>
       </div>
-      <div class="ctx-item" :class="{ 'ctx-danger': !selectedRowsAreFakeLive }" @click="ctxToggleFakeLive">
-        {{ selectedRowsAreFakeLive ? '取消假直播标记' : '标记为假直播' }}
-      </div>
       <div class="ctx-item has-sub">
         <span>设置分组</span><span class="ctx-arrow">▸</span>
         <div class="ctx-sub">
@@ -437,9 +404,6 @@
           <div class="ctx-item" @click="ctxSourceTagCustom">自定义标记…</div>
           <div class="ctx-item ctx-danger" @click="ctxSourceTagClear">清除标记</div>
         </div>
-      </div>
-      <div class="ctx-item" :class="{ 'ctx-danger': !sourceCtxIsFakeLive }" @click="ctxSourceToggleFakeLive">
-        {{ sourceCtxIsFakeLive ? '取消假直播标记' : '标记为假直播' }}
       </div>
       <div class="ctx-sep" />
       <div class="ctx-item ctx-danger" @click="ctxSourceDelete">删除此源</div>
@@ -611,8 +575,6 @@
       <div class="source-mgr">
         <div class="sm-toolbar">
           <el-button size="small" type="primary" plain @click="smAddSource">+ 新增源</el-button>
-          <el-button size="small" :disabled="!smSelected.length" @click="smAggregate">聚合选中</el-button>
-          <el-button size="small" :disabled="!sourceMgrGroups.length" @click="smUngroupAll">解散全部聚合</el-button>
         </div>
 
         <!-- 聚合组 -->
@@ -993,9 +955,9 @@ async function ctxDeleteGroup() {
   store.refresh()
   hideCtx()
 }
-// 现有标记库：聚合所有频道主 tag 与每个源(source_tags)的标记，不再包含"假直播"
+// 现有标记库：聚合所有频道主 tag 与每个源(source_tags)的标记，"假直播"作为固定可选项置顶
 const existingTags = computed(() => {
-  const set = new Set()
+  const set = new Set(['假直播'])
   const collect = (tagStr) => {
     if (!tagStr) return
     for (const x of String(tagStr).split(',')) {
@@ -1007,17 +969,11 @@ const existingTags = computed(() => {
     collect(c.tag)
     for (const t of Object.values(c.source_tags || {})) collect(t)
   }
-  return [...set].sort()
-})
-const selectedRowsAreFakeLive = computed(() => {
-  const rows = getTargetRows()
-  if (rows.length === 0) return false
-  return rows.every(r => r.is_fake_live)
-})
-const sourceCtxIsFakeLive = computed(() => {
-  const row = ctxSource.row
-  if (!row || !ctxSource.url) return false
-  return !!(row.source_is_fake_live || {})[ctxSource.url]
+  return [...set].sort((a, b) => {
+    if (a === '假直播') return -1
+    if (b === '假直播') return 1
+    return a.localeCompare(b, 'zh-Hans-CN')
+  })
 })
 // EPG 规范分组（默认提供的常用分组，取自 epg_service.update_groups 规则）
 const epgGroups = ['央视频道', '地方卫视', '港澳台', '影院剧场', '体育竞技', '少儿动漫', '轮播专区']
@@ -1027,6 +983,10 @@ async function applyTagToRows(tag) {
   if (rows.length === 0) return
   const ids = rows.map(r => r.id)
   await channelApi.batchTagAdd(ids, tag)
+  // "假直播"作为主 tag 时同步 is_fake_live 布尔字段，保持后端/导出语义一致
+  if (tag === '假直播') {
+    await channelApi.batchFakeLive(ids, true)
+  }
   store.refresh()
   ElMessage.success(`已为 ${rows.length} 个频道添加标记：${tag}`)
 }
@@ -1044,22 +1004,14 @@ async function ctxTagClear() {
   const rows = getTargetRows()
   if (rows.length === 0) { hideCtx(); return }
   const ids = rows.map(r => r.id)
+  const hadFake = rows.filter(r => r.tag === '假直播').map(r => r.id)
   await channelApi.batchTagClear(ids)
+  // 清除假直播 tag 时同步清除 is_fake_live
+  if (hadFake.length) await channelApi.batchFakeLive(hadFake, false)
   store.refresh()
   ElMessage.success(`已清除 ${rows.length} 个频道的标记`)
   hideCtx()
 }
-async function ctxToggleFakeLive() {
-  const rows = getTargetRows()
-  if (rows.length === 0) { hideCtx(); return }
-  const ids = rows.map(r => r.id)
-  const next = !rows.every(r => r.is_fake_live)
-  await channelApi.batchFakeLive(ids, next)
-  store.refresh()
-  ElMessage.success(next ? `已将 ${rows.length} 个频道标记为假直播` : `已取消 ${rows.length} 个频道的假直播标记`)
-  hideCtx()
-}
-
 // ==================== 聚合源单行右键菜单 ====================
 function ctxSourcePlay() { playSourceInline(ctxSource.row, ctxSource.url); hideCtx() }
 function ctxSourcePlayExternal() { playExternal({ ...ctxSource.row, url: ctxSource.url }); hideCtx() }
@@ -1087,13 +1039,6 @@ async function ctxSourceTagClear() {
   await channelApi.setSourceTag(ctxSource.row.id, ctxSource.url, '')
   store.refresh()
   ElMessage.success('已清除源标记')
-  hideCtx()
-}
-async function ctxSourceToggleFakeLive() {
-  const next = !sourceCtxIsFakeLive.value
-  await channelApi.setSourceFakeLive(ctxSource.row.id, ctxSource.url, next)
-  store.refresh()
-  ElMessage.success(next ? '已标记该源为假直播' : '已取消该源的假直播标记')
   hideCtx()
 }
 async function ctxSourceDelete() {
@@ -1387,11 +1332,6 @@ async function deleteSourceInline(row, url) {
     ElMessage.error('删除失败: ' + (e.response?.data?.detail || e.message))
   }
 }
-function toggleRowExpand(row) {
-  const t = tableRef.value
-  if (t) t.toggleRowExpansion(row)
-}
-
 // ==================== Ctrl/Shift 点击多选 ====================
 function onRowClick(row, column, event) {
   // 阻止浏览器默认的文本选择行为（Shift+click触发）
