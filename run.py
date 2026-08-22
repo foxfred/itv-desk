@@ -482,6 +482,18 @@ class PlayerApi:
         except Exception:
             return False
 
+    def move_window(self, dx, dy):
+        """无外框模式下移动播放窗口（前端拖拽顶部条时调用）。
+        dx/dy 为相对偏移量，基于 pywebview 窗口当前位置移动。"""
+        try:
+            w = self._window
+            if w is None:
+                return False
+            w.move(int(getattr(w, 'x', 0)) + int(dx), int(getattr(w, 'y', 0)) + int(dy))
+            return True
+        except Exception:
+            return False
+
     def play_external(self, url, player_path):
         """用外部播放器打开直播源（VLC / PotPlayer）"""
         return _launch_external_player(url, player_path)
@@ -881,7 +893,7 @@ def _create_player_window(api, player_api, url):
             width=1100,
             height=680,
             min_size=(420, 260),
-            frameless=False,
+            frameless=True,
             hidden=True,
             resizable=True,
             background_color="#11151c",

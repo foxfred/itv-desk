@@ -6,6 +6,14 @@
     </div>
 
     <div v-else class="player-container">
+      <!-- 无外框模式下的窗口拖拽条：细窄、悬停显示，拖动移动整个窗口 -->
+      <div class="player-drag-bar"
+        @mousedown.prevent="onDragStart"
+        @mousemove="onDragMove"
+        @mouseup="onDragEnd"
+        @mouseleave="onDragEnd">
+        <span class="drag-hint">⋮⋮</span>
+      </div>
       <div
         class="player-video-wrap"
         :class="{ 'player-video-wrap-mini': mini }"
@@ -314,6 +322,40 @@ const isMuted = ref(false)
 const showControls = ref(true)
 // 双窗口（Phase 1）：独立播放窗置顶状态（仅 standalone 模式可用）
 const topmost = ref(false)
+// 无外框模式：窗口拖拽状态（拖动顶部条移动整个窗口）
+let dragState = { active: false, startX: 0, startY: 0 }
+function onDragStart(e) {
+  if (e.button !== 0) return
+  dragState = { active: true, startX: e.clientX, startY: e.clientY }
+  document.addEventListener('mousemove', onGlobalDragMove)
+  document.addEventListener('mouseup', onGlobalDragEnd)
+}
+function onDragMove(e) {
+  // 仅在条内 mousemove，全局拖拽走 onGlobalDragMove
+}
+function onDragEnd() {
+  document.removeEventListener('mousemove', onGlobalDragMove)
+  document.removeEventListener('mouseup', onGlobalDragEnd)
+  dragState.active = false
+}
+let lastDragX = 0, lastDragY = 0
+function onGlobalDragMove(e) {
+  if (!dragState.active) return
+  const dx = e.clientX - dragState.startX
+  const dy = e.clientY - dragState.startY
+  if (dx === 0 && dy === 0) return
+  // 累加位移调用 move_window（相对偏移）
+  callNative('move_window', dx, dy).catch(() => {})
+  dragState.startX = e.clientX
+  dragState.startY = e.clientY
+  lastDragX = e.clientX
+  lastDragY = e.clientY
+}
+function onGlobalDragEnd() {
+  document.removeEventListener('mousemove', onGlobalDragMove)
+  document.removeEventListener('mouseup', onGlobalDragEnd)
+  dragState.active = false
+}
 // Phase 5：mpv 窗口跟随播放面板（拖动/缩放时重定位覆盖视频区）
 const mpvFollowPlayer = ref(true)
 const playbackSpeed = ref(1.0)
@@ -2304,6 +2346,20 @@ async function mpvQuitSafe() {
 }
 
 .player-container { height: 100%; display: flex; flex-direction: column; }
+
+/* 无外框模式：窗口拖拽条——细窄、悬停显示、拖动时高亮 */
+.player-drag-bar {
+  height: 16px; cursor: grab;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition: background .15s, border-color .15s;
+  user-select: none; flex-shrink: 0;
+}
+.player-drag-bar:hover { background: rgba(255,255,255,0.06); border-bottom-color: rgba(255,255,255,0.12); }
+.player-drag-bar:active { cursor: grabbing; }
+.drag-hint { font-size: 11px; color: rgba(255,255,255,0.25); letter-spacing: 2px; }
+
 
 .player-video-wrap {
   flex: 1; display: flex; align-items: center; justify-content: center;
