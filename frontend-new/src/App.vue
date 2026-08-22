@@ -108,7 +108,7 @@
 
       <!-- 状态栏（独立播放窗下隐藏） -->
       <el-footer v-if="!isStandalonePlayer && playerStore.currentChannel" class="app-statusbar" height="26px">
-        <span class="sb-engine" :class="playerStore.mpvActive ? 'sb-mpv' : ''">{{ playerStore.mpvActive ? 'mpv' : 'Web' }}</span>
+        <span class="sb-engine">Web</span>
         <span class="sb-sep">|</span>
         <span class="sb-name" :title="playerStore.currentUrl || ''">{{ playerStore.currentChannel?.name || '未播放' }}</span>
         <span v-if="playerStore.currentUrlNote" class="sb-note">{{ playerStore.currentUrlNote }}</span>

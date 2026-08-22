@@ -2,7 +2,7 @@
 
 桌面端 IPTV 直播源整理工具（PyWebView + FastAPI + Vue3）。
 
-抓取 / 订阅源 / 在线检测 / 自动分组 / EPG 校正 / 乱码修补 / 导出 / **双窗口播放器**（hls.js / flv.js / mpv 可选）。
+抓取 / 订阅源 / 在线检测 / 自动分组 / EPG 校正 / 乱码修补 / 导出 / **双窗口播放器**（hls.js / flv.js 内置内核 + VLC / PotPlayer / mpv 外部播放可选）。
 
 ---
 
@@ -25,8 +25,8 @@
 - **播放（双窗口）**：
   - 主窗口 = 频道库 / 管理（列表即唯一选源入口）
   - 独立播放窗口 = 可拖 / 缩 / 置顶；Web 内核（hls.js / flv.js）即点即播
-  - 可选 mpv 独立窗原生解码（默认关闭）
   - **H.265 / HEVC 源自动转码**：Chrome / Edge 的 MSE 不支持 H.265 软解。遇到 H.265 的 HLS 源时，程序自动经后端 ffmpeg 实时重编码为 H.264 + AAC 的 HTTP-FLV 流（flv.js 播放），无需手动切换引擎。转码依赖本机 `ffmpeg`（需在系统 PATH，或通过环境变量 `IPTV_FFMPEG` 指定路径）。
+  - **外部播放器（可选）**：支持调用 VLC / PotPlayer / mpv 作为外部播放器打开当前源（在「系统设置 → 播放器」选择，需本机已安装）。
 
 ---
 
@@ -43,13 +43,9 @@
 | FastAPI / Uvicorn | 后端框架 | MIT | https://github.com/fastapi/fastapi |
 | SQLAlchemy | ORM | MIT | https://www.sqlalchemy.org |
 | pywebview | 桌面壳 | BSD-3-Clause | https://github.com/r0x0r/pywebview |
-| **mpv** | **可选原生解码** | **GPL-v2+** | https://github.com/mpv-player/mpv |
+| VLC / PotPlayer / mpv | 外部播放器（可选，不集成） | 各自许可证 | 由用户本机安装 |
 
-> **⚠️ mpv GPL 版权说明：**
-> iTV Desk 打包版集成 `mpv`（由 shinchiro 提供的 Windows 构建，**GPL-2.0+ 许可证**）。
-> 依据 GPL 要求，Releases 分发包内已附带 `COPYING`（GPL v2 许可证全文）。
-> mpv 源码：https://github.com/mpv-player/mpv
-> 若你不希望使用 GPL 组件，可从本仓库源码自行构建（不集成 mpv 的包）。
+> **外部播放器说明：** 自 v1.0.17 起，mpv 不再作为内置解码引擎，降级为与 VLC / PotPlayer 同级的**可选外部播放器**。程序**不再集成**任何 GPL 组件，打包分发包体积更小、许可证更干净（仅含 MIT / BSD / Apache-2.0 依赖）。如需用 mpv 播放，请在本机自行安装，程序仅负责调用。
 >
 > 其它第三方依赖均为宽松许可证（MIT / BSD / Apache-2.0），详见 `THIRD_PARTY_NOTICES.md`。
 
@@ -85,6 +81,16 @@ iTV Desk 通过 **GitHub Releases** 分发更新：
 3. 重启后由更新器完成替换；更新器**只替换程序文件，绝不改动你的数据**（`channels.db` / `settings.json` / 台标 / 分组等均保留）。
 
 ## 更新日志
+
+### v1.0.17（2026-08-23）
+
+| 类别 | 说明 |
+|---|---|
+| **移除 mpv 内置引擎** | mpv 不再作为内置解码引擎，彻底清除前端 mpv 相关逻辑（引擎切换/状态轮询/首帧超时/窗口跟随）与后端 mpv 探测代码；播放引擎固定为 Web（hls.js / flv.js），更稳定兼容 |
+| **mpv 降级为外部播放器** | 与 VLC / PotPlayer 并列，在「系统设置 → 播放器」中作为可选项；需本机自行安装，程序仅负责调用（不再集成 GPL 组件） |
+| **播放器 UI 修复** | 停止按钮图标改为实心方块（原误用禁止 X 图标）；控制栏背景加深（0.85→0.92），按钮图标在深色背景下清晰可见；播放窗口白色边框根除（`WS_POPUP` 彻底去客户区边缘） |
+| **设置面板精简** | 删除「播放引擎」radio（固定 Web）、删除「MPV 独立窗」「MPV 容器跟随」选项、隐藏「更新清单地址」栏、清除更新面板内所有说明文字 |
+| **H.265 转码兜底增强** | 探测机制升级：主清单无 codec 时进一步抓取首个 TS 分片检测 HEVC NAL 起始码；HLS.js `MEDIA_ERROR`（parse/frag/alloc）时自动回退后端 ffmpeg 转码路径，大量 H.265 源不再因 MSE 拒绝而黑屏 |
 
 ### v1.0.12（2026-08-22）
 

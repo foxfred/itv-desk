@@ -115,14 +115,6 @@
                 <el-switch v-model="form.player_keyboard_enabled" />
                 <span class="tip">启用后支持 空格播放/暂停、←/→ 快退快进、↑/↓ 音量、M 静音、F 全屏</span>
               </el-form-item>
-              <el-form-item label="播放引擎">
-                <el-radio-group v-model="form.player_engine">
-                  <el-radio value="auto">自动（默认，Web 优先）</el-radio>
-                  <el-radio value="webview">Web 内置（hls.js/flv.js）</el-radio>
-                  <el-radio value="mpv">mpv 独立窗（原生解码）</el-radio>
-                </el-radio-group>
-                <span class="tip">播放窗口为独立窗口。自动模式默认 Web（稳定、出画面快），mpv 作为可选增强：手动点播放窗引擎徽标或选「mpv 独立窗」时启用；mpv 异常自动回退 Web。</span>
-              </el-form-item>
               <el-form-item label="双击频道自动播放">
                 <el-switch v-model="form.double_click_auto_play" />
                 <span class="tip">列表双击频道 → 独立播放窗自动跟播（列表即唯一选源入口）。</span>
@@ -130,10 +122,6 @@
               <el-form-item label="播放窗口总在最前">
                 <el-switch v-model="form.player_window_topmost" />
                 <span class="tip">播放窗口常驻置顶（边看边操作频道列表）；也可用播放窗控制条「📌」随时切换。</span>
-              </el-form-item>
-              <el-form-item label="mpv 窗口跟随播放面板">
-                <el-switch v-model="form.mpv_follow_player" />
-                <span class="tip">mpv 独立窗拖动/缩放播放窗口时自动重新定位覆盖视频区（关闭则 mpv 窗口自由摆放）。</span>
               </el-form-item>
               <el-form-item label="待播轮询间隔">
                 <el-input-number v-model="form.player_update_interval_ms" :min="100" :max="5000" :step="100" style="width:140px" />
@@ -149,12 +137,13 @@
               <el-divider>外部播放器</el-divider>
               <el-form-item label="默认使用外部播放">
                 <el-switch v-model="form.prefer_external_player" />
-                <span class="tip">开启后双击频道直接调用外部播放器（需安装 VLC / PotPlayer）</span>
+                <span class="tip">开启后双击频道直接调用外部播放器（需安装 VLC / PotPlayer / mpv）</span>
               </el-form-item>
               <el-form-item label="外部播放器">
                 <el-radio-group v-model="form.external_player">
                   <el-radio label="vlc">VLC</el-radio>
                   <el-radio label="potplayer">PotPlayer</el-radio>
+                  <el-radio label="mpv">mpv</el-radio>
                 </el-radio-group>
               </el-form-item>
               <el-form-item label="播放器路径">
@@ -370,18 +359,12 @@
              <el-form-item label="当前版本">
                <span class="ver-tag">v{{ curVersion }}</span>
              </el-form-item>
-             <el-form-item label="更新清单地址">
-               <el-input v-model="form.update_url" placeholder="如 https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json"
-                         style="width:420px" />
-               <div class="tip">指向 GitHub 仓库 release/update.json（GitHub raw 直链）。程序比对版本后从对应 Release 下载更新包。</div>
-             </el-form-item>
              <el-form-item label="检查更新">
                <el-button type="primary" @click="checkForUpdate" :loading="checking">检查更新</el-button>
                <div v-if="updateInfo.latest" class="update-result" :class="{ avail: updateInfo.has_update }">
                  <template v-if="updateInfo.has_update">
                    <span class="ur-title">发现新版本 v{{ updateInfo.latest }}</span>
                    <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
-                   <p class="ur-sha" v-if="updateInfo.packages.length">共 {{ updateInfo.packages.length }} 个更新包</p>
                    <div class="ur-actions">
                      <el-button v-if="updateInfo.packages.length" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
                        下载更新包
@@ -392,16 +375,11 @@
                        @click="doInstallUpdate"
                      >退出并安装更新</el-button>
                      <span v-if="updateInfo.is_installing" class="ur-installing">更新器已启动，程序即将退出并自动安装…</span>
-                     <span v-if="downloadPaths.length && !updateInfo.is_installing" class="ur-path">已下载 {{ downloadPaths.length }} 个包到暂存目录</span>
                    </div>
                  </template>
                  <span v-else class="ur-title">已是最新版本</span>
                </div>
              </el-form-item>
-            <div class="tip" style="margin-left:100px">
-              清单 JSON 示例：{"version":"1.0.1","packages":[{"name":"core.zip","url":"https://github.com/foxfred/itv-desk/raw/master/release/core.zip","sha256":"...","role":"main"}],"notes":"修复若干问题"}
-              <br/>「退出并安装更新」会退出程序并自动安装更新（只替换程序本体，你的频道/设置/台标数据保留），安装完成后自动重启，全程无需手动操作。
-            </div>
            </el-form>
          </el-tab-pane>
        </el-tabs>
@@ -485,9 +463,7 @@ const form = reactive({
   player_keyboard_enabled: true,
   player_update_interval_ms: 500,
   player_stream_proxy: false,
-  player_engine: 'auto',
   player_window_topmost: false,
-  mpv_follow_player: false,
   double_click_auto_play: true,
   prefer_external_player: false,
   external_player: 'vlc',
@@ -809,6 +785,8 @@ async function browsePlayerPath() {
     const lower = path.toLowerCase()
     if (lower.includes('potplayer') || lower.includes('potplayermini')) {
       form.external_player = 'potplayer'
+    } else if (lower.includes('mpv')) {
+      form.external_player = 'mpv'
     } else if (lower.includes('vlc')) {
       form.external_player = 'vlc'
     }

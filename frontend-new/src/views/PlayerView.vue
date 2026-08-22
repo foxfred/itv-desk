@@ -21,14 +21,11 @@
         @mousemove="(!mini) && (showControls = true)"
         @mouseleave="(!mini) && scheduleHideControls()"
       >
-        <!-- mpv 模式：隐藏 video 元素（避免 src 清空后残留上一帧造成"两窗口"视觉混淆，IPTVnator 式"先关旧再开新"）；
-             用 v-show 保留 ref，避免 forceStopAll 中 videoEl 丢失。 -->
         <video
-          v-show="!mpvActive"
           ref="videoEl"
           class="player-video"
           autoplay
-          :src="mpvActive ? '' : currentUrl"
+          :src="currentUrl"
           @error="onVideoError"
           @dblclick="toggleFullscreen"
           @timeupdate="onTimeUpdate"
@@ -37,11 +34,6 @@
           @playing="onPlaying"
           @canplay="onPlaying"
         />
-        <!-- mpv 引擎占位：mpv 通过 --wid 嵌入主窗容器渲染画面，这里保持纯黑避免 webview 尝试解码 -->
-        <div v-if="mpvActive" class="mpv-placeholder">
-          <span class="mpv-badge">mpv</span>
-          <span class="mpv-hint">原生解码中…（mpv 正在渲染画面）</span>
-        </div>
         <!-- 播放器内 EPG 信息条：显示当前频道正在播放的节目 + 进度 + 接下来 -->
         <div class="player-epg-bar" v-if="epg.visible && currentUrl && !playError">
           <div class="epg-content">
@@ -116,7 +108,7 @@
               <el-icon><VideoPlay v-if="isPaused" /><VideoPause v-else /></el-icon>
             </el-button>
             <el-button v-if="!embedded" size="default" text circle title="停止播放" @click="stopPlay">
-              <el-icon><CircleClose /></el-icon>
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="12" height="12"/></svg>
             </el-button>
             <!-- 音量 -->
             <el-button size="default" text circle :type="isMuted ? 'warning' : ''" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
@@ -147,52 +139,16 @@
               <el-icon><StarFilled v-if="isFav" /><Star v-else /></el-icon>
             </el-button>
             <el-tag v-if="currentTag" size="default" type="warning" effect="dark" class="player-tag" :title="`标记：${currentTag}`">{{ currentTag }}</el-tag>
-            <!-- 播放引擎指示 + 切换（Phase 5 Track A） -->
-            <el-tooltip :content="mpvActive ? '当前 mpv 原生解码，点击切回 WebView' : (mpvAvailable ? '当前 WebView 解码，点击切换到 mpv 原生' : 'mpv 未就位')" placement="top">
-              <el-tag
-                size="default"
-                :type="mpvActive ? 'success' : 'info'"
-                effect="dark"
-                class="engine-tag"
-                :class="{ 'engine-clickable': mpvAvailable }"
-                @click="toggleEngineBtn"
-              >{{ mpvActive ? 'mpv' : 'Web' }}</el-tag>
-            </el-tooltip>
+            <el-tag size="default" type="info" effect="dark" class="engine-tag">Web</el-tag>
             <!-- P5: 媒体信息按钮（6.3 信息浮层） -->
             <el-button size="default" text circle title="媒体信息（分辨率/帧率/音频）" @click="toggleVideoInfo">
               <el-icon><InfoFilled /></el-icon>
             </el-button>
-            <!-- P5: 音轨下拉（mpv 模式多音轨才显示） -->
-            <el-dropdown v-if="mpvActive && audioTracks.length > 1" size="default" trigger="click" @command="onPickAudioTrack">
-              <el-button size="default" text circle title="切换音轨">
-                <el-icon><Headset /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-for="t in audioTracks" :key="t.id" :command="t.id" :class="{ 'sp-active': t.selected }">
-                    <span>{{ trackLabel(t) }}</span>
-                    <el-icon v-if="t.selected" class="sp-check"><Check /></el-icon>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <!-- P5: 字幕（mpv 模式：字幕轨切换 + 加载本地字幕） -->
-            <el-dropdown v-if="mpvActive && (subTracks.length > 1 || true)" size="default" trigger="click" @command="onPickSubCmd">
-              <el-button size="default" text circle title="字幕">
-                <el-icon><DocumentAdd /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-for="t in subTracks" :key="t.id" :command="'track:' + t.id" :class="{ 'sp-active': t.selected }">
-                    <span>{{ t.title || (t.lang || ('字幕 ' + t.id)) }}</span>
-                    <el-icon v-if="t.selected" class="sp-check"><Check /></el-icon>
-                  </el-dropdown-item>
-                  <el-dropdown-item divided command="load-file">📂 加载本地字幕…</el-dropdown-item>
-                  <el-dropdown-item v-if="subTracks.length > 1" command="off">关闭字幕</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <!-- P5: 清晰度（mpv 用 video 轨 / webview 用 hls.levels） -->
+            <!-- 字幕按钮（仅提示，字幕需外部播放器支持） -->
+            <el-button size="default" text circle title="字幕（需外部播放器支持）" @click="onPickSubCmd">
+              <el-icon><DocumentAdd /></el-icon>
+            </el-button>
+            <!-- 清晰度（webview 用 hls.levels） -->
             <el-dropdown v-if="qualityOptions.length > 1" size="default" trigger="click" @command="onPickQuality">
               <el-button size="default" text circle title="清晰度">
                 <el-icon><Monitor /></el-icon>
@@ -407,8 +363,6 @@ async function stopPlay() {
   isPaused.value = false
   loading.value = false
 }
-// Phase 5：mpv 窗口跟随播放面板（拖动/缩放时重定位覆盖视频区）
-const mpvFollowPlayer = ref(true)
 const playbackSpeed = ref(1.0)
 const playbackSpeedText = ref('1.0x')
 const timeText = ref('00:00 / 00:00')
@@ -424,14 +378,11 @@ const hasChannelNav = ref(false)
 let channelIndex = -1
 let channelList = []  // [{url, name, group}] 当前视图的频道列表快照
 
-// P5: 媒体信息（6.3）+ 轨道状态
+// P5: 媒体信息（6.3）
 const videoInfoVisible = ref(false)
 const videoInfo = reactive({ w: 0, h: 0, fps: 0, audio: null, codec: '', engine: '', bitrate: 0, protocol: '', latency: 0 })
-const mpvTracks = ref([])
-// P5: 并发修复状态（C1/C3/C4）
-let engineSwitching = false     // C1: 引擎切换中标志
-let playSession = 0             // C3: 快速换台会话 id
-let _loadSeq = 0                // C4: mpv loadfile 序号
+// C3: 快速换台会话 id
+let playSession = 0
 
 // 由设置驱动的状态（默认值与 config.DEFAULTS 对齐）
 const loading = ref(false)
@@ -486,15 +437,8 @@ const isFakeLive = ref(false)
 const currentIsFakeLiveMarked = ref(false)
 let looksLikeLiveNow = false
 
-// mpv 引擎（Phase 5 Track A）：默认 webview（今日已验证），MPV 作为可选项 + 失败自动兜底
-const engine = ref('webview')           // 'webview' | 'mpv'
-// mpv 激活 = 引擎已切 mpv 且子进程就绪（此时隐藏 <video>，画面由独立 mpv 窗渲染）
-const mpvActive = computed(() => engine.value === 'mpv' && mpvReady.value)
-const mpvAvailable = ref(false)          // mpv 二进制是否就位
-const mpvReady = ref(false)              // mpv 子进程已起 + 管道已连
-const mpvLoading = ref(false)
-const mpvError = ref('')                 // 最近一次 mpv 错误（前端可见，用于自动回退 webview）
-let mpvStateTimer = null                 // 轮询 mpv_state
+// 播放引擎（v1.0.17 起固定为 webview；mpv 已降级为外部播放器，与 VLC/PotPlayer 同级）
+const engine = ref('webview')
 
 // 提示条关闭状态：每次换台/换源重置，避免“常驻播放器”影响观看
 const fakeLiveDismissed = ref(false)
@@ -553,24 +497,9 @@ const showFakeLiveBar = computed(() => {
   return isFakeLive.value || currentIsFakeLiveMarked.value
 })
 
-// ==================== P5: 轨道 / 清晰度 / 媒体信息 ====================
-// 从 mpv track-list 过滤三类轨道
-const audioTracks = computed(() => (mpvTracks.value || []).filter(t => t.type === 'audio'))
-const subTracks = computed(() => (mpvTracks.value || []).filter(t => t.type === 'sub'))
-const videoTracks = computed(() => (mpvTracks.value || []).filter(t => t.type === 'video'))
-
-// 清晰度选项：mpv 模式用 video 轨；webview 模式用 hls.levels
+// ==================== P5: 清晰度 / 媒体信息 ====================
+// 清晰度选项：webview 模式用 hls.levels
 const qualityOptions = computed(() => {
-  if (mpvActive.value) {
-    if (videoTracks.value.length > 1) {
-      return videoTracks.value.map(t => ({
-        id: String(t.id), label: `${t.title || '清晰度 ' + t.id}${t.selected ? '（当前）' : ''}`,
-        selected: !!t.selected,
-      }))
-    }
-    return [{ id: 'auto', label: '自动', selected: true }]
-  }
-  // webview：hls.js levels（L1172 已改为不强制最高）
   if (hls && hls.levels && hls.levels.length > 1) {
     return [
       { id: 'auto', label: '自动', selected: hls.currentLevel === -1 || hls.autoLevelEnabled },
@@ -603,60 +532,16 @@ function toggleVideoInfo() {
   videoInfoVisible.value = !videoInfoVisible.value
 }
 
-function onPickAudioTrack(id) {
-  callNative('mpv_set_track', 'audio', Number(id))
-}
-
-function onPickSubCmd(cmd) {
-  if (cmd === 'load-file') {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.srt,.ass,.ssa,.vtt'
-    input.onchange = async () => {
-      const f = input.files && input.files[0]
-      if (!f) return
-      // 经后端原生保存对话框无法直接拿路径，改用 webkitRelativePath 或提示：
-      // 桌面端用 showOpenFileDialog 原生能力选路径
-      const api = window.pywebview?.api
-      if (api && typeof api.select_file === 'function') {
-        const path = await callNative('select_file', '选择字幕文件', '字幕文件 (*.srt;*.ass;*.ssa;*.vtt)|*.srt;*.ass;*.ssa;*.vtt')
-        if (path && typeof path === 'string') {
-          const r = await callNative('mpv_sub_add', path)
-          if (r && r.ok) ElMessage.success('字幕已加载')
-          else ElMessage.error('字幕加载失败：' + ((r && r.error) || '未知'))
-        }
-      } else {
-        ElMessage.warning('请使用桌面客户端加载字幕文件')
-      }
-    }
-    input.click()
-    return
-  }
-  if (cmd === 'off') {
-    callNative('mpv_set_track', 'sub', 'no')
-    return
-  }
-  if (cmd.startsWith('track:')) {
-    callNative('mpv_set_track', 'sub', Number(cmd.slice(6)))
-  }
+function onPickSubCmd() {
+  ElMessage.info('字幕功能需要外部播放器（VLC/PotPlayer/mpv）支持')
 }
 
 function onPickQuality(id) {
   if (id === 'auto') {
-    if (mpvActive.value) {
-      // mpv：cycle video 回自动
-      callNative('mpv_cycle_track', 'video')
-    } else if (hls) {
-      hls.currentLevel = -1
-      hls.autoLevelCapping = -1
-    }
+    if (hls) { hls.currentLevel = -1; hls.autoLevelCapping = -1 }
     return
   }
-  if (mpvActive.value) {
-    callNative('mpv_set_quality', Number(id))
-  } else if (hls) {
-    hls.currentLevel = Number(id)
-  }
+  if (hls) hls.currentLevel = Number(id)
 }
 
 function formatTime(s) {
@@ -685,11 +570,6 @@ function onTimeUpdate() {
 }
 
 function togglePlay() {
-  if (engine.value === 'mpv' && mpvReady.value) {
-    callNative('mpv_toggle_pause')
-    isPaused.value = !isPaused.value
-    return
-  }
   const v = videoEl.value
   if (!v) return
   if (v.paused) { v.play().catch(() => {}); isPaused.value = false }
@@ -701,14 +581,6 @@ function onSeek(val) {
 }
 
 function onSeekEnd(val) {
-  if (engine.value === 'mpv' && mpvReady.value) {
-    // mpv 用 absolute 模式 seek 到百分比对应秒数（前端只拿百分比，需要 duration）
-    if (isLive.value) return
-    if (!duration.value) return
-    const sec = (val / 100) * duration.value
-    callNative('mpv_seek', sec, 'absolute')
-    return
-  }
   const v = videoEl.value
   if (!v || !isFinite(v.duration)) return
   if (isLive.value) return  // 直播流不支持 seek
@@ -756,262 +628,8 @@ async function playChannelAtIndex(idx) {
   }
 }
 
-// ==================== mpv 引擎（Phase 5 Track A）====================
-async function ensureMpvAvailable() {
-  if (mpvAvailable.value) return true
-  const r = await callNative('mpv_available')
-  if (r && r.ok) {
-    mpvAvailable.value = true
-    return true
-  }
-  // 失败：把后端探测的所有候选路径写到 mpvError（不再硬编码）
-  if (r && r.candidates && r.candidates.length) {
-    const detail = r.candidates
-      .map(c => `${c.exists ? '✓' : '✗'} ${c.label}: ${c.path}`)
-      .join('\n')
-    mpvError.value = `mpv.exe 未就位（已探测：\n${detail}\n_meipass=${r.meipass || '(空)'}）`
-  } else {
-    mpvError.value = (r && r.reason) || 'mpv 引擎不可用'
-  }
-  return false
-}
-
-async function initMpv() {
-  if (!isNative()) return false
-  if (mpvReady.value) return true
-  if (mpvLoading.value) return false
-  mpvLoading.value = true
-  mpvError.value = ''
-  try {
-    if (!(await ensureMpvAvailable())) {
-      // mpvError 已在 ensureMpvAvailable 里写好（含探测路径）
-      return false
-    }
-    const r = await callNative('mpv_init')
-    if (r && r.ok) {
-      mpvReady.value = true
-      startMpvStatePoll()
-      return true
-    }
-    mpvError.value = (r && r.error) || 'mpv 启动失败'
-    return false
-  } finally {
-    mpvLoading.value = false
-  }
-}
-
-function startMpvStatePoll() {
-  if (mpvStateTimer) return
-  mpvStateTimer = setInterval(async () => {
-    if (!mpvReady.value) return
-    // C1 修复：引擎切换窗口期跳过轮询，避免与 switchEngine 竞态双重 setupHls
-    if (engineSwitching) return
-    const s = await callNative('mpv_state')
-    if (s && s.alive === false && engine.value === 'mpv') {
-      // mpv 进程死了。强制 mpv 模式下不静默回退 webview（用户要求），保持 engine='mpv' 等用户操作
-      mpvReady.value = false
-      mpvError.value = s.last_error || 'mpv 进程退出'
-      ElMessage.warning('mpv 进程已退出，请重试或切换引擎')
-    } else if (s && s.state) {
-      // 同步状态：暂停/进度/音量
-      const st = s.state
-      if (typeof st.pause === 'boolean') isPaused.value = st.pause
-      if (typeof st.volume === 'number' && Math.abs(st.volume - volume.value) > 1) {
-        volume.value = st.volume
-      }
-      // B2 修复：mpv 模式直播判定——duration 非法/为 0 且 path 是流媒体 → 直播
-      const dur = st.duration
-      const path = st.path || ''
-      const looksLive = !(typeof dur === 'number' && isFinite(dur) && dur > 1)
-        && /m3u8|m3u|mpd|flv|rtmp|rtsp|\.ts/i.test(path)
-      if (looksLive) {
-        isLive.value = true
-        duration.value = 0
-        // 直播流进度条显示循环指示
-        if (typeof st.position === 'number') progressVal.value = (st.position % 86400) / 86400 * 100
-      } else {
-        isLive.value = false
-        if (typeof dur === 'number' && dur > 0) {
-          duration.value = dur
-          if (typeof st.position === 'number' && dur > 0) {
-            progressVal.value = st.position / dur * 100
-          }
-        }
-      }
-      // 时间文本（直播显示 elapsed / 直播）
-      if (typeof st.position === 'number') {
-        const ct = st.position
-        timeText.value = isLive.value
-          ? `${formatTime(ct)} / 直播`
-          : `${formatTime(ct)} / ${formatTime(duration.value)}`
-      }
-      // P5: 媒体信息（6.3）+ 轨道填充
-      if (st.video_w || st.video_h) {
-        videoInfo.w = st.video_w || 0
-        videoInfo.h = st.video_h || 0
-        videoInfo.fps = st.fps || 0
-        videoInfo.engine = 'mpv'
-        // R4: 同步到 store 供状态栏展示
-        playerStore.videoInfo = { w: videoInfo.w, h: videoInfo.h, fps: videoInfo.fps, engine: 'mpv' }
-      }
-      if (st.audio) videoInfo.audio = st.audio
-      if (st.codec) videoInfo.codec = st.codec
-      if (Array.isArray(st.tracks)) mpvTracks.value = st.tracks
-      // P5: mpv 健康上报（首帧=播放成功，video_h>0 即出帧）
-      if ((st.video_h || 0) > 0 && !healthReported) {
-        reportPlayHealth(true)
-      }
-    }
-  }, 1500)
-}
-
-function stopMpvStatePoll() {
-  if (mpvStateTimer) {
-    clearInterval(mpvStateTimer)
-    mpvStateTimer = null
-  }
-}
-
-async function playMpv(url) {
-  if (!url) return false
-  // C4 修复：loadfile 序号——连续两次 playMpv 时旧调用的异步结果丢弃
-  const seq = ++_loadSeq
-  // 记住进入时的引擎模式：强制 mpv 失败时不静默回退 webview（用户要求：单独用 mpv 不需要兜底）
-  const origEng = engine.value
-  if (!mpvReady.value) {
-    const ok = await initMpv()
-    if (!ok) return
-    // mpv 首次启动成功后定位到参考坐标；之后用户可自由拖动 mpv 窗口（不随切台重定位，避免"不可控"）
-    await positionMpv()
-  }
-  if (seq !== _loadSeq) return  // 已被更新的换台请求取代
-  const r = await callNative('mpv_load', url)
-  if (seq !== _loadSeq) return  // 加载期间又换台，丢弃
-  if (!r || !r.ok) {
-    const detail = (r && r.error) || 'mpv_load 失败'
-    mpvError.value = detail
-    reportPlayHealth(false, detail)
-    await forceStopAll()
-    mpvReady.value = false
-    ElMessage.warning(`mpv 加载失败：${detail}`)
-    if (origEng !== 'mpv') {
-      // 非强制 mpv（auto/webview 过渡）：回退 webview 兜底
-      engine.value = 'webview'
-      playerStore.engine = 'webview'
-      setupHls()
-    }
-    // 强制 mpv：保持 engine='mpv'，不静默回退，等用户重试或切引擎
-    return false
-  }
-  // D3/M1 修复：20s 内未出现 video-params（首帧解码）→ 判定加载失败；强制 mpv 不回退
-  if (_mpvFirstFrameTimer) { clearTimeout(_mpvFirstFrameTimer); _mpvFirstFrameTimer = null }
-  const lastVideoH = _mpvLastVideoH
-  const frameSeq = seq
-  _mpvFirstFrameTimer = setTimeout(async () => {
-    _mpvFirstFrameTimer = null
-    if (frameSeq !== _loadSeq) return
-    if (engine.value !== 'mpv' || !mpvReady.value) return
-    const s = await callNative('mpv_state')
-    const curH = s && s.state ? (s.state.video_h || 0) : 0
-    if (!curH || curH === lastVideoH) {
-      const detail = `首帧超时(20s)${s && s.last_error ? '：' + s.last_error : ''}`
-      mpvError.value = detail
-      reportPlayHealth(false, detail)
-      await forceStopAll()
-      mpvReady.value = false
-      ElMessage.warning(`mpv 首帧超时：${detail}`)
-      if (origEng !== 'mpv') {
-        engine.value = 'webview'
-        playerStore.engine = 'webview'
-        if (!maybeFailover()) setupHls()
-      }
-      // 强制 mpv：不静默回退
-    }
-  }, 20000)
-  return true
-}
-
-// D3 修复：首帧超时判定用的跨调用状态
-let _mpvFirstFrameTimer = null
-let _mpvLastVideoH = 0
-
-async function positionMpv() {
-  // 记录当前视频高度（首帧判定基线）
-  try {
-    const s0 = await callNative('mpv_state')
-    if (s0 && s0.state) _mpvLastVideoH = s0.state.video_h || 0
-  } catch { /* ignore */ }
-  // 当前播放器窗口的 client area 在屏幕上的位置 + 视频区在 client area 内的偏移
-  const wrap = document.querySelector('.player-video-wrap')
-  if (!wrap) return
-  const r = wrap.getBoundingClientRect()
-  const hwndRect = await callNative('get_client_rect')
-  if (hwndRect) {
-    // hwndRect = {x, y, w, h, chrome_h}  client area 屏幕坐标
-    const x = hwndRect.x + (r.left || 0)
-    const y = hwndRect.y + hwndRect.chrome_h + (r.top || 0)
-    const w = Math.max(100, r.width || 100)
-    // Phase 2（风险 A）：mpv 只覆盖视频区上部，底部露出 Vue 控制条条带（否则控制条被 OS 窗口盖住）
-    let h = Math.max(60, r.height || 60)
-    const ctrlEl = wrap.querySelector('.player-controls')
-    const ctrlH = ctrlEl && ctrlEl.offsetHeight > 0 ? ctrlEl.offsetHeight + 8 : 0
-    h = Math.max(60, h - ctrlH)
-    await callNative('mpv_set_rect', Math.round(x), Math.round(y), Math.round(w), Math.round(h))
-  } else {
-    // fallback: 让 mpv 浮动到屏幕中央
-    await callNative('mpv_set_rect', 200, 150)
-  }
-}
-
-async function switchEngine(newEngine) {
-  // P1c：'auto' 作为目标时，根据当前实际状态决定去向
-  if (newEngine === 'auto') {
-    newEngine = mpvActive.value ? 'webview' : 'mpv'
-  }
-  if (newEngine === engine.value) return
-  // C1 修复：引擎切换窗口期置标志，mpv 轮询跳过，避免竞态双重 setupHls
-  engineSwitching = true
-  try {
-    if (newEngine === 'mpv') {
-      // 先 forceStopAll 释放 webview 旧源（hls/flv），再启 mpv
-      await forceStopAll()
-      const ok = await initMpv()
-      if (!ok) {
-        ElMessage.warning(mpvError.value || 'mpv 启动失败，保持 WebView')
-        return
-      }
-      engine.value = 'mpv'
-      playerStore.engine = 'mpv'
-      let playOk = true
-      if (currentUrl.value) {
-        playOk = await playMpv(currentUrl.value)
-      }
-      if (playOk) {
-        ElMessage.success('已切换到 mpv 引擎（原生解码）')
-      }
-    } else {
-      // 回退 webview：先 forceStopAll 释放所有源（hls/flvPlayer/mpv），避免叠加
-      await forceStopAll()
-      engine.value = 'webview'
-      playerStore.engine = 'webview'
-      if (currentUrl.value) {
-        setupHls()
-      }
-      ElMessage.success('已切回 WebView 引擎')
-    }
-  } finally {
-    engineSwitching = false
-  }
-}
-
-// 控制条引擎标签点击切换（mpv 可用才可点）
-function toggleEngineBtn() {
-  if (!mpvAvailable.value && !mpvActive.value) {
-    ElMessage.warning('mpv 引擎未就位（vendor/mpv/mpv.exe 缺失）')
-    return
-  }
-  switchEngine(mpvActive.value ? 'webview' : 'mpv')
-}
+// v1.0.17：mpv 已降级为外部播放器（与 VLC/PotPlayer 同级），不再作为内置引擎。
+// 以下 mpv 相关代码已删除，保留注释段标记以便未来如需恢复可定位。
 
 // ==================== 播放器内 EPG 信息条 ====================
 function parseEpgDate(s) {
@@ -1081,11 +699,6 @@ function switchSource(toIndex) {
   triedSources = new Set()   // B4 修复：手动换源时清空已尝试集合，避免故障转移跳过本可用源
   isFakeLive.value = false
   fakeLiveDismissed.value = false
-  // mpv 引擎模式直接换源（不走 webview 播放）
-  if (engine.value === 'mpv' && mpvReady.value) {
-    playMpv(srcs[i])
-    return
-  }
   // 切换时先停止当前源播放，再加载所选源（A3 修复：先 destroy 旧实例，防回调交叉）
   if (hls) { hls.destroy(); hls = null }
   if (flvPlayer) { flvPlayer.destroy(); flvPlayer = null }
@@ -1248,11 +861,6 @@ function onLoadedMeta() {
 function setVolume(val) {
   const nv = Math.min(100, Math.max(0, Math.round(val)))
   volume.value = nv
-  if (engine.value === 'mpv' && mpvReady.value) {
-    callNative('mpv_set_volume', nv)
-    isMuted.value = false
-    return
-  }
   const v = videoEl.value
   if (v) { v.volume = nv / 100; v.muted = false }
   isMuted.value = false
@@ -1289,20 +897,6 @@ function onVolumeSliderMouseDown(e) {
 let _savedVolume = null
 
 function toggleMute() {
-  if (engine.value === 'mpv' && mpvReady.value) {
-    if (isMuted.value) {
-      // unmute：恢复 mute 前音量（若没有记录则用当前音量）
-      const nv = _savedVolume != null ? _savedVolume : Math.max(volume.value, 1)
-      _savedVolume = null
-      callNative('mpv_set_volume', nv)
-      volume.value = nv
-    } else {
-      _savedVolume = volume.value
-      callNative('mpv_set_volume', 0)
-    }
-    isMuted.value = !isMuted.value
-    return
-  }
   const v = videoEl.value
   if (!v) return
   if (v.muted) {
@@ -1320,12 +914,6 @@ function toggleMute() {
 }
 
 function onSpeedChange(sp) {
-  if (engine.value === 'mpv' && mpvReady.value) {
-    callNative('mpv_set_speed', sp)
-    playbackSpeed.value = sp
-    playbackSpeedText.value = `${sp}x`
-    return
-  }
   const v = videoEl.value
   if (!v) return
   v.playbackRate = sp
@@ -1369,11 +957,6 @@ async function setupHls() {
   miscTimers = []
   // 清理上一轮 dashPlayer（防叠加）
   if (dashPlayer) { try { dashPlayer.reset() } catch (_) {}; dashPlayer = null }
-  // mpv 引擎模式下不走 webview 播放
-  if (engine.value === 'mpv' && mpvReady.value) {
-    playMpv(currentUrl.value)
-    return
-  }
   const url = currentUrl.value
   // 绑定画中画状态监听（仅在元素可用时）
   v.addEventListener('enterpictureinpicture', () => {
@@ -1601,9 +1184,19 @@ async function setupHls() {
                 miscTimers.push(setTimeout(() => { if (hls) hls.startLoad() }, 1000))
               }
               break
-            case Hls.Events.MEDIA_ERROR:
+            case Hls.Events.MEDIA_ERROR: {
+              // H.265 源探测失效兜底：HLS.js 能拉清单但 MSE 解析不出画面 → detail 包含 parse/frag/alloc 关键字，
+              // 此时说明是浏览器不支持该编码（典型：H.265 HEVC），切到后端 ffmpeg 转码路径。
+              const detail = (data.details || '').toLowerCase()
+              if (/parse|frag|alloc/.test(detail) && !usingProxy) {
+                console.warn('[HLS] media parse error，疑似 H.265，转 h264-proxy:', detail)
+                cleanupHls()
+                playH264Proxy(url, src, sid, looksLikeLive)
+                return
+              }
               try { hls.recoverMediaError() } catch (_) { /* 尝试恢复失败 */ }
               break
+            }
             default:
               // 其他致命错误：若尚未走代理，先回退到本地中继重试一次；否则标记失败让用户看到
               if (!usingProxy) {
@@ -1897,49 +1490,12 @@ async function loadPlayerConfig() {
     if (data.external_player) externalPref.value = data.external_player
     if (data.external_player_path) externalPathManual.value = data.external_player_path
     if (data.player_stream_proxy != null) proxyEnabled.value = !!data.player_stream_proxy
-    // Phase 5：双窗口新增项——播放窗口置顶 + mpv 跟随播放面板
+    // 双窗口新增项——播放窗口置顶
     if (data.player_window_topmost != null) {
       const wantTop = !!data.player_window_topmost
       if (wantTop !== topmost.value) {
         topmost.value = wantTop
         if (wantTop) callNative('set_topmost', true)
-      }
-    }
-    if (data.mpv_follow_player != null) mpvFollowPlayer.value = !!data.mpv_follow_player
-    // 播放引擎（P1c 1.6 播放器预选）：'auto'(默认, mpv 优先失败降级) / 'mpv' / 'webview'
-    const pe = data.player_engine || 'auto'
-    if (pe === 'mpv' || pe === 'webview' || pe === 'auto') {
-      // 问题1修复：引擎设置发生变化时，必须先释放旧音源再切换，
-      // 否则旧 webview 声音悬空 + 新源 mpv = 双声叠加
-      if (engine.value !== pe) {
-        // 记录旧引擎，切换前彻底停旧源
-        const oldEng = engine.value
-        if (hls || flvPlayer || dashPlayer || mpvReady.value) {
-          await forceStopAll()
-        }
-        engine.value = pe
-        playerStore.engine = pe
-        // 若当前正有频道在播且处于窗口激活态，立即按新引擎重播
-        if (currentUrl.value && (oldEng === 'mpv' && mpvReady.value || oldEng === 'webview')) {
-          // 避免重复 init，统一走 setupHls/playMpv 分流（embedded 时由 store watch 触发）
-          queueMicrotask(async () => {
-            if (pe === 'mpv') {
-              const ok = await initMpv()
-              if (ok && currentUrl.value) playMpv(currentUrl.value)
-              else miscTimers.push(setTimeout(setupHls, 100))
-            } else if (pe === 'webview') {
-              setupHls()
-            } else {
-              // auto
-              const eff = await resolveEngine(currentUrl.value)
-              if (eff === 'mpv' && currentUrl.value) await playMpv(currentUrl.value)
-              else miscTimers.push(setTimeout(setupHls, 100))
-            }
-          })
-        }
-      } else {
-        // 引擎未变，仅更新 store 状态
-        playerStore.engine = pe
       }
     }
   } catch { /* ignore */ }
@@ -1987,7 +1543,8 @@ function isHlsContentType(ct) {
 }
 
 // 探测 HLS 主清单是否 H.265 编码：URL 自身含 h265/hevc/videocodec=h26 标记直接判定；
-// 否则抓取一小段清单文本，若含相关关键字则判为 h265（浏览器 MSE 不支持，需转码）。
+// 否则抓取主清单文本做关键字匹配；主清单不含 codec 信息时进一步抓取首个 TS 分片头字节，
+// 检测 HEVC NAL 单元起始码（0x42 之后 NAL 类型 0x1E-0x21 为 HEVC）→ 这是最可靠的判据。
 // 返回 Promise<boolean>。
 function probeHlsIsH265(url, timeoutMs = 5000) {
   const u = (url || '').toLowerCase()
@@ -2003,14 +1560,86 @@ function probeHlsIsH265(url, timeoutMs = 5000) {
         .then((res) => {
           if (timer) clearTimeout(timer)
           if (!res.ok) { resolve(false); return }
-          return res.text().then((t) => {
-            const low = (t || '').toLowerCase()
-            resolve(/h265|hevc|videocodec=h26|codec=hev1|codecs=.{0,8}hev1/.test(low))
-          })
+          return res.arrayBuffer()
+        })
+        .then((buf) => {
+          const text = decodeText(buf)
+          const low = text.toLowerCase()
+          if (/h265|hevc|videocodec=h26|codec=hev1|codecs=.{0,8}hev1/.test(low)) {
+            resolve(true); return
+          }
+          // 主清单没标注 codec，取首个 TS 分片头检测 HEVC NAL
+          return probeTsSegmentH265(url, text)
+            .then((segResult) => resolve(segResult))
+            .catch(() => resolve(false))
         })
         .catch(() => { if (timer) clearTimeout(timer); resolve(false) })
     } catch (e) { if (timer) clearTimeout(timer); resolve(false) }
   })
+}
+
+// 从 HLS 清单里抽出相对/绝对路径的第一个 TS 分片，取前 32KB 检测 HEVC NAL
+function probeTsSegmentH265(baseUrl, manifestText) {
+  return new Promise((resolve) => {
+    try {
+      const lines = manifestText.split(/\r?\n/)
+      let firstTsUrl = null
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (line && !line.startsWith('#') && /\.(ts|TS|m2ts|M2TS|mp4|MP4|mp4s|M4S)(\?|#|$)/i.test(line)) {
+          firstTsUrl = line
+          break
+        }
+        // 兼容 EXT-X-MEDIA:URI="xxx.ts" 或 EXT-X-MAP:URI
+        const m = line.match(/URI="([^"]+\.(?:ts|m2ts|mp4|mp4s))[^"]*"/i)
+        if (m && !firstTsUrl) firstTsUrl = m[1]
+      }
+      if (!firstTsUrl) { resolve(false); return }
+      const segUrl = resolveUrl(baseUrl, firstTsUrl)
+      const segCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+      let segTimer = setTimeout(() => segCtrl && segCtrl.abort(), 4000)
+      fetch(segUrl, { method: 'GET', cache: 'no-store',
+                       headers: { 'User-Agent': 'Mozilla/5.0' },
+                       signal: segCtrl ? segCtrl.signal : undefined })
+        .then((res) => {
+          if (segTimer) clearTimeout(segTimer)
+          if (!res.ok) { resolve(false); return }
+          return res.arrayBuffer().then((b) => new Uint8Array(b))
+        })
+        .then((bytes) => {
+          // 检查前 32KB 里是否有 HEVC NAL 起始码
+          const len = Math.min(bytes.length, 32 * 1024)
+          for (let i = 0; i < len - 2; i++) {
+            // HEVC NAL header：Type = (nalu_type >> 1) & 63，HEVC 类型范围 16..40（含 IDR/WRD/BLA/CRA/...）
+            const nalType = (bytes[i] >> 1) & 0x3f
+            if (nalType >= 16 && nalType <= 40) {
+              resolve(true); return
+            }
+            // 也接受 H264 起始码后跟 HEVC NAL 头（0x00 0x00 0x01 或 0x00 0x00 0x00 0x01 后字节）
+            if (i + 4 < len && bytes[i] === 0 && bytes[i + 1] === 0 && bytes[i + 2] === 1) {
+              const t = (bytes[i + 3] >> 1) & 0x3f
+              if (t >= 16 && t <= 40) { resolve(true); return }
+            }
+          }
+          resolve(false)
+        })
+        .catch(() => { if (segTimer) clearTimeout(segTimer); resolve(false) })
+    } catch (e) { resolve(false) }
+  })
+}
+
+function decodeText(buf) {
+  try {
+    return new TextDecoder('utf-8', { fatal: false }).decode(buf)
+  } catch { return '' }
+}
+
+function resolveUrl(base, relative) {
+  try {
+    return new URL(relative, base).href
+  } catch {
+    return relative
+  }
 }
 
 // 构建 h265 → h264 转码代理 URL（后端 ffmpeg 实时转码，输出 HTTP-FLV）
@@ -2018,53 +1647,11 @@ function h264ProxyUrl(srcUrl) {
   return '/api/h264-proxy?url=' + encodeURIComponent(srcUrl)
 }
 
-// 引擎解析：auto 时优先 mpv（全协议原生），mpv 不可用按协议回退 webview
-// 返回实际生效引擎 'mpv' | 'webview'
-// 问题4修复：auto 模式下 RTMP/RTSP 优先走 webview（flv.js + 后端 rtmp_proxy），
-// 因为 mpv 播 RTMP 对部分源不稳（连接/超时），走成熟链路更可靠；
-// 其余协议（hls/mpd/flv/ts/mp4 等）mpv 可用则用 mpv 原生解码。
-async function resolveEngine(urlOverride = null) {
-  if (engine.value === 'mpv') return 'mpv'
-  if (engine.value === 'webview') return 'webview'
-  // auto（Phase 2 起 = Web 优先，与「Web为主 + mpv独立窗可选」决策一致）：
-  // 默认走 webview（hls.js/flv.js + RTMP 中继成熟可靠），mpv 仅手动/设置切换时启用。
-  return 'webview'
-}
-
-// ==================== 统一播放入口（第一点修复）====================
-// 修复前：mpv 仅在「手动点状态栏徽标切换引擎」时才会初始化；
-// 首播、或设置了「强制 mpv」时，playRow 直接因 mpvReady===false 静默落到 WebView，
-// 导致「强制使用 MPV」形同虚设、状态栏始终显示 Web。
-// 这里集中做引擎分发，并在需要时主动拉起 mpv（force-mpv 必拉起；auto 非 RTMP 探测后拉起）。
-// playRow / 浮层预载 / 独立窗口三处播放入口共用，避免逻辑分叉再出 bug。
+// ==================== 统一播放入口 ====================
+// 引擎固定 webview（v1.0.17 起 mpv 已降级为外部播放器，与 VLC/PotPlayer 同级）。
 async function startPlayback() {
   const url = currentUrl.value || ''
   if (!url) return
-  const isRtmpLike = /^(rtmp|rtmps|rtsp):\/\//i.test(url)
-  if (engine.value === 'mpv') {
-    // 强制 mpv（用户明确要求：不静默回退 webview，让他加载到最后/明确报错即可）
-    const ok = await initMpv()
-    if (ok) {
-      await playMpv(url)
-    } else {
-      // mpv 不可用（如 vendor/mpv/mpv.exe 缺失）：明确报错并保持 mpv 引擎状态，不自动切 web
-      mpvReady.value = false
-      ElMessage.error(mpvError.value || 'mpv 启动失败，请在设置中确认 mpv 可用或切换引擎')
-    }
-    return
-  }
-  if (engine.value === 'auto') {
-    // auto（Phase 2 起 = Web 优先，IPTVnator 式：默认 Web 内核 hls.js/flv.js，不弹 mpv 窗）
-    if (isRtmpLike) {
-      setupHls()
-      return
-    }
-    const eff = await resolveEngine(url)
-    if (eff === 'mpv' && currentUrl.value) await playMpv(currentUrl.value)
-    else setupHls()
-    return
-  }
-  // 显式 webview
   setupHls()
 }
 
@@ -2075,39 +1662,6 @@ function onKeyDown(e) {
   if (!keyboardEnabled.value) return
   const tag = (e.target && e.target.tagName) || ''
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return
-  // P5: mpv 模式键盘路由到 mpv_*（不碰 videoEl）
-  if (engine.value === 'mpv' && mpvReady.value) {
-    switch (e.key) {
-      case ' ':
-      case 'Spacebar':
-        e.preventDefault()
-        callNative('mpv_toggle_pause')
-        break
-      case 'ArrowLeft':
-        e.preventDefault()
-        callNative('mpv_seek', -(seekStep.value / 1000), 'relative')
-        break
-      case 'ArrowRight':
-        e.preventDefault()
-        callNative('mpv_seek', seekStep.value / 1000, 'relative')
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setVolume(volume.value + volStep.value)
-        break
-      case 'ArrowDown':
-        e.preventDefault()
-        setVolume(volume.value - volStep.value)
-        break
-      case 'm': case 'M':
-        toggleMute()
-        break
-      case 'f': case 'F':
-        toggleFullscreen()
-        break
-    }
-    return
-  }
   const v = videoEl.value
   if (!v) return
   switch (e.key) {
@@ -2152,7 +1706,8 @@ async function playExternal() {
   if (!path) {
     try {
       const { data } = await configApi.getPlayers()
-      path = externalPref.value === 'potplayer' ? data.pot : data.vlc
+      path = externalPref.value === 'potplayer' ? data.pot
+        : externalPref.value === 'mpv' ? data.mpv : data.vlc
     } catch { /* ignore */ }
   }
   if (!path) {
@@ -2164,11 +1719,7 @@ async function playExternal() {
   if (ok === undefined) ElMessage.info('仅桌面版支持外部播放')
 }
 
-// 状态栏联动（R4 + 第一点修复）：本地 mpvReady / engine 是唯一数据源，
-// 必须同步到 playerStore，否则主窗状态栏 playerStore.mpvActive 永远为 false → 始终显示「Web」。
-// 之前只同步 playerStore.engine（switchEngine/loadPlayerConfig），漏掉 playerStore.mpvReady，
-// 导致 mpv 真在播时状态栏仍显示 Web。
-watch(mpvReady, (v) => { playerStore.mpvReady = v })
+// 状态栏联动：播放引擎固定 webview，同步到 store
 watch(engine, (v) => { playerStore.engine = v })
 
 // Phase 3：跨窗口状态上报——播放窗把 引擎/频道/分辨率 推给主窗状态栏。
@@ -2198,15 +1749,6 @@ onMounted(async () => {
   window.__iptvCleanup = () => {
     if (hls) { hls.destroy(); hls = null }
     if (flvPlayer) { flvPlayer.destroy(); flvPlayer = null }
-    stopMpvStatePoll()
-    if (mpvReady.value) {
-      callNative('mpv_quit')
-      mpvReady.value = false
-    }
-  }
-  // Phase 5：mpv 窗口跟随播放面板——后端 events.moved/resized 触发本回调重定位 mpv
-  window.__repositionMpv = () => {
-    if (mpvFollowPlayer.value && mpvActive.value) positionMpv()
   }
   window.addEventListener('keydown', onKeyDown)
 
@@ -2228,14 +1770,11 @@ onMounted(async () => {
 
   // 读取播放器设置（音量/倍速/隐藏延时/快捷键步长等）
   await loadPlayerConfig()
-  // 第一点修复：主动探测 mpv 可用性，使状态栏徽标/点击切换可正确反映真实状态
-  ensureMpvAvailable()
   // 读取全局设置：获取 fake_live_whitelist（真实直播链接白名单，修复误判）
   try { await settingsStore.fetchSettings() } catch { /* ignore */ }
   if (currentUrl.value) applyPlayerDefaults()
 
   if (currentUrl.value) {
-    // 引擎分流（P1c 1.6 + 第一点修复）：统一走 startPlayback()，强制 mpv 也会主动拉起引擎
     await startPlayback()
   }
 
@@ -2264,15 +1803,7 @@ function startPendingPolling() {
 async function playRow(row, list = null, idx = -1) {
   if (!row || !row.url) return
   // 切台前清理上一播放源，避免多音频流叠加（BUG3）
-  // P5-C5 修复：mpv 模式换台不 quit（loadfile replace 天然换源），仅重置状态，
-  // 避免 quit→重 init→load 重启风暴；hls/flvPlayer/webview 仍走 forceStopAll
-  if (engine.value === 'mpv' && mpvReady.value) {
-    resetPlayState()
-    // 释放 webview 侧残留（若有）
-    if (hls) { try { hls.destroy() } catch (_) {}; hls = null }
-    if (flvPlayer) { try { flvPlayer.destroy() } catch (_) {}; flvPlayer = null }
-    if (dashPlayer) { try { dashPlayer.reset() } catch (_) {}; dashPlayer = null }
-  } else if (hls || flvPlayer || dashPlayer || mpvReady.value) {
+  if (hls || flvPlayer || dashPlayer) {
     await forceStopAll()
   }
   // row 可能携带 __channelList / __index（run.py open_player 附加的元数据）
@@ -2324,18 +1855,13 @@ async function playRow(row, list = null, idx = -1) {
   fakeLiveDismissed.value = false
   triedSources = new Set()
   if (!same) {
-    // 引擎分流换台（P1c 1.6 + 问题4修复 + 第一点修复）：
-    // 统一走 startPlayback()，由它按 engine 决定 mpv/webview 并主动拉起 mpv，
-    // 解决「强制 mpv 却静默走 webview / 状态栏恒显 Web」的问题。
     nextTick(() => startPlayback())
   } else if (!hls && videoEl.value) {
     setupHls()
   }
 }
 
-// BUG3 修复：统一释放所有播放源，避免多音频流叠加
-// 切台/切引擎/关闭时调用，确保旧源彻底停止
-// P5-C5 修复：轻量状态重置（不碰引擎进程），mpv 换台时复用，避免 quit 重启风暴
+// BUG3 修复：轻量状态重置（切台/切源时清零，防旧状态残留）
 function resetPlayState() {
   playError.value = false
   loading.value = false
@@ -2356,9 +1882,8 @@ function resetPlayState() {
   playerStore.videoInfo = { w: 0, h: 0, fps: 0, engine: '' }
 }
 
-// BUG3 修复：统一释放所有播放源（hls/flvPlayer/mpv），避免多音频流叠加
-// 切台/切引擎/关闭时调用，确保旧源彻底停止
-// 问题1修复：改为 async，mpv_quit 用 mpvQuitSafe await 确认退出后再继续，杜绝叠加
+// BUG3 修复：统一释放所有播放源（hls/flvPlayer），避免多音频流叠加
+// 切台/关闭时调用，确保旧源彻底停止
 async function forceStopAll() {
   // 1) 销毁 hls.js
   if (hls) { try { hls.destroy() } catch (_) {} ; hls = null }
@@ -2371,19 +1896,7 @@ async function forceStopAll() {
     try { v.removeAttribute('src') } catch (_) {}
     try { v.load() } catch (_) {}
   }
-  // 3) 退出 mpv（如果运行中）——await 确认退出，避免 mpv 与 webview 双声短暂叠加
-  if (mpvReady.value) {
-    mpvReady.value = false
-    if (engine.value === 'mpv' || engine.value === 'auto') {
-      await mpvQuitSafe()
-    } else {
-      // 静默退出（非 mpv 模式也确保干净）
-      await mpvQuitSafe()
-    }
-  }
-  // 4) 清首帧超时计时器
-  if (_mpvFirstFrameTimer) { clearTimeout(_mpvFirstFrameTimer); _mpvFirstFrameTimer = null }
-  // 5) 重置状态
+  // 3) 重置状态
   resetPlayState()
 }
 
@@ -2392,23 +1905,13 @@ onUnmounted(() => {
   if (window.__iptvPlay === playRow) delete window.__iptvPlay
   if (window.__iptvCleanup) delete window.__iptvCleanup
   window.removeEventListener('keydown', onKeyDown)
-  // BUG3：统一释放所有源（hls/flvPlayer/mpv）+ timer + EPG，避免残留
+  // BUG3：统一释放所有源（hls/flvPlayer）+ timer + EPG，避免残留
   forceStopAll()
   if (pendingTimer) { clearInterval(pendingTimer); pendingTimer = null }
   if (epgTimer) { clearInterval(epgTimer); epgTimer = null }
   if (epgRefreshTimer) { clearInterval(epgRefreshTimer); epgRefreshTimer = null }
-  stopMpvStatePoll()
 })
 
-// A1 修复：异步确认 mpv 退出（onUnmounted 非 async，抽成独立函数）
-async function mpvQuitSafe() {
-  try {
-    await Promise.race([
-      callNative('mpv_quit'),
-      new Promise(resolve => setTimeout(resolve, 3000)),
-    ])
-  } catch { /* ignore */ }
-}
 </script>
 
 <style scoped>
@@ -2453,18 +1956,6 @@ async function mpvQuitSafe() {
 }
 .player-video { width: 100%; height: 100%; object-fit: contain; }
 
-/* mpv 引擎占位：纯黑背景 + 顶部小徽标，画面在独立 mpv 窗 */
-.mpv-placeholder {
-  position: absolute; inset: 0; z-index: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; background: #000; color: #666;
-}
-.mpv-badge {
-  font-size: 11px; letter-spacing: 1px; color: #4ade80;
-  border: 1px solid #4ade80; border-radius: 4px; padding: 2px 8px;
-}
-.mpv-hint { font-size: 12px; color: #888; }
-
 .player-error {
   position: absolute; inset: 0; z-index: 5;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -2478,7 +1969,7 @@ async function mpvQuitSafe() {
 
 .player-controls {
   position: absolute; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0));
+  background: linear-gradient(to top, rgba(0,0,0,0.92) 60%, rgba(0,0,0,0));
   padding: 24px 16px 10px; display: flex; flex-direction: column;
 }
 .progress-wrap { width: 100%; margin-bottom: 6px; padding: 0 4px; }

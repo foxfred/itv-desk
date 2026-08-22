@@ -696,7 +696,7 @@ import { subscribeLogsSSE, subscribeEventsSSE } from '@/api/realtime'
 const store = useChannelStore()
 const settingsStore = useSettingsStore()
 const playerStore = usePlayerStore()
-// 外部播放器可执行文件路径（默认 VLC / PotPlayer 探测结果）
+// 外部播放器可执行文件路径（默认 VLC / PotPlayer / mpv 探测结果）
 const externalPlayerPath = ref('')
 
 // ==================== 左侧面板 ====================
@@ -1267,19 +1267,19 @@ async function playExternal(row) {
   if (!path) {
     try {
       const { data } = await configApi.getPlayers()
-      path = settingsStore.get('external_player') === 'potplayer' ? data.pot : data.vlc
+      path = settingsStore.get('external_player') === 'potplayer' ? data.pot : (settingsStore.get('external_player') === 'mpv' ? data.mpv : data.vlc)
       externalPlayerPath.value = path || ''
     } catch { /* ignore */ }
   }
   if (!path) {
-    ElMessage.warning('未检测到 VLC / PotPlayer，请在设置中指定播放器路径后再使用外部播放')
+    ElMessage.warning('未检测到 VLC / PotPlayer / mpv，请在设置中指定播放器路径后再使用外部播放')
     return
   }
   const ok = await callNative('play_external', row.url, path)
   if (ok === undefined) {
     ElMessage.info('仅桌面版支持外部播放，请使用客户端打开')
   } else if (ok === false) {
-    ElMessage.error('未找到外部播放器，请检查设置或安装 VLC / PotPlayer')
+    ElMessage.error('未找到外部播放器，请检查设置或安装 VLC / PotPlayer / mpv')
   }
 }
 
@@ -2060,7 +2060,7 @@ onMounted(async () => {
   await store.fetchIfNeeded()
   await settingsStore.fetchSettings()
   fetchAppVersion()
-  // 探测外部播放器路径（VLC / PotPlayer），供「用外部播放器打开」使用
+  // 探测外部播放器路径（VLC / PotPlayer / mpv），供「用外部播放器打开」使用
   // 优先读手动配置路径，其次自动探测
   try {
     const manual = settingsStore.get('external_player_path')

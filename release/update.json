@@ -1,20 +1,13 @@
 {
-  "version": "1.0.16",
-  "notes": "iTV Desk v1.0.16：4 项修复——(1) 500 后端错误：channel_service.py 兼容旧缓存 health 字典缺 decode_fail 字段，改用 .get() 安全访问；(2) 播放器窗口白色边框：_strip_window_border() 修复 hwnd 获取语法错误（原 window._/win32_window 是非法除法），改用 getattr 多路兜底，并在 events.shown 回调中再次去边框（窗口未渲染前 Win32 操作不生效）；(3) 右侧按钮重排：置顶→最小化→迷你→全屏→关闭，margin-left:auto 移到全屏按钮上让全屏靠右；(4) 停止播放图标：VideoCamera 改 CircleClose（红叉），外部播放器图标改 Upload。",
+  "version": "1.0.17",
+  "notes": "iTV Desk v1.0.17：清除 mpv 内置引擎 + 播放器修复——(1) 彻底移除 mpv 内置解码引擎，播放引擎固定为 Web（hls.js/flv.js），清除前端 mpv 全部逻辑与后端探测代码，不再集成 GPL 组件（打包更干净）；(2) mpv 降级为外部播放器，与 VLC/PotPlayer 并列在「系统设置→播放器」可选（需本机自行安装）；(3) 播放器 UI：停止按钮改实心方块（原误用红叉图标）、控制栏背景加深按钮清晰可见、播放窗口白色边框根除（WS_POPUP 彻底去客户区边缘）；(4) 设置面板精简：删「播放引擎」单选、删 MPV 独立窗/容器跟随选项、隐藏更新地址栏、清除更新说明文字；(5) H.265 转码兜底增强：主清单无 codec 时抓取 TS 分片检测 HEVC NAL，HLS.js 解析错误自动回退后端 ffmpeg 转码，大量 H.265 源恢复播放。",
   "packages": [
     {
-      "name": "itv-desk_1.0.16_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.16_core.zip",
-      "sha256": "89b89675777861e254df128666943fb592804786fb45291ad366cc1dbdb1f7ff",
-      "size": 44058455,
+      "name": "itv-desk_1.0.17_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.17_core.zip",
+      "sha256": "514b9203143ca6181c4ff4d911e77777963d37211b1d3bd85388ccbdfd95b82b",
+      "size": 44056879,
       "role": "main"
-    },
-    {
-      "name": "itv-desk_1.0.0_mpv.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.0_mpv.zip",
-      "sha256": "9014e4b47eb5f98aeb91ce42ab91ce42ab91ce42ab91ce42ab91ce42ab91ce",
-      "size": 48483396,
-      "role": "mpv"
     }
   ]
 }

@@ -89,7 +89,7 @@ def export_direct(body: ExportDirectReq,
 
 @router.get("/players")
 def find_players():
-    """查找 VLC 和 PotPlayer 可执行文件路径"""
+    """查找 VLC / PotPlayer / mpv 可执行文件路径"""
     return {
         "vlc": shutil.which("vlc.exe") or _find_common("vlc", [
             r"C:\Program Files\VideoLAN\VLC\vlc.exe",
@@ -99,6 +99,10 @@ def find_players():
             r"C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe",
             r"C:\Program Files\DAUM\PotPlayer\PotPlayer.exe",
             r"C:\Program Files (x86)\DAUM\PotPlayer\PotPlayerMini64.exe",
+        ]),
+        "mpv": shutil.which("mpv.exe") or _find_common("mpv", [
+            r"C:\Program Files\mpv\mpv.exe",
+            r"C:\Program Files (x86)\mpv\mpv.exe",
         ]),
     }
 
@@ -121,7 +125,7 @@ def play_external(body: PlayExternalReq):
     players = find_players()
     exe = players.get(body.player)
     if not exe:
-        raise HTTPException(400, f"未找到外部播放器: {body.player}，请先安装 VLC 或 PotPlayer")
+        raise HTTPException(400, f"未找到外部播放器: {body.player}，请先安装 VLC / PotPlayer / mpv")
     try:
         subprocess.Popen([exe, body.url], shell=False)
         return {"ok": True, "player": body.player}

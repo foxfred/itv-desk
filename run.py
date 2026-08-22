@@ -898,18 +898,37 @@ class Api:
 
 
 def _strip_window_border(window):
-    """强制去掉 pywebview 窗口的操作系统边框（frameless=True 在 winforms 5.4.1 只去标题栏，边框还在）。"""
+    """强制去掉 pywebview 窗口的操作系统边框（frameless=True 在 winforms 5.4.1 只去标题栏，边框还在）。
+    移除风格：WS_CAPTION+WS_THICKFRAME（标题栏+可缩放手柄）+ WS_BORDER（简单边框）+ WS_DLGFRAME（对话框边框）
+    扩展风格：WS_EX_DLGMODALFRAME（加粗边框）+ WS_EX_CLIENTEDGE（凹凸 3D 边框）+ WS_EX_STATICEDGE（细灰边）
+    最彻底方案：把窗口风格直接设为 WS_POPUP（无边框无标题栏），杜绝 DWM 非客户区残留白边。"""
     try:
         import ctypes
-        hwnd = window._/win32_window.handle
+        win32_obj = getattr(window, '_win32_window', None) or getattr(window, '_w32_window', None)
+        hwnd = getattr(win32_obj, 'handle', 0) if win32_obj else 0
+        if not hwnd:
+            hwnd = getattr(window, 'hwnd', 0)
+        if not hwnd:
+            return
         user32 = ctypes.windll.user32
         GWL_STYLE = -16
+        GWL_EXSTYLE = -20
+        WS_POPUP = 0x80000000
         WS_CAPTION = 0x00C00000
         WS_THICKFRAME = 0x00040000
+        WS_BORDER = 0x00800000
+        WS_DLGFRAME = 0x00400000
+        WS_EX_DLGMODALFRAME = 0x00000001
         WS_EX_CLIENTEDGE = 0x00000200
+        WS_EX_STATICEDGE = 0x00020000
+        # 直接设为纯 WS_POPUP：移除所有边框/标题栏/客户区边缘
         style = user32.GetWindowLongW(hwnd, GWL_STYLE)
-        style &= ~(WS_CAPTION | WS_THICKFRAME)
+        style &= ~(WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_DLGFRAME)
+        style |= WS_POPUP
         user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        exstyle = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        exstyle &= ~(WS_EX_DLGMODALFRAME | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE)
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, exstyle)
         SWP_NOSIZE = 0x0001
         SWP_NOMOVE = 0x0002
         SWP_NOZORDER = 0x0004
@@ -941,20 +960,21 @@ def _create_player_window(api, player_api, url):
         )
         if player_window is None:
             return False
-        # 强制去掉窗口边框（pywebview 5.4.1 的 frameless=True 在 winforms 下只去标题栏，边框还在）
-        _strip_window_border(player_window)
         player_api.set_window(player_window)
         api.set_player(player_window, player_api)
         player_window.events.maximized += player_api._mark_maximized
         player_window.events.restored += player_api._mark_restored
-        player_window.events.shown += lambda *_: player_api._get_hwnd()  # GUI 线程预取句柄
-        # Phase 5：mpv 窗口跟随播放面板——拖动/缩放播放窗时通知前端重定位 mpv 覆盖视频区
-        def _on_player_moved_resized(*_):
+        # 在窗口首次显示后（而非创建时）去掉 Win32 边框——窗口未渲染前 SetWindowPos 可能不生效
+        _strip_window_border(player_window)
+        def _on_player_shown(*_):
             try:
-                player_window.evaluate_js("window.__repositionMpv && window.__repositionMpv()")
+                # 连调两次：首次可能未被 WebView2 渲染完成而失效，二次强化
+                _strip_window_border(player_window)
+                _strip_window_border(player_window)
+                player_api._get_hwnd()
             except Exception:
                 pass
-        player_window.events.moved += _on_player_moved_resized
+        player_window.events.shown += _on_player_shown
         player_window.events.resized += _on_player_moved_resized
         # 播放器被真正关闭（JS 关闭按钮 / 标题栏 X / 主窗口退出）后清空引用，
         # 下次 open_player 重建窗口，不再后台隐藏继续播放

@@ -360,10 +360,8 @@ class Config:
         "external_player": "vlc",
         "external_player_path": "",  # 手动指定外部播放器可执行文件路径（留空则自动检测）
         "player_stream_proxy": False,  # 内置 HLS 播放经本地后端中继（绕过 WebView 跨源/MSE 限制）
-        "player_engine": "auto",  # 播放引擎：auto(默认，Web 优先，mpv 为可选增强)/ webview(hls.js/flv.js)/ mpv(独立窗原生解码)
         # 双窗口播放器（Phase 5 设置面板）
         "player_window_topmost": False,  # 播放窗口总在最前（📌置顶默认状态）
-        "mpv_follow_player": False,      # mpv 窗口跟随播放面板（关闭=用户自由拖动 mpv；持续定位会覆盖用户调整导致"不可控"）
         "double_click_auto_play": True,  # 双击频道自动播放（列表即唯一选源入口）
         # 以下三项由「系统设置→播放器」面板保存（SettingsView），此前漏列 DEFAULTS，
         # 导致「恢复默认」会丢失；补齐以保持配置键一致、重置可保留。

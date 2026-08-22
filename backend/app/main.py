@@ -409,6 +409,7 @@ def find_players():
     return {
         "vlc": shutil.which("vlc.exe"),
         "pot": shutil.which("potplayermini.exe"),
+        "mpv": shutil.which("mpv.exe"),
     }
 
 

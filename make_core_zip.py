@@ -1,15 +1,29 @@
-"""生成 release/itv-desk_core.zip：高压缩比打包程序本体。
+"""生成 release/itv-desk_<version>_core.zip：高压缩比打包程序本体。
 
-排除：logos/（48MB，作为独立 mpv 包一起发，或用户已有）、update_staging/
+排除：logos/（用户数据，不进包）、update_staging/、scraping_cache/、__pycache__/、mpv/
 只保留程序本体 + _internal + 用户数据文件（让更新器回迁时不丢数据）。
+版本号从 backend/app/version.py 读取，保持单真相源。
 """
 import os
+import re
 import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(ROOT, "dist", "IPTVCore_Folder", "IPTVCore")
-DST = os.path.join(ROOT, "release", "itv-desk_1.0.16_core.zip")
+
+# 从 version.py 读取 APP_VERSION（不 import，避免污染环境）
+_version = "0.0.0"
+try:
+    with open(os.path.join(ROOT, "backend", "app", "version.py"), encoding="utf-8") as _f:
+        for _line in _f:
+            _m = re.match(r'\s*APP_VERSION\s*=\s*["\']([^"\']+)["\']', _line)
+            if _m:
+                _version = _m.group(1)
+                break
+except Exception:
+    pass
+DST = os.path.join(ROOT, "release", f"itv-desk_{_version}_core.zip")
 
 EXCLUDE_DIRS = {"logos", "update_staging", "scraping_cache", "__pycache__", "mpv"}
 EXCLUDE_EXTS = {".pyc", ".pyo"}
