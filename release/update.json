@@ -1,18 +1,18 @@
 {
-  "version": "1.0.5",
-  "notes": "iTV Desk v1.0.5：修复 WebView2 缓存导致旧界面问题（启动时自动清除缓存）；侧边栏点击修复；聚合源 UI 清理；假直播标记合并；H.265 转发修复。",
+  "version": "1.0.6",
+  "notes": "iTV Desk v1.0.6：彻底修复 WebView2 页面级缓存导致显示旧界面问题（窗口 URL 自动注入 UUID 防缓存）；资源 URL 强制 no-store + UUID 参数；新增 Vary 头；含订阅源/扫描网段全部页面。",
   "packages": [
     {
-      "name": "itv-desk_1.0.5_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.5_core.zip",
-      "sha256": "038f22c86c225c6562580e502da7c8b619ba25de2da4aaab95b6a8acac2e7024",
-      "size": 44055006,
+      "name": "itv-desk_1.0.6_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.6_core.zip",
+      "sha256": "2b37bdc5641e8e5d0d4bd7ca65ec8ce0be0b10dc7a8f17b4a53ab5e52b2014b7",
+      "size": 44055488,
       "role": "main"
     },
     {
       "name": "itv-desk_1.0.0_mpv.zip",
       "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.0_mpv.zip",
-      "sha256": "9014e4b47eb5f98aeb91ce42ab6c5422b3970203967d10b888a64edf03bf1df0",
+      "sha256": "9014e4b47eb5f98aeb91ce42ab91ce42ab91ce42ab91ce42ab91ce42ab91ce",
       "size": 48483396,
       "role": "mpv"
     }

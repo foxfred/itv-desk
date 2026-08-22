@@ -8,4 +8,4 @@
 - 前端 build-info.json 的版本号在构建时引用本文件，保持单真相源一致。
 """
 
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.6"
