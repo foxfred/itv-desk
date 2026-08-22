@@ -1,12 +1,12 @@
 {
-  "version": "1.0.7",
-  "notes": "iTV Desk v1.0.7：三项 bug 修复——①假直播标记与标签列解耦，播放器界面标记后 tag 列正常显示；②死源检测加强，H.265 等格式问题不再被误标死源（新增 decode_fail/decode_unsupported 字段）；③H.265 转码黑屏修复，增加像素格式归一化消除 yuv420p10/444 等格式转码视频流损坏。",
+  "version": "1.0.8",
+  "notes": "iTV Desk v1.0.8：播放器窗口去掉顶部标题栏改为无外框显示，顶部新增细窄拖拽条（悬停显示），拖动可移动整个窗口。",
   "packages": [
     {
-      "name": "itv-desk_1.0.7_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.7_core.zip",
-      "sha256": "fa48c62422f78b3558b60730c498f7f86501883676bd0e6d4cef5521fee3eee5",
-      "size": 44056272,
+      "name": "itv-desk_1.0.8_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.8_core.zip",
+      "sha256": "ce02fa8eb02ede9f704021d116ffe75293cb553d9fbe6faf4f8cfe91d142b920",
+      "size": 44056900,
       "role": "main"
     },
     {
