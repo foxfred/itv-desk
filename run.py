@@ -897,6 +897,29 @@ class Api:
             return f"ERROR: {e}"
 
 
+def _strip_window_border(window):
+    """强制去掉 pywebview 窗口的操作系统边框（frameless=True 在 winforms 5.4.1 只去标题栏，边框还在）。"""
+    try:
+        import ctypes
+        hwnd = window._/win32_window.handle
+        user32 = ctypes.windll.user32
+        GWL_STYLE = -16
+        WS_CAPTION = 0x00C00000
+        WS_THICKFRAME = 0x00040000
+        WS_EX_CLIENTEDGE = 0x00000200
+        style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+        style &= ~(WS_CAPTION | WS_THICKFRAME)
+        user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        SWP_NOZORDER = 0x0004
+        SWP_NOACTIVATE = 0x0010
+        SWP_FRAMECHANGED = 0x0020
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                            SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED)
+    except Exception:
+        pass
+
 def _create_player_window(api, player_api, url):
     """创建独立播放器窗口（初始隐藏，由 open_player 显示）。
 
@@ -918,6 +941,8 @@ def _create_player_window(api, player_api, url):
         )
         if player_window is None:
             return False
+        # 强制去掉窗口边框（pywebview 5.4.1 的 frameless=True 在 winforms 下只去标题栏，边框还在）
+        _strip_window_border(player_window)
         player_api.set_window(player_window)
         api.set_player(player_window, player_api)
         player_window.events.maximized += player_api._mark_maximized

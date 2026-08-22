@@ -125,7 +125,7 @@
                 <path v-else d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 4v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L2 14h3l7-7-4-3z" />
               </svg>
             </el-button>
-            <div class="volume-slider-wrap" ref="volumeSliderWrap" @mousedown="onVolumeSliderMouseDown">
+            <div class="volume-slider-wrap" ref="volumeSliderWrap" @mousedown.stop.prevent="onVolumeSliderMouseDown">
               <el-slider
                 v-model="volume"
                 :show-tooltip="false"
@@ -257,8 +257,7 @@
             <el-button size="default" text circle title="全屏" @click="toggleFullscreen">
               <el-icon><FullScreen /></el-icon>
             </el-button>
-            <span class="spacer"></span>
-            <el-button v-if="!embedded" size="default" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
+            <el-button v-if="!embedded" style="margin-left: auto" size="default" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
               <el-icon><Top /></el-icon>
             </el-button>
             <el-button v-if="!embedded" size="default" text circle :type="miniMode ? 'primary' : ''" :title="miniMode ? '退出迷你模式' : '迷你模式'" @click="toggleMiniMode">
@@ -2486,10 +2485,24 @@ async function mpvQuitSafe() {
 .progress-wrap :deep(.el-slider__runway) { background-color: rgba(255,255,255,0.2); height: 3px; }
 .progress-wrap :deep(.el-slider__bar) { background-color: var(--el-color-primary); height: 3px; }
 .progress-wrap :deep(.el-slider__button) { width: 10px; height: 10px; border: 2px solid #fff; }
-.ctrl-row { display: flex; align-items: center; gap: 12px; width: 100%; color: #fff; padding: 0 6px; }
-.ctrl-row :deep(.el-button) { color: #fff; min-width: 36px; height: 36px; padding: 8px; }
-.ctrl-row :deep(.el-button) .el-icon { font-size: 18px; }
-.ctrl-row :deep(.el-button:hover) { color: var(--el-color-primary); }
+.ctrl-row { display: flex; align-items: center; gap: 8px; width: 100%; color: #fff; padding: 0 6px; }
+.ctrl-row :deep(.el-button) {
+  color: #fff; min-width: 34px; height: 34px; padding: 6px;
+  background: transparent !important; border: 1px solid transparent !important;
+  border-radius: 6px;
+}
+.ctrl-row :deep(.el-button:hover) {
+  color: var(--el-color-primary);
+  background: rgba(255,255,255,0.1) !important;
+}
+.ctrl-row :deep(.el-button.is-active) {
+  color: var(--el-color-primary);
+  background: rgba(255,255,255,0.12) !important;
+}
+.ctrl-row :deep(.el-button .el-icon) { font-size: 17px; }
+.ctrl-row :deep(.el-button--default),
+.ctrl-row :deep(.el-button--primary),
+.ctrl-row :deep(.el-button--danger) { border-color: transparent !important; }
 .time-label { font-size: 12px; color: #ccc; font-family: 'Consolas', monospace; }
 .speed-label { font-size: 12px; color: #ccc; }
 .spacer { flex: 1; }
@@ -2598,24 +2611,24 @@ async function mpvQuitSafe() {
 /* P5: 媒体信息浮层（6.3）——右下角弹出，非常驻 */
 .video-info-overlay {
   position: absolute;
-  right: 16px;
-  bottom: 56px;
-  z-index: 8;
-  background: rgba(10, 12, 16, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 12px;
-  min-width: 180px;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  right: 20px;
+  bottom: 80px;
+  z-index: 20;
+  background: rgba(8, 10, 14, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 13px;
+  min-width: 220px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
 }
 .vi-row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  padding: 2px 0;
+  gap: 20px;
+  padding: 4px 0;
+  align-items: center;
 }
-.vi-label { color: var(--el-text-color-secondary); }
-.vi-value { color: var(--el-text-color-primary); font-family: 'Consolas', monospace; }
+.vi-label { color: #94a3b8; font-size: 12px; }
+.vi-value { color: #f1f5f9; font-size: 13px; font-family: 'Consolas', monospace; font-weight: 600; }
 </style>
