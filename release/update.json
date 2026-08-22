@@ -1,12 +1,12 @@
 {
-  "version": "1.0.11",
-  "notes": "iTV Desk v1.0.11：缩放宽度公式修复（左下角拖拽正确）；音量图标改用稳定内联 SVG 兼容 WebView2；音量滑块新增鼠标级拖拽处理器（mousedown+mousemove）；播放/暂停、停止、最大化/还原、最小化按钮全部就位。",
+  "version": "1.0.12",
+  "notes": "iTV Desk v1.0.12：播放窗口 WebView2 页面级缓存修复——播放窗口 URL 追加 UUID，每次打开强制重新加载前端，彻底解决旧前端反复回滚问题。同时确认 v1.0.11 六项播放器优化全部生效：flv.js 音画同步、音量图标、音量拖动、播放/暂停/停止按钮、最大化/还原/最小化按钮、四角缩放公式修正。",
   "packages": [
     {
-      "name": "itv-desk_1.0.11_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.11_core.zip",
-      "sha256": "b402a144bbbd0a90ebf716cfc319b15d52a8eacbef447ff5db05ec4d8a9c18bb",
-      "size": 44058094,
+      "name": "itv-desk_1.0.12_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.12_core.zip",
+      "sha256": "2aa18d5c86ccf0f7afb7d2f023035ddfd651fe36071a1c2983723bb5dff59408",
+      "size": 44058223,
       "role": "main"
     },
     {
