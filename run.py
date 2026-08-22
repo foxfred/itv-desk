@@ -1056,6 +1056,13 @@ def main():
     # 清除 WebView2 缓存，强制加载最新前端 build 文件
     _clear_webview_cache()
 
+    # 关键：在 URL 本身追加唯一查询参数，彻底绕过 WebView2 页面级缓存。
+    # WebView2 会把查询参数纳入缓存键，URL 不同则必须重新请求。
+    import uuid as _uuid
+    base_url = url
+    url = url + "?_v=" + _uuid.uuid4().hex[:12]
+    print(f"[startup] 主窗口 URL: {url}")
+
     api = Api()
     window = webview.create_window(
         "IPTV Core PRO MAX",
@@ -1068,7 +1075,7 @@ def main():
     )
     api.set_window(window)
     # 双窗口（Phase 1）：记录前端基址，供 open_player 创建 #/player 独立播放窗
-    api._player_url = url
+    api._player_url = base_url
 
     # 双窗口架构（Phase 1）：播放窗口是独立 pywebview 窗口（#/player 路由，js_api=PlayerApi），
     # 由前端双击频道经 Api.play_channel → Api.open_player 按需创建/复用。
