@@ -8,10 +8,8 @@
     <div v-else class="player-container">
       <!-- 无外框模式下的窗口拖拽条：细窄、悬停显示，拖动移动整个窗口 -->
       <div class="player-drag-bar"
-        @mousedown.prevent="onDragStart"
-        @mousemove="onDragMove"
-        @mouseup="onDragEnd"
-        @mouseleave="onDragEnd">
+        @mousedown.stop.prevent="onDragStart"
+        @mouseup.stop="onDragEnd">
         <span class="drag-hint">⋮⋮</span>
       </div>
       <div
@@ -260,6 +258,9 @@
             <el-button size="small" text circle title="全屏" @click="toggleFullscreen">
               <el-icon><FullScreen /></el-icon>
             </el-button>
+            <el-button v-if="!embedded" size="small" text circle :type="miniMode ? 'primary' : ''" :title="miniMode ? '退出迷你模式' : '迷你模式'" @click="toggleMiniMode">
+              <el-icon><Minimize /></el-icon>
+            </el-button>
             <el-button v-if="!embedded" size="small" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
               <el-icon><Top /></el-icon>
             </el-button>
@@ -268,6 +269,11 @@
             </el-button>
           </div>
         </div>
+        <!-- 无外框模式四角缩放手柄（拖动调整窗口大小） -->
+        <div class="resize-handle resize-tl" @mousedown.stop.prevent="onResizeStart($event, 0, 'tl')" />
+        <div class="resize-handle resize-tr" @mousedown.stop.prevent="onResizeStart($event, 1, 'tr')" />
+        <div class="resize-handle resize-br" @mousedown.stop.prevent="onResizeStart($event, 2, 'br')" />
+        <div class="resize-handle resize-bl" @mousedown.stop.prevent="onResizeStart($event, 3, 'bl')" />
         <!-- P5: 媒体信息浮层（6.3，右下角弹出，点击信息按钮开关） -->
         <transition name="el-fade-in">
           <div v-if="videoInfoVisible && videoInfo.w" class="video-info-overlay">
@@ -330,31 +336,58 @@ function onDragStart(e) {
   document.addEventListener('mousemove', onGlobalDragMove)
   document.addEventListener('mouseup', onGlobalDragEnd)
 }
-function onDragMove(e) {
-  // 仅在条内 mousemove，全局拖拽走 onGlobalDragMove
-}
 function onDragEnd() {
   document.removeEventListener('mousemove', onGlobalDragMove)
   document.removeEventListener('mouseup', onGlobalDragEnd)
   dragState.active = false
 }
-let lastDragX = 0, lastDragY = 0
 function onGlobalDragMove(e) {
   if (!dragState.active) return
   const dx = e.clientX - dragState.startX
   const dy = e.clientY - dragState.startY
   if (dx === 0 && dy === 0) return
-  // 累加位移调用 move_window（相对偏移）
   callNative('move_window', dx, dy).catch(() => {})
   dragState.startX = e.clientX
   dragState.startY = e.clientY
-  lastDragX = e.clientX
-  lastDragY = e.clientY
 }
 function onGlobalDragEnd() {
   document.removeEventListener('mousemove', onGlobalDragMove)
   document.removeEventListener('mouseup', onGlobalDragEnd)
   dragState.active = false
+}
+
+// 无外框模式：四角缩放手柄拖拽逻辑
+let resizeState = { active: false, corner: null, startW: 0, startH: 0, startX: 0, startY: 0 }
+function onResizeStart(e, corner, pos) {
+  if (e.button !== 0) return
+  const w = window.innerWidth, h = window.innerHeight
+  resizeState = { active: true, corner, startW: w, startH: h, startX: e.clientX, startY: e.clientY }
+  document.addEventListener('mousemove', onGlobalResizeMove)
+  document.addEventListener('mouseup', onGlobalResizeEnd)
+}
+function onGlobalResizeMove(e) {
+  if (!resizeState.active) return
+  const dx = e.clientX - resizeState.startX
+  const dy = e.clientY - resizeState.startY
+  const newW = Math.max(320, resizeState.startW + (resizeState.corner === 0 ? -dx : dx))
+  const newH = Math.max(200, resizeState.startH + (resizeState.corner < 2 ? -dy : dy))
+  callNative('resize_window', newW, newH, resizeState.corner).catch(() => {})
+}
+function onGlobalResizeEnd() {
+  document.removeEventListener('mousemove', onGlobalResizeMove)
+  document.removeEventListener('mouseup', onGlobalResizeEnd)
+  resizeState.active = false
+}
+
+// 无外框模式：迷你模式（小窗固定 320×200 放右下角）
+const miniMode = ref(false)
+function toggleMiniMode() {
+  if (miniMode.value) {
+    callNative('resize_window', 1100, 680, 0).catch(() => {})
+  } else {
+    callNative('resize_window', 320, 200, 2).catch(() => {})
+  }
+  miniMode.value = !miniMode.value
 }
 // Phase 5：mpv 窗口跟随播放面板（拖动/缩放时重定位覆盖视频区）
 const mpvFollowPlayer = ref(true)
@@ -2359,6 +2392,19 @@ async function mpvQuitSafe() {
 .player-drag-bar:hover { background: rgba(255,255,255,0.06); border-bottom-color: rgba(255,255,255,0.12); }
 .player-drag-bar:active { cursor: grabbing; }
 .drag-hint { font-size: 11px; color: rgba(255,255,255,0.25); letter-spacing: 2px; }
+
+/* 四角缩放手柄（无外框模式）：鼠标靠近时显示浅色三角形提示 */
+.resize-handle {
+  position: absolute; width: 14px; height: 14px; z-index: 50;
+  opacity: 0; transition: opacity .15s, background .15s;
+  pointer-events: auto;
+}
+.player-container:hover .resize-handle { opacity: 0.6; }
+.resize-tl { top: 0; left: 0; cursor: nw-resize; border-top-left-radius: 4px; background: rgba(255,255,255,0.15); }
+.resize-tr { top: 0; right: 0; cursor: ne-resize; border-top-right-radius: 4px; background: rgba(255,255,255,0.15); }
+.resize-br { bottom: 0; right: 0; cursor: se-resize; border-bottom-right-radius: 4px; background: rgba(255,255,255,0.15); }
+.resize-bl { bottom: 0; left: 0; cursor: sw-resize; border-bottom-left-radius: 4px; background: rgba(255,255,255,0.15); }
+.resize-handle:hover { opacity: 1; background: rgba(255,255,255,0.35); }
 
 
 .player-video-wrap {

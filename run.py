@@ -494,6 +494,22 @@ class PlayerApi:
         except Exception:
             return False
 
+    def resize_window(self, w, h, corner=0):
+        """无外框模式下调整播放窗口大小（前端拖拽角手柄时调用）。
+        w/h 为最终宽高；corner 为锚点角（0=左上, 1=右上, 2=右下, 3=左下）。"""
+        try:
+            w_win = self._window
+            if w_win is None:
+                return False
+            if corner:
+                from webview.window import FixPoint
+                w_win.resize(int(w), int(h), FixPoint(int(corner)))
+            else:
+                w_win.resize(int(w), int(h))
+            return True
+        except Exception:
+            return False
+
     def play_external(self, url, player_path):
         """用外部播放器打开直播源（VLC / PotPlayer）"""
         return _launch_external_player(url, player_path)
