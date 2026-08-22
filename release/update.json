@@ -4,7 +4,7 @@
   "packages": [
     {
       "name": "itv-desk_1.0.17_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.17_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v1.0.17/itv-desk_1.0.17_core.zip",
       "sha256": "514b9203143ca6181c4ff4d911e77777963d37211b1d3bd85388ccbdfd95b82b",
       "size": 44056879,
       "role": "main"
