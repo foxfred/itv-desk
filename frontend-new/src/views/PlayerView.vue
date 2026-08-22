@@ -112,19 +112,24 @@
             <el-button size="small" text circle title="下一个频道" @click="nextChannel" :disabled="!hasChannelNav">
               <el-icon><DArrowRight /></el-icon>
             </el-button>
-            <!-- 音量（喇叭图标） -->
+            <!-- 音量 -->
             <el-button size="small" text circle :type="isMuted ? 'warning' : ''" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
-              <el-icon><Volume v-if="!isMuted" /><Mute v-else /></el-icon>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <path v-if="!isMuted" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                <path v-else d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 4v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L2 14h3l7-7-4-3z" />
+              </svg>
             </el-button>
-            <el-slider
-              v-model="volume"
-              :show-tooltip="false"
-              :max="100"
-              size="small"
-              style="width:90px; flex-shrink: 0"
-              @input="onVolumeChange"
-              @change="onVolumeChange"
-            />
+            <div class="volume-slider-wrap" ref="volumeSliderWrap" @mousedown="onVolumeSliderMouseDown">
+              <el-slider
+                v-model="volume"
+                :show-tooltip="false"
+                :max="100"
+                size="small"
+                style="width:100px; flex-shrink: 0"
+                @input="onVolumeChange"
+                @change="onVolumeChange"
+              />
+            </div>
             <span class="time-label">{{ timeText }}</span>
             <span class="player-title" :title="currentUrl">{{ currentName }}</span>
             <el-tag v-if="currentUrlNote" size="small" type="info" effect="dark" class="player-note" :title="`源标签：${currentUrlNote}`">{{ currentUrlNote }}</el-tag>
@@ -319,6 +324,7 @@ import { usePlayerStore } from '@/stores/player'
 const route = useRoute()
 const playerStore = usePlayerStore()
 const videoEl = ref(null)
+const volumeSliderWrap = ref(null)
 const currentUrl = ref('')
 const currentName = ref('')
 // 1.5: $ 后源标签（如「组播超高清-50fps」），标题栏展示
@@ -369,7 +375,8 @@ function onGlobalResizeMove(e) {
   if (!resizeState.active) return
   const dx = e.clientX - resizeState.startX
   const dy = e.clientY - resizeState.startY
-  const newW = Math.max(320, resizeState.startW + (resizeState.corner === 0 ? -dx : dx))
+  // 左角（0=tl, 3=bl）拖右→收窄（-dx）；右角（1=tr, 2=br）拖右→变宽（+dx）
+  const newW = Math.max(320, resizeState.startW + (resizeState.corner % 2 === 0 ? -dx : dx))
   const newH = Math.max(200, resizeState.startH + (resizeState.corner < 2 ? -dy : dy))
   callNative('resize_window', newW, newH, resizeState.corner).catch(() => {})
 }
@@ -1264,6 +1271,29 @@ function setVolume(val) {
 
 function onVolumeChange(val) {
   setVolume(val)
+}
+
+// WebView2 兼容：鼠标拖动音量条时手动计算音量（el-slider 在 WebView2 中 @input 可能不响应拖拽）
+let _volumeDragActive = false
+function onVolumeSliderMouseDown(e) {
+  if (e.button !== 0) return
+  _volumeDragActive = true
+  const handleMouseMove = (ev) => {
+    if (!_volumeDragActive) return
+    const wrap = volumeSliderWrap.value
+    if (!wrap) return
+    const rect = wrap.getBoundingClientRect()
+    const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width))
+    volume.value = Math.round(pct * 100)
+    setVolume(volume.value)
+  }
+  const handleMouseUp = () => {
+    _volumeDragActive = false
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', handleMouseUp)
+  }
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
 }
 
 // B3 修复：跨引擎统一静音——mute 前保存当前音量，unmute 时恢复（两引擎行为一致）
@@ -2414,6 +2444,7 @@ async function mpvQuitSafe() {
 .player-drag-bar:hover { background: rgba(255,255,255,0.06); border-bottom-color: rgba(255,255,255,0.12); }
 .player-drag-bar:active { cursor: grabbing; }
 .drag-hint { font-size: 11px; color: rgba(255,255,255,0.25); letter-spacing: 2px; }
+.volume-slider-wrap { width: 100px; flex-shrink: 0; cursor: pointer; }
 
 /* 四角缩放手柄（无外框模式）：四角小圆点，悬停时变亮 */
 .resize-handle {
