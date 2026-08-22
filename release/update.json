@@ -1,12 +1,12 @@
 {
   "version": "1.0.5",
-  "notes": "iTV Desk v1.0.5：修复 EXE 搬移后设置打不开问题（注释增强 os.chdir 位置说明）；聚合源 UI 清理；假直播标记合并；Web 播放器优化；H.265 转发修复。",
+  "notes": "iTV Desk v1.0.5：修复 WebView2 缓存导致旧界面问题（启动时自动清除缓存）；侧边栏点击修复；聚合源 UI 清理；假直播标记合并；H.265 转发修复。",
   "packages": [
     {
       "name": "itv-desk_1.0.5_core.zip",
       "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.5_core.zip",
-      "sha256": "94309c1a782fc7306f4f2c150f521f4efa1c84c8e1c54bc0ee6dff65a8c7cf83",
-      "size": 44053403,
+      "sha256": "038f22c86c225c6562580e502da7c8b619ba25de2da4aaab95b6a8acac2e7024",
+      "size": 44055006,
       "role": "main"
     },
     {

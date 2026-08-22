@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import zipfile
+import ctypes
 
 # --update-only 模式：作为内嵌更新器运行，不走正常启动。
 # 必须在 import webview 等重模块之前拦截，避免加载 GUI 依赖。
@@ -938,6 +939,33 @@ def _free_port():
     return port
 
 
+def _clear_webview_cache():
+    """清除 WebView2 缓存，强制加载最新前端 build 文件。
+    
+    WebView2 会缓存 index.html 和 JS 文件，导致前端 build 更新后
+    EXE/run.py 仍显示旧界面。删除 WebView2 缓存目录即可强制刷新。
+    """
+    try:
+        # WebView2 缓存目录：%LOCALAPPDATA%\IPTVCore\EBWebView\ 或同级
+        appdata = os.environ.get('LOCALAPPDATA', '')
+        if not appdata:
+            return
+        cache_dir = os.path.join(appdata, 'IPTVCore')
+        if os.path.isdir(cache_dir):
+            for name in os.listdir(cache_dir):
+                full = os.path.join(cache_dir, name)
+                try:
+                    if os.path.isfile(full):
+                        os.remove(full)
+                    elif os.path.isdir(full):
+                        shutil.rmtree(full, ignore_errors=True)
+                except Exception:
+                    pass
+            print(f"[cache] 已清除 WebView2 缓存: {cache_dir}")
+    except Exception:
+        pass
+
+
 def _start_backend(port):
     global PORT
     PORT = port
@@ -1016,6 +1044,9 @@ def main():
         import ctypes
         ctypes.windll.user32.MessageBoxW(0, "后端服务启动失败，请查看是否有端口或权限问题。", "IPTV Core", 0x10)
         return 1
+
+    # 清除 WebView2 缓存，强制加载最新前端 build 文件
+    _clear_webview_cache()
 
     api = Api()
     window = webview.create_window(
