@@ -106,14 +106,20 @@
           </div>
           <div class="ctrl-row">
             <!-- 上一频道 / 下一频道 -->
-            <el-button size="small" text circle title="上一个频道" @click="prevChannel" :disabled="!hasChannelNav">
+            <el-button size="default" text circle title="上一个频道" @click="prevChannel" :disabled="!hasChannelNav">
               <el-icon><DArrowLeft /></el-icon>
             </el-button>
-            <el-button size="small" text circle title="下一个频道" @click="nextChannel" :disabled="!hasChannelNav">
+            <el-button size="default" text circle title="下一个频道" @click="nextChannel" :disabled="!hasChannelNav">
               <el-icon><DArrowRight /></el-icon>
             </el-button>
+            <el-button v-if="!embedded" size="default" text circle :title="isPaused ? '播放' : '暂停'" @click="togglePlay">
+              <el-icon><VideoPlay v-if="isPaused" /><VideoPause v-else /></el-icon>
+            </el-button>
+            <el-button v-if="!embedded" size="default" text circle title="停止播放" @click="stopPlay">
+              <el-icon><VideoCamera /></el-icon>
+            </el-button>
             <!-- 音量 -->
-            <el-button size="small" text circle :type="isMuted ? 'warning' : ''" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
+            <el-button size="default" text circle :type="isMuted ? 'warning' : ''" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
                 <path v-if="!isMuted" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
                 <path v-else d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 4v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L2 14h3l7-7-4-3z" />
@@ -124,7 +130,7 @@
                 v-model="volume"
                 :show-tooltip="false"
                 :max="100"
-                size="small"
+                size="default"
                 style="width:100px; flex-shrink: 0"
                 @input="onVolumeChange"
                 @change="onVolumeChange"
@@ -132,19 +138,19 @@
             </div>
             <span class="time-label">{{ timeText }}</span>
             <span class="player-title" :title="currentUrl">{{ currentName }}</span>
-            <el-tag v-if="currentUrlNote" size="small" type="info" effect="dark" class="player-note" :title="`源标签：${currentUrlNote}`">{{ currentUrlNote }}</el-tag>
+            <el-tag v-if="currentUrlNote" size="default" type="info" effect="dark" class="player-note" :title="`源标签：${currentUrlNote}`">{{ currentUrlNote }}</el-tag>
             <!-- R3: 收藏星标（tag=fav 读写，复用 channels API） -->
-            <el-button v-if="currentChannelId" size="small" text circle
+            <el-button v-if="currentChannelId" size="default" text circle
               :type="isFav ? 'warning' : ''"
               :title="isFav ? '取消收藏' : '收藏该频道'"
               @click="toggleFav">
               <el-icon><StarFilled v-if="isFav" /><Star v-else /></el-icon>
             </el-button>
-            <el-tag v-if="currentTag" size="small" type="warning" effect="dark" class="player-tag" :title="`标记：${currentTag}`">{{ currentTag }}</el-tag>
+            <el-tag v-if="currentTag" size="default" type="warning" effect="dark" class="player-tag" :title="`标记：${currentTag}`">{{ currentTag }}</el-tag>
             <!-- 播放引擎指示 + 切换（Phase 5 Track A） -->
             <el-tooltip :content="mpvActive ? '当前 mpv 原生解码，点击切回 WebView' : (mpvAvailable ? '当前 WebView 解码，点击切换到 mpv 原生' : 'mpv 未就位')" placement="top">
               <el-tag
-                size="small"
+                size="default"
                 :type="mpvActive ? 'success' : 'info'"
                 effect="dark"
                 class="engine-tag"
@@ -153,12 +159,12 @@
               >{{ mpvActive ? 'mpv' : 'Web' }}</el-tag>
             </el-tooltip>
             <!-- P5: 媒体信息按钮（6.3 信息浮层） -->
-            <el-button size="small" text circle title="媒体信息（分辨率/帧率/音频）" @click="toggleVideoInfo">
+            <el-button size="default" text circle title="媒体信息（分辨率/帧率/音频）" @click="toggleVideoInfo">
               <el-icon><InfoFilled /></el-icon>
             </el-button>
             <!-- P5: 音轨下拉（mpv 模式多音轨才显示） -->
-            <el-dropdown v-if="mpvActive && audioTracks.length > 1" size="small" trigger="click" @command="onPickAudioTrack">
-              <el-button size="small" text circle title="切换音轨">
+            <el-dropdown v-if="mpvActive && audioTracks.length > 1" size="default" trigger="click" @command="onPickAudioTrack">
+              <el-button size="default" text circle title="切换音轨">
                 <el-icon><Headset /></el-icon>
               </el-button>
               <template #dropdown>
@@ -171,8 +177,8 @@
               </template>
             </el-dropdown>
             <!-- P5: 字幕（mpv 模式：字幕轨切换 + 加载本地字幕） -->
-            <el-dropdown v-if="mpvActive && (subTracks.length > 1 || true)" size="small" trigger="click" @command="onPickSubCmd">
-              <el-button size="small" text circle title="字幕">
+            <el-dropdown v-if="mpvActive && (subTracks.length > 1 || true)" size="default" trigger="click" @command="onPickSubCmd">
+              <el-button size="default" text circle title="字幕">
                 <el-icon><DocumentAdd /></el-icon>
               </el-button>
               <template #dropdown>
@@ -187,8 +193,8 @@
               </template>
             </el-dropdown>
             <!-- P5: 清晰度（mpv 用 video 轨 / webview 用 hls.levels） -->
-            <el-dropdown v-if="qualityOptions.length > 1" size="small" trigger="click" @command="onPickQuality">
-              <el-button size="small" text circle title="清晰度">
+            <el-dropdown v-if="qualityOptions.length > 1" size="default" trigger="click" @command="onPickQuality">
+              <el-button size="default" text circle title="清晰度">
                 <el-icon><Monitor /></el-icon>
               </el-button>
               <template #dropdown>
@@ -202,8 +208,8 @@
             </el-dropdown>
             <div class="spacer"></div>
             <span class="speed-label">{{ playbackSpeedText }}</span>
-            <el-dropdown size="small" trigger="click" @command="onSpeedChange">
-              <el-button size="small" text>
+            <el-dropdown size="default" trigger="click" @command="onSpeedChange">
+              <el-button size="default" text>
                 <el-icon><CaretBottom /></el-icon>
               </el-button>
               <template #dropdown>
@@ -214,24 +220,24 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <el-button v-if="isNative()" size="small" text circle title="用外部播放器打开" @click="playExternal">
+            <el-button v-if="isNative()" size="default" text circle title="用外部播放器打开" @click="playExternal">
               <el-icon><VideoCamera /></el-icon>
             </el-button>
-            <el-button v-if="pipSupported" size="small" text circle :type="pipActive ? 'primary' : ''" title="画中画" @click="togglePiP">
+            <el-button v-if="pipSupported" size="default" text circle :type="pipActive ? 'primary' : ''" title="画中画" @click="togglePiP">
               <el-icon><Picture /></el-icon>
             </el-button>
-            <el-button v-if="currentSources.length > 1" size="small" text circle :title="`切换下一个源 (${sourceIndex + 1}/${currentSources.length})`" @click="cycleSource">
+            <el-button v-if="currentSources.length > 1" size="default" text circle :title="`切换下一个源 (${sourceIndex + 1}/${currentSources.length})`" @click="cycleSource">
               <el-icon><Refresh /></el-icon>
             </el-button>
-            <el-dropdown v-if="currentSources.length > 1" size="small" trigger="click" placement="top" @command="onPickSource">
-              <el-button size="small" text circle :type="isFakeLive ? 'warning' : ''" :title="`选择直播源 (${sourceIndex + 1}/${currentSources.length})`">
+            <el-dropdown v-if="currentSources.length > 1" size="default" trigger="click" placement="top" @command="onPickSource">
+              <el-button size="default" text circle :type="isFakeLive ? 'warning' : ''" :title="`选择直播源 (${sourceIndex + 1}/${currentSources.length})`">
                 <el-icon><Switch /></el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu class="source-picker-menu">
                   <div class="sp-menu-title">
                     选择直播源（共 {{ currentSources.length }} 个）
-                    <el-tag v-if="currentTag" size="small" type="warning" effect="dark" class="sp-menu-tag" :title="`标记：${currentTag}`">{{ currentTag }}</el-tag>
+                    <el-tag v-if="currentTag" size="default" type="warning" effect="dark" class="sp-menu-tag" :title="`标记：${currentTag}`">{{ currentTag }}</el-tag>
                   </div>
                   <el-dropdown-item
                     v-for="(s, i) in currentSources"
@@ -241,35 +247,27 @@
                   >
                     <span class="sp-idx">{{ i + 1 }}</span>
                     <span class="sp-url" :title="s">{{ shortUrl(s) }}</span>
-                    <el-tag v-if="currentIsFakeLiveMarked" size="small" type="danger" effect="dark" class="sp-fake-tag">假直播</el-tag>
-                    <el-tag v-if="groupLabelOf(s)" size="small" type="info" effect="plain" class="sp-group">{{ groupLabelOf(s) }}</el-tag>
+                    <el-tag v-if="currentIsFakeLiveMarked" size="default" type="danger" effect="dark" class="sp-fake-tag">假直播</el-tag>
+                    <el-tag v-if="groupLabelOf(s)" size="default" type="info" effect="plain" class="sp-group">{{ groupLabelOf(s) }}</el-tag>
                     <el-icon v-if="i === sourceIndex" class="sp-check"><Check /></el-icon>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <el-button v-if="!embedded" size="small" text circle :title="isPaused ? '播放' : '暂停'" @click="togglePlay">
-              <el-icon><VideoPlay v-if="isPaused" /><VideoPause v-else /></el-icon>
-            </el-button>
-            <el-button v-if="!embedded" size="small" text circle title="停止播放" @click="stopPlay">
-              <el-icon><VideoCamera /></el-icon>
-            </el-button>
-            <el-button size="small" text circle title="全屏" @click="toggleFullscreen">
+            <el-button size="default" text circle title="全屏" @click="toggleFullscreen">
               <el-icon><FullScreen /></el-icon>
             </el-button>
-            <el-button v-if="!embedded" size="small" text circle :type="miniMode ? 'primary' : ''" :title="miniMode ? '退出迷你模式' : '迷你模式'" @click="toggleMiniMode">
-              <el-icon><Minimize /></el-icon>
-            </el-button>
-            <el-button v-if="!embedded" size="small" text circle :type="maximized ? 'primary' : ''" :title="maximized ? '还原窗口' : '最大化窗口'" @click="toggleMaximize">
-              <el-icon><FullScreen /></el-icon>
-            </el-button>
-            <el-button v-if="!embedded" size="small" text circle title="最小化窗口" @click="minimizeWindow">
-              <el-icon><Minus /></el-icon>
-            </el-button>
-            <el-button v-if="!embedded" size="small" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
+            <span class="spacer"></span>
+            <el-button v-if="!embedded" size="default" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
               <el-icon><Top /></el-icon>
             </el-button>
-            <el-button size="small" text circle type="danger" title="关闭窗口" @click="closePlayer">
+            <el-button v-if="!embedded" size="default" text circle :type="miniMode ? 'primary' : ''" :title="miniMode ? '退出迷你模式' : '迷你模式'" @click="toggleMiniMode">
+              <el-icon><Minimize /></el-icon>
+            </el-button>
+            <el-button v-if="!embedded" size="default" text circle title="最小化窗口" @click="minimizeWindow">
+              <el-icon><Minus /></el-icon>
+            </el-button>
+            <el-button size="default" text circle type="danger" title="关闭窗口" @click="closePlayer">
               <el-icon><Close /></el-icon>
             </el-button>
           </div>
@@ -376,7 +374,8 @@ function onGlobalResizeMove(e) {
   const dx = e.clientX - resizeState.startX
   const dy = e.clientY - resizeState.startY
   // 左角（0=tl, 3=bl）拖右→收窄（-dx）；右角（1=tr, 2=br）拖右→变宽（+dx）
-  const newW = Math.max(320, resizeState.startW + (resizeState.corner % 2 === 0 ? -dx : dx))
+  const isLeft = resizeState.corner === 0 || resizeState.corner === 3
+  const newW = Math.max(320, resizeState.startW + (isLeft ? -dx : dx))
   const newH = Math.max(200, resizeState.startH + (resizeState.corner < 2 ? -dy : dy))
   callNative('resize_window', newW, newH, resizeState.corner).catch(() => {})
 }
@@ -397,16 +396,7 @@ function toggleMiniMode() {
   miniMode.value = !miniMode.value
 }
 
-// 窗口最大化 / 最小化 / 停止播放
-const maximized = ref(false)
-function toggleMaximize() {
-  if (maximized.value) {
-    callNative('restore').catch(() => {})
-  } else {
-    callNative('maximize').catch(() => {})
-  }
-  maximized.value = !maximized.value
-}
+// 窗口最小化 / 停止播放
 function minimizeWindow() {
   callNative('minimize').catch(() => {})
 }
@@ -2423,7 +2413,7 @@ async function mpvQuitSafe() {
 </script>
 
 <style scoped>
-.player-page { height: 100%; background: #000; }
+.player-page { height: 100%; background: #000; border: 0 !important; margin: 0; padding: 0; }
 
 .player-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -2448,16 +2438,14 @@ async function mpvQuitSafe() {
 
 /* 四角缩放手柄（无外框模式）：四角小圆点，悬停时变亮 */
 .resize-handle {
-  position: absolute; width: 18px; height: 18px; z-index: 50;
-  opacity: 0.3; transition: opacity .15s, background .15s;
+  position: absolute; width: 20px; height: 20px; z-index: 50;
+  opacity: 0; transition: none;
   pointer-events: auto; border-radius: 4px;
 }
-.player-container:hover .resize-handle { opacity: 0.7; }
-.resize-tl { top: -2px; left: -2px; cursor: nw-resize; background: rgba(255,255,255,0.3); }
-.resize-tr { top: -2px; right: -2px; cursor: ne-resize; background: rgba(255,255,255,0.3); }
-.resize-br { bottom: -2px; right: -2px; cursor: se-resize; background: rgba(255,255,255,0.3); }
-.resize-bl { bottom: -2px; left: -2px; cursor: sw-resize; background: rgba(255,255,255,0.3); }
-.resize-handle:hover { opacity: 1; background: rgba(255,255,255,0.6); }
+.resize-tl { top: -4px; left: -4px; cursor: nw-resize; background: transparent; }
+.resize-tr { top: -4px; right: -4px; cursor: ne-resize; background: transparent; }
+.resize-br { bottom: -4px; right: -4px; cursor: se-resize; background: transparent; }
+.resize-bl { bottom: -4px; left: -4px; cursor: sw-resize; background: transparent; }
 
 
 .player-video-wrap {
@@ -2498,8 +2486,9 @@ async function mpvQuitSafe() {
 .progress-wrap :deep(.el-slider__runway) { background-color: rgba(255,255,255,0.2); height: 3px; }
 .progress-wrap :deep(.el-slider__bar) { background-color: var(--el-color-primary); height: 3px; }
 .progress-wrap :deep(.el-slider__button) { width: 10px; height: 10px; border: 2px solid #fff; }
-.ctrl-row { display: flex; align-items: center; gap: 8px; width: 100%; color: #fff; }
-.ctrl-row :deep(.el-button) { color: #fff; }
+.ctrl-row { display: flex; align-items: center; gap: 12px; width: 100%; color: #fff; padding: 0 6px; }
+.ctrl-row :deep(.el-button) { color: #fff; min-width: 36px; height: 36px; padding: 8px; }
+.ctrl-row :deep(.el-button) .el-icon { font-size: 18px; }
 .ctrl-row :deep(.el-button:hover) { color: var(--el-color-primary); }
 .time-label { font-size: 12px; color: #ccc; font-family: 'Consolas', monospace; }
 .speed-label { font-size: 12px; color: #ccc; }
