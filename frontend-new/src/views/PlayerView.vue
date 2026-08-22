@@ -105,10 +105,6 @@
             />
           </div>
           <div class="ctrl-row">
-            <!-- 播放/暂停 -->
-            <el-button size="small" text circle :title="isPaused ? '播放' : '暂停'" @click="togglePlay">
-              <el-icon><VideoPlay v-if="isPaused" /><VideoPause v-else /></el-icon>
-            </el-button>
             <!-- 上一频道 / 下一频道 -->
             <el-button size="small" text circle title="上一个频道" @click="prevChannel" :disabled="!hasChannelNav">
               <el-icon><DArrowLeft /></el-icon>
@@ -116,18 +112,9 @@
             <el-button size="small" text circle title="下一个频道" @click="nextChannel" :disabled="!hasChannelNav">
               <el-icon><DArrowRight /></el-icon>
             </el-button>
-            <!-- 音量（喇叭图标：未静音=喇叭+声波，静音=喇叭+X） -->
+            <!-- 音量（喇叭图标） -->
             <el-button size="small" text circle :type="isMuted ? 'warning' : ''" :title="isMuted ? '取消静音' : '静音'" @click="toggleMute">
-              <svg v-if="!isMuted" viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" stroke="none"></polygon>
-                <line x1="23" y1="9" x2="17" y2="15"></line>
-                <line x1="17" y1="9" x2="23" y2="15"></line>
-              </svg>
+              <el-icon><Volume v-if="!isMuted" /><Mute v-else /></el-icon>
             </el-button>
             <el-slider
               v-model="volume"
@@ -136,6 +123,7 @@
               size="small"
               style="width:90px; flex-shrink: 0"
               @input="onVolumeChange"
+              @change="onVolumeChange"
             />
             <span class="time-label">{{ timeText }}</span>
             <span class="player-title" :title="currentUrl">{{ currentName }}</span>
@@ -255,11 +243,23 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
+            <el-button v-if="!embedded" size="small" text circle :title="isPaused ? '播放' : '暂停'" @click="togglePlay">
+              <el-icon><VideoPlay v-if="isPaused" /><VideoPause v-else /></el-icon>
+            </el-button>
+            <el-button v-if="!embedded" size="small" text circle title="停止播放" @click="stopPlay">
+              <el-icon><VideoCamera /></el-icon>
+            </el-button>
             <el-button size="small" text circle title="全屏" @click="toggleFullscreen">
               <el-icon><FullScreen /></el-icon>
             </el-button>
             <el-button v-if="!embedded" size="small" text circle :type="miniMode ? 'primary' : ''" :title="miniMode ? '退出迷你模式' : '迷你模式'" @click="toggleMiniMode">
               <el-icon><Minimize /></el-icon>
+            </el-button>
+            <el-button v-if="!embedded" size="small" text circle :type="maximized ? 'primary' : ''" :title="maximized ? '还原窗口' : '最大化窗口'" @click="toggleMaximize">
+              <el-icon><FullScreen /></el-icon>
+            </el-button>
+            <el-button v-if="!embedded" size="small" text circle title="最小化窗口" @click="minimizeWindow">
+              <el-icon><Minus /></el-icon>
             </el-button>
             <el-button v-if="!embedded" size="small" text circle :type="topmost ? 'primary' : ''" :title="topmost ? '取消窗口置顶' : '窗口置顶'" @click="toggleTopmost">
               <el-icon><Top /></el-icon>
@@ -388,6 +388,28 @@ function toggleMiniMode() {
     callNative('resize_window', 320, 200, 2).catch(() => {})
   }
   miniMode.value = !miniMode.value
+}
+
+// 窗口最大化 / 最小化 / 停止播放
+const maximized = ref(false)
+function toggleMaximize() {
+  if (maximized.value) {
+    callNative('restore').catch(() => {})
+  } else {
+    callNative('maximize').catch(() => {})
+  }
+  maximized.value = !maximized.value
+}
+function minimizeWindow() {
+  callNative('minimize').catch(() => {})
+}
+async function stopPlay() {
+  // 停止所有播放引擎并清空当前频道
+  await forceStopAll()
+  currentUrl.value = ''
+  currentName.value = ''
+  isPaused.value = false
+  loading.value = false
 }
 // Phase 5：mpv 窗口跟随播放面板（拖动/缩放时重定位覆盖视频区）
 const mpvFollowPlayer = ref(true)
@@ -1384,8 +1406,8 @@ async function setupHls() {
         hasVideo: true,
         enableWorker: true,
         // 对齐 IPTVnator：禁用 stash + 低初始缓冲，首帧更快
-        enableStashBuffer: false,
-        stashInitialSize: 128 * 1024,
+        enableStashBuffer: true,
+        stashInitialSize: 64 * 1024,
         lazyLoad: false,
         deferLoadAfterSourceOpen: false,
         autoCleanupSourceBuffer: true,
@@ -1447,8 +1469,8 @@ async function setupHls() {
       hasVideo: true,
       enableWorker: true,
       // 对齐 IPTVnator(mpegts.js)：禁用 stash 缓冲 + 快速呈现首帧，避免慢源缓冲滞后
-      enableStashBuffer: false,
-      stashInitialSize: 128 * 1024,
+      enableStashBuffer: true,
+      stashInitialSize: 64 * 1024,
       lazyLoad: false,
       deferLoadAfterSourceOpen: false,
       autoCleanupSourceBuffer: true,
@@ -1722,8 +1744,8 @@ function playH264Proxy(url, src, sid, looksLikeLive) {
   const flv = flvjs.createPlayer(
     { type: 'flv', isLive: !!looksLikeLive, url: proxyUrl },
     {
-      enableStashBuffer: false,
-      stashInitialSize: 128 * 1024,
+      enableStashBuffer: true,
+      stashInitialSize: 64 * 1024,
       lazyLoad: false,
       deferLoadAfterSourceOpen: false,
       autoCleanupSourceBuffer: true,
@@ -2378,7 +2400,7 @@ async function mpvQuitSafe() {
   height: 100%; gap: 16px; color: var(--el-text-color-secondary);
 }
 
-.player-container { height: 100%; display: flex; flex-direction: column; }
+.player-container { height: 100%; display: flex; flex-direction: column; position: relative; }
 
 /* 无外框模式：窗口拖拽条——细窄、悬停显示、拖动时高亮 */
 .player-drag-bar {
@@ -2393,18 +2415,18 @@ async function mpvQuitSafe() {
 .player-drag-bar:active { cursor: grabbing; }
 .drag-hint { font-size: 11px; color: rgba(255,255,255,0.25); letter-spacing: 2px; }
 
-/* 四角缩放手柄（无外框模式）：鼠标靠近时显示浅色三角形提示 */
+/* 四角缩放手柄（无外框模式）：四角小圆点，悬停时变亮 */
 .resize-handle {
-  position: absolute; width: 14px; height: 14px; z-index: 50;
-  opacity: 0; transition: opacity .15s, background .15s;
-  pointer-events: auto;
+  position: absolute; width: 18px; height: 18px; z-index: 50;
+  opacity: 0.3; transition: opacity .15s, background .15s;
+  pointer-events: auto; border-radius: 4px;
 }
-.player-container:hover .resize-handle { opacity: 0.6; }
-.resize-tl { top: 0; left: 0; cursor: nw-resize; border-top-left-radius: 4px; background: rgba(255,255,255,0.15); }
-.resize-tr { top: 0; right: 0; cursor: ne-resize; border-top-right-radius: 4px; background: rgba(255,255,255,0.15); }
-.resize-br { bottom: 0; right: 0; cursor: se-resize; border-bottom-right-radius: 4px; background: rgba(255,255,255,0.15); }
-.resize-bl { bottom: 0; left: 0; cursor: sw-resize; border-bottom-left-radius: 4px; background: rgba(255,255,255,0.15); }
-.resize-handle:hover { opacity: 1; background: rgba(255,255,255,0.35); }
+.player-container:hover .resize-handle { opacity: 0.7; }
+.resize-tl { top: -2px; left: -2px; cursor: nw-resize; background: rgba(255,255,255,0.3); }
+.resize-tr { top: -2px; right: -2px; cursor: ne-resize; background: rgba(255,255,255,0.3); }
+.resize-br { bottom: -2px; right: -2px; cursor: se-resize; background: rgba(255,255,255,0.3); }
+.resize-bl { bottom: -2px; left: -2px; cursor: sw-resize; background: rgba(255,255,255,0.3); }
+.resize-handle:hover { opacity: 1; background: rgba(255,255,255,0.6); }
 
 
 .player-video-wrap {
