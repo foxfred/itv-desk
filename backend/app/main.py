@@ -430,17 +430,19 @@ if _FRONTEND_DIST:
 
     _index_mtime = os.path.getmtime(os.path.join(_FRONTEND_DIST, "index.html"))
 
-    @app.get("/", include_in_schema=False)
-    def serve_index():
-        # 关键：给 index.html 里的所有资源 URL 注入 ?_v=<mtime> 查询参数。
-        # WebView2 无视 Cache-Control: no-store，有自己的磁盘缓存层（不校验）。
-        # 通过让 URL 每次变，强制 WebView2 重新请求——这是唯一可靠的绕过方式。
-        import time as _t
-        _v = int(_t.time())
+    def _serve_index_html():
+        """返回带唯一查询参数的 index.html（供 / 和 /player.html 复用）。
+
+        关键：查询参数用 UUID 而非时间戳，保证每次请求 URL 绝对不同。
+        WebView2 有自己的磁盘缓存层，无视 Cache-Control。只有 URL 变了
+        才会强制重新请求。加 Vary: * 防止任何中间层（代理/CDN）做缓存。
+        """
+        import uuid as _uuid
+        import re as _re
+        _v = _uuid.uuid4().hex[:12]
         html_path = os.path.join(_FRONTEND_DIST, "index.html")
         with open(html_path, "r", encoding="utf-8") as f:
             content = f.read()
-        import re as _re
         content = _re.sub(
             r'(src|href)="(/assets/[^"]+)"',
             rf'\1="\2?_v={_v}"',
@@ -458,37 +460,19 @@ if _FRONTEND_DIST:
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Pragma": "no-cache",
                 "Expires": "0",
+                "Vary": "*",
             },
         )
 
+    @app.get("/", include_in_schema=False)
+    def serve_index():
+        log(f"[serve_index] 返回 index.html, _FRONTEND_DIST={_FRONTEND_DIST}")
+        return _serve_index_html()
+
     @app.get("/player.html", include_in_schema=False)
     def serve_player():
-        # Vite SPA 只有一个 index.html，player 由 Vue Router 的 hash 路由处理
-        import time as _t
-        _v = int(_t.time())
-        html_path = os.path.join(_FRONTEND_DIST, "index.html")
-        with open(html_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        import re as _re
-        content = _re.sub(
-            r'(src|href)="(/assets/[^"]+)"',
-            rf'\1="\2?_v={_v}"',
-            content,
-        )
-        content = _re.sub(
-            r'(src|href)="(/themes/[^"]+)"',
-            rf'\1="\2?_v={_v}"',
-            content,
-        )
-        return Response(
-            content=content,
-            media_type="text/html",
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
-        )
+        log(f"[serve_player] 返回 index.html (player)")
+        return _serve_index_html()
 
     @app.get("/favicon.ico", include_in_schema=False)
     def serve_favicon():
