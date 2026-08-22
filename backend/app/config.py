@@ -433,3 +433,14 @@ class Config:
         """从 settings.json 读取单个配置项，失败返回 default"""
         settings = Config.load_settings()
         return settings.get(key, default)
+
+    @staticmethod
+    def get_data_dir():
+        """获取运行期数据目录（EXE 所在目录，或开发态仓库根目录）。
+        所有运行时文件（settings.json、channels.db、channels_cache.json 等）
+        都落在此目录下。"""
+        try:
+            from app.main import DATA_DIR
+            return DATA_DIR
+        except ImportError:
+            return os.getcwd()

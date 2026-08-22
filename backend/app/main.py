@@ -12,6 +12,8 @@ import json
 import threading
 
 # ==================== 路径自适应（开发 / PyInstaller 打包） ====================
+# 注意：如需将 EXE 搬到其他目录，必须把**整个包（EXE + _internal/ 目录）一起复制**，
+# 不能只复制 EXE。
 if getattr(sys, 'frozen', False):
     RES_DIR = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     DATA_DIR = os.path.dirname(os.path.abspath(sys.executable))
@@ -23,6 +25,8 @@ else:
 for p in (RES_DIR, DATA_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
+# 切换工作目录到 DATA_DIR，保证所有相对路径文件读写（settings.json、channels.db 等）
+# 落在 EXE 同级目录下，而非 CWD 所在的任何位置。
 os.chdir(DATA_DIR)
 
 from fastapi import FastAPI, Query
