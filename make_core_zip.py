@@ -9,7 +9,7 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.join(ROOT, "dist", "IPTVCore_Folder", "IPTVCore")
-DST = os.path.join(ROOT, "release", "itv-desk_1.0.12_core.zip")
+DST = os.path.join(ROOT, "release", "itv-desk_1.0.13_core.zip")
 
 EXCLUDE_DIRS = {"logos", "update_staging", "scraping_cache", "__pycache__", "mpv"}
 EXCLUDE_EXTS = {".pyc", ".pyo"}

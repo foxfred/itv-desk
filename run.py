@@ -906,7 +906,7 @@ def _create_player_window(api, player_api, url):
     try:
         player_window = webview.create_window(
             "IPTV 播放器",
-            url + "#/player?standalone=1&_v=" + _uuid_mod.uuid4().hex,  # UUID 防 WebView2 页面级缓存
+            url + "?_v=" + _uuid_mod.uuid4().hex + "#/player?standalone=1",  # UUID 必须在 # 前面才参与 HTTP 请求
             width=1100,
             height=680,
             min_size=(420, 260),
