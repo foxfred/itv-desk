@@ -428,22 +428,67 @@ for cand in (
 if _FRONTEND_DIST:
     from fastapi.staticfiles import StaticFiles
 
+    _index_mtime = os.path.getmtime(os.path.join(_FRONTEND_DIST, "index.html"))
+
     @app.get("/", include_in_schema=False)
     def serve_index():
-        r = FileResponse(os.path.join(_FRONTEND_DIST, "index.html"))
-        r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        r.headers["Pragma"] = "no-cache"
-        r.headers["Expires"] = "0"
-        return r
+        # 关键：给 index.html 里的所有资源 URL 注入 ?_v=<mtime> 查询参数。
+        # WebView2 无视 Cache-Control: no-store，有自己的磁盘缓存层（不校验）。
+        # 通过让 URL 每次变，强制 WebView2 重新请求——这是唯一可靠的绕过方式。
+        import time as _t
+        _v = int(_t.time())
+        html_path = os.path.join(_FRONTEND_DIST, "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        import re as _re
+        content = _re.sub(
+            r'(src|href)="(/assets/[^"]+)"',
+            rf'\1="\2?_v={_v}"',
+            content,
+        )
+        content = _re.sub(
+            r'(src|href)="(/themes/[^"]+)"',
+            rf'\1="\2?_v={_v}"',
+            content,
+        )
+        return Response(
+            content=content,
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
 
     @app.get("/player.html", include_in_schema=False)
     def serve_player():
         # Vite SPA 只有一个 index.html，player 由 Vue Router 的 hash 路由处理
-        r = FileResponse(os.path.join(_FRONTEND_DIST, "index.html"))
-        r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        r.headers["Pragma"] = "no-cache"
-        r.headers["Expires"] = "0"
-        return r
+        import time as _t
+        _v = int(_t.time())
+        html_path = os.path.join(_FRONTEND_DIST, "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        import re as _re
+        content = _re.sub(
+            r'(src|href)="(/assets/[^"]+)"',
+            rf'\1="\2?_v={_v}"',
+            content,
+        )
+        content = _re.sub(
+            r'(src|href)="(/themes/[^"]+)"',
+            rf'\1="\2?_v={_v}"',
+            content,
+        )
+        return Response(
+            content=content,
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
 
     @app.get("/favicon.ico", include_in_schema=False)
     def serve_favicon():
