@@ -1,12 +1,12 @@
 {
-  "version": "1.0.10",
-  "notes": "iTV Desk v1.0.10：六项播放器优化——①flv.js 启用 stash 缓冲修复音画不同步；②音量图标改为标准 Volume/Mute 图标；③音量滑块新增 @change 事件支持拖动；④右侧新增播放/暂停、停止播放按钮；⑤右侧新增最大化/还原、最小化按钮；⑥修复四角缩放手柄定位问题（.player-container 加 position:relative），手柄加大并半透明常显。",
+  "version": "1.0.11",
+  "notes": "iTV Desk v1.0.11：缩放宽度公式修复（左下角拖拽正确）；音量图标改用稳定内联 SVG 兼容 WebView2；音量滑块新增鼠标级拖拽处理器（mousedown+mousemove）；播放/暂停、停止、最大化/还原、最小化按钮全部就位。",
   "packages": [
     {
-      "name": "itv-desk_1.0.10_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.10_core.zip",
-      "sha256": "930a98d4c4c84a196632867380c0cc4690665117774bc71cc6d294b3189c5487",
-      "size": 44056928,
+      "name": "itv-desk_1.0.11_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.11_core.zip",
+      "sha256": "b402a144bbbd0a90ebf716cfc319b15d52a8eacbef447ff5db05ec4d8a9c18bb",
+      "size": 44058094,
       "role": "main"
     },
     {
