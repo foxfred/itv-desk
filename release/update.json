@@ -1,12 +1,12 @@
 {
-  "version": "1.0.14",
-  "notes": "iTV Desk v1.0.14：播放器 UI 优化——取消外框（缩放手柄完全隐藏）；修复缩放公式（左角判定 corner===0||corner===3，之前 corner%2===0 把右下角误判为左角）；暂停/停止按钮移到左侧；取消最大化按钮（与全屏冲突）；右侧按钮重排：置顶→迷你→最小化→全屏→关闭；所有控件放大（按钮 24px→36px，图标 14px→18px）。",
+  "version": "1.0.15",
+  "notes": "iTV Desk v1.0.15：5 项修复——(1) 音量滑块拖动失效：@mousedown 加 .stop.prevent 阻止事件冒泡到窗口拖拽层；(2) 按钮背景变白：:deep(.el-button) 强制 background:transparent !important；(3) 右侧按钮重排：spacer 改为 margin-left:auto 放在置顶按钮上，左右两组按钮分离；(4) 媒体信息弹窗增强：背景更暗(0.97)、字体 13px、间距加大、位置更高(bottom 80px)；(5) 窗口边框：pywebview 5.4.1 frameless=True 只去标题栏，新增 _strip_window_border() 用 Win32 SetWindowLong 去掉 WS_CAPTION|WS_THICKFRAME。",
   "packages": [
     {
-      "name": "itv-desk_1.0.14_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.14_core.zip",
-      "sha256": "e9213c3c2f5268e1346927bc6d777b9137fe17b634b09694226796bdb580a26a",
-      "size": 44056925,
+      "name": "itv-desk_1.0.15_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.15_core.zip",
+      "sha256": "6eb7f7643ce26102385987f1dc97a668cf89dd067dd1c3645610fcd12db799f6",
+      "size": 44060074,
       "role": "main"
     },
     {
