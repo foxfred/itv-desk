@@ -941,27 +941,29 @@ def _free_port():
 
 def _clear_webview_cache():
     """清除 WebView2 缓存，强制加载最新前端 build 文件。
-    
-    WebView2 会缓存 index.html 和 JS 文件，导致前端 build 更新后
-    EXE/run.py 仍显示旧界面。删除 WebView2 缓存目录即可强制刷新。
+
+    pywebview 每次启动在 %TEMP% 下创建 tmp*.tmp 临时目录，
+    里面会建 EBWebView 子目录存放 WebView2 缓存。前端 build 更新后，
+    旧的 index.html / JS 仍被 WebView2 缓存，导致显示旧界面。
+    需要扫描 %TEMP% 下所有 tmp*.tmp 目录，删除其 EBWebView 子目录。
     """
     try:
-        # WebView2 缓存目录：%LOCALAPPDATA%\IPTVCore\EBWebView\ 或同级
-        appdata = os.environ.get('LOCALAPPDATA', '')
-        if not appdata:
+        tmp_dir = os.environ.get('TEMP') or os.environ.get('TMP') or tempfile.gettempdir()
+        if not tmp_dir or not os.path.isdir(tmp_dir):
             return
-        cache_dir = os.path.join(appdata, 'IPTVCore')
-        if os.path.isdir(cache_dir):
-            for name in os.listdir(cache_dir):
-                full = os.path.join(cache_dir, name)
-                try:
-                    if os.path.isfile(full):
-                        os.remove(full)
-                    elif os.path.isdir(full):
-                        shutil.rmtree(full, ignore_errors=True)
-                except Exception:
-                    pass
-            print(f"[cache] 已清除 WebView2 缓存: {cache_dir}")
+        cleaned = 0
+        for name in os.listdir(tmp_dir):
+            if not name.startswith('tmp'):
+                continue
+            candidate = os.path.join(tmp_dir, name)
+            if not os.path.isdir(candidate):
+                continue
+            eb = os.path.join(candidate, 'EBWebView')
+            if os.path.isdir(eb):
+                shutil.rmtree(eb, ignore_errors=True)
+                cleaned += 1
+        if cleaned:
+            print(f"[cache] 已清除 {cleaned} 个 WebView2 缓存目录 (根: {tmp_dir})")
     except Exception:
         pass
 
