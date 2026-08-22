@@ -1,12 +1,12 @@
 {
-  "version": "1.0.8",
-  "notes": "iTV Desk v1.0.8：播放器窗口去掉顶部标题栏改为无外框显示，顶部新增细窄拖拽条（悬停显示），拖动可移动整个窗口。",
+  "version": "1.0.9",
+  "notes": "iTV Desk v1.0.9：播放窗口四角拖拽缩放（悬停显示缩放手柄）；修复顶部拖拽条 mousemove 抢占音量滑块问题；新增迷你模式按钮（Minimize），一键切换 320×200 小窗 / 1100×680 标准窗。",
   "packages": [
     {
-      "name": "itv-desk_1.0.8_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.8_core.zip",
-      "sha256": "ce02fa8eb02ede9f704021d116ffe75293cb553d9fbe6faf4f8cfe91d142b920",
-      "size": 44056900,
+      "name": "itv-desk_1.0.9_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.9_core.zip",
+      "sha256": "45418364db6cbfb8acb05a3f76d9efcc52ca0ba42c298473f25b63e0d4ac277b",
+      "size": 44057334,
       "role": "main"
     },
     {
