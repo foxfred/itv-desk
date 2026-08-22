@@ -1,12 +1,12 @@
 {
-  "version": "1.0.12",
-  "notes": "iTV Desk v1.0.12：播放窗口 WebView2 页面级缓存修复——播放窗口 URL 追加 UUID，每次打开强制重新加载前端，彻底解决旧前端反复回滚问题。同时确认 v1.0.11 六项播放器优化全部生效：flv.js 音画同步、音量图标、音量拖动、播放/暂停/停止按钮、最大化/还原/最小化按钮、四角缩放公式修正。",
+  "version": "1.0.13",
+  "notes": "iTV Desk v1.0.13：播放窗口 WebView2 页面级缓存彻底修复——UUID 从 # 后面挪到 # 前面（?_v=<UUID>#/player），确保 UUID 参与 HTTP 请求，WebView2 缓存键每次不同，强制重新加载前端。v1.0.12 的 UUID 写在 hash 片段里（#/player?_v=），不参与 HTTP 请求，导致缓存键永远是 http://127.0.0.1:8000/，每次都命中旧缓存。",
   "packages": [
     {
-      "name": "itv-desk_1.0.12_core.zip",
-      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.12_core.zip",
-      "sha256": "2aa18d5c86ccf0f7afb7d2f023035ddfd651fe36071a1c2983723bb5dff59408",
-      "size": 44058223,
+      "name": "itv-desk_1.0.13_core.zip",
+      "url": "https://github.com/foxfred/itv-desk/raw/master/release/itv-desk_1.0.13_core.zip",
+      "sha256": "194eec031b8b3900fb4990b597fd44afe988c0dcc18ad0c8658318044fff33f1",
+      "size": 44057938,
       "role": "main"
     },
     {
