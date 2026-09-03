@@ -20,7 +20,12 @@ const METHODS = [
   'pop_pending',       // 取待播频道（轮询换台）
   'notify_main',       // 播放状态上报主窗（window.__updatePlaying）
   'set_topmost',       // 置顶
+  'is_topmost',        // 查询是否置顶
   'minimize',          // 最小化播放窗
+  // 自绘顶栏窗口控制（主窗 TitleBar.vue）
+  'maximize_window',   // 最大化/还原切换
+  'is_maximized',      // 查询是否最大化
+  'close_window',      // 关闭窗口
   'move_window',       // 无边框拖拽移动
   'resize_window',     // 无边框四角缩放
   'hide_window',       // 画中画时隐藏播放窗

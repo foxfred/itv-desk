@@ -149,6 +149,11 @@ function registerIpcHandlers(ctx) {
       return 'OK';
     },
 
+    is_topmost(_args, event) {
+      const win = senderWindow(event);
+      return !!(win && win.isAlwaysOnTop());
+    },
+
     toggle_fullscreen(_args, event) {
       const win = senderWindow(event);
       if (win) win.setFullScreen(!win.isFullScreen());
@@ -158,6 +163,27 @@ function registerIpcHandlers(ctx) {
     minimize(_args, event) {
       const win = senderWindow(event);
       if (win) win.minimize();
+      return 'OK';
+    },
+
+    // ---------- 自绘顶栏窗口控制（主窗 TitleBar.vue 调用） ----------
+    // 最大化/还原切换：返回切换后是否处于最大化，供前端更新图标
+    maximize_window(_args, event) {
+      const win = senderWindow(event);
+      if (!win) return false;
+      if (win.isMaximized()) { win.unmaximize(); return false; }
+      win.maximize(); return true;
+    },
+
+    is_maximized(_args, event) {
+      const win = senderWindow(event);
+      return !!(win && win.isMaximized());
+    },
+
+    // 关闭窗口（主窗关闭 → window-all-closed → app.quit，杀后端）
+    close_window(_args, event) {
+      const win = senderWindow(event);
+      if (win) win.close();
       return 'OK';
     },
 

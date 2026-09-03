@@ -4,7 +4,10 @@
   <router-view v-if="isStandalonePlayer" />
 
   <!-- 双窗口（Phase 1）：主窗口 = 纯频道库/管理（永远满尺寸）；播放窗为独立 pywebview 窗口 -->
-  <el-container v-else class="app-layout">
+  <div v-else class="app-shell">
+    <!-- 自绘顶栏（frameless 主窗）：图标+ITV Desk+虚线+中文菜单+窗口按钮，背景跟随皮肤 -->
+    <TitleBar />
+    <el-container class="app-layout">
     <!-- 侧边栏 -->
     <el-aside :width="sidebarCollapsed ? '64px' : '220px'" class="app-aside">
       <div class="logo">
@@ -121,6 +124,7 @@
       </el-footer>
     </el-container>
   </el-container>
+  </div>
 </template>
 
 <script setup>
@@ -132,6 +136,7 @@ import {
 } from '@/composables/useTheme'
 import { usePlayerStore } from '@/stores/player'
 import { callNative } from '@/composables/useNative'
+import TitleBar from '@/components/TitleBar.vue'
 
 const route = useRoute()
 const sidebarCollapsed = ref(true)
@@ -172,8 +177,16 @@ html, body, #app {
   font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-.app-layout {
+.app-shell {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-layout {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }

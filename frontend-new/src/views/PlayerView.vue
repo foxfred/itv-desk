@@ -114,11 +114,26 @@
         </button>
         <!-- 停止 -->
         <button class="ico-btn" @click="stopPlay" title="停止播放">
-          <el-icon :size="14"><VideoPause /></el-icon>
+          <el-icon :size="14">
+            <svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx="1" fill="currentColor" /></svg>
+          </el-icon>
         </button>
         <!-- 静音切换 -->
         <button class="ico-btn" :class="{ on: isMuted }" @click="toggleMute" :title="isMuted ? '取消静音' : '静音'">
-          <el-icon :size="14"><MuteNotification v-if="isMuted" /><Notification v-else /></el-icon>
+          <el-icon :size="14">
+            <!-- 静音：喇叭+叉 -->
+            <svg v-if="isMuted" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+              <path d="M2 6v4h3l4 3V3L5 6H2z" fill="currentColor" stroke="none" />
+              <line x1="11.5" y1="6.5" x2="15.5" y2="10.5" />
+              <line x1="15.5" y1="6.5" x2="11.5" y2="10.5" />
+            </svg>
+            <!-- 有声：喇叭+声波 -->
+            <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+              <path d="M2 6v4h3l4 3V3L5 6H2z" fill="currentColor" stroke="none" />
+              <path d="M11.5 5.8c1.1 1.2 1.1 3.2 0 4.4" />
+              <path d="M13.4 3.8c1.9 2.1 1.9 6.3 0 8.4" />
+            </svg>
+          </el-icon>
         </button>
         <!-- 音量滑条 -->
         <div class="volume-slider-wrap" ref="volumeSliderWrap" @mousedown.stop.prevent="onVolumeSliderMouseDown">

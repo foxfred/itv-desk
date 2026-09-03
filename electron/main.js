@@ -140,21 +140,26 @@ function waitBackend(timeoutMs = 60000) {
 
 // ==================== 窗口 ====================
 
+// 自绘顶栏方案：主窗 frame:false + 移除原生菜单，整条顶栏（图标+ITV Desk+虚线+中文菜单+窗口按钮）
+// 由前端 TitleBar.vue 绘制，背景用 Element CSS 变量自动跟随皮肤。
+// 原生英文菜单栏彻底移除（用户要求：去丑标题栏 + 菜单汉化 + 背景统一皮肤，原生菜单三条都做不到）。
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    frame: true, // 系统标题栏（规避 pywebview frameless 白框/缩放 bug 的根因）
+    frame: false, // 无边框：整条顶栏前端自绘（播放窗同款方案，已验证 Electron frameless 稳定无白框）
     show: false,
     title: 'ITV Desk',
+    backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+  mainWindow.setMenu(null); // 移除原生菜单栏
   // 转发 renderer 控制台错误到主进程 stdout（便于沙箱/无 devtools 环境诊断）
   mainWindow.webContents.on('console-message', (_e, level, msg, line, source) => {
     const tag = ['log', 'warn', 'error'][level] || 'log'

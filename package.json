@@ -1,6 +1,6 @@
 {
   "name": "itv-desk",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "description": "ITV Desk 桌面版（Electron 壳 + FastAPI 后端 + Vue3 前端）",
   "main": "electron/main.js",

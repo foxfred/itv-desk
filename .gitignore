@@ -8,8 +8,7 @@ build/
 frontend-new/dist/
 frontend-new/dist_*/
 dist_electron/
-dist_electron_v2/
-dist_electron_bak/
+dist_electron*/
 release/*.zip
 
 # 运行期数据（用户本地状态，不入库）
@@ -44,3 +43,15 @@ ELECTRON_MIGRATION.md
 方案书-*.md
 *.spec
 frontend-new/.env.*
+
+# 发布产物：core zip 与更新清单入库（旧版机制，raw 直链供软件自更新下载）
+!release/*.zip
+!release/update.json
+
+# 临时诊断/解包目录
+_asar_repack/
+_asar_verify/
+_diag*.txt
+_diag*.py
+_lockcheck.txt
+_make_zip.py
