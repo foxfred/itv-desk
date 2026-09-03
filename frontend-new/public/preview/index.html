@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IPTV Core · 主题预览 (WinXP / 磨砂玻璃)</title>
+  <link rel="stylesheet" href="/preview/element-plus.css" />
+  <!-- 主题皮肤由 JS 动态注入 /themes/*.css -->
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { overflow: hidden; }
+
+    /* ---------- 预览控制条 ---------- */
+    .preview-bar {
+      position: fixed; top: 0; left: 0; right: 0; height: 52px; z-index: 9999;
+      display: flex; align-items: center; gap: 10px; padding: 0 16px;
+      background: rgba(20,24,34,0.92); color: #fff;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+    .preview-bar .title { font-weight: 700; margin-right: 8px; letter-spacing: .5px; }
+    .preview-bar .spacer { flex: 1; }
+    .preview-bar .hint { font-size: 12px; opacity: .7; }
+    .theme-btn {
+      border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.08);
+      color: #fff; padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      transition: all .2s;
+    }
+    .theme-btn:hover { background: rgba(255,255,255,0.18); }
+    .theme-btn.active { background: #6C8EBF; border-color: #6C8EBF; font-weight: 700; }
+
+    /* ---------- 应用外壳（布局用变量，随主题切换） ---------- */
+    .app-shell { position: absolute; top: 52px; left: 0; right: 0; bottom: 0; display: flex; }
+    .app-header {
+      position: absolute; top: 0; left: 0; right: 0; height: 46px;
+      display: flex; align-items: center; padding: 0 14px; color: #fff;
+    }
+    .app-bg { position: absolute; inset: 52px 0 0 0; display: flex; }
+    .sidebar { width: 200px; padding-top: 12px; }
+    .main-content { flex: 1; padding: 16px; overflow: auto; }
+    .logo-text { font-size: 15px; font-weight: 700; }
+    .header-right { margin-left: auto; display: flex; gap: 8px; }
+
+    /* 模拟菜单 */
+    .fake-menu { list-style: none; margin: 0; padding: 0; }
+    .fake-menu li {
+      padding: 0 14px; height: 38px; line-height: 38px; cursor: pointer;
+      color: inherit; border-radius: 6px; margin: 2px 8px; font-size: 13px;
+    }
+
+    /* 统计卡片 */
+    .stats-row { display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .stat-card {
+      flex: 1; min-width: 130px; padding: 14px 16px; border-radius: 10px;
+      background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
+      box-shadow: var(--el-box-shadow-light);
+    }
+    .stat-card .num { font-size: 26px; font-weight: 800; color: var(--el-color-primary); }
+    .stat-card .lbl { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 2px; }
+
+    /* 表格（用变量，随主题变化） */
+    .iptv-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--el-bg-color); border-radius: 8px; overflow: hidden; }
+    .iptv-table th, .iptv-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--el-border-color-lighter); }
+    .iptv-table th { background: var(--el-fill-color); color: var(--el-text-color-regular); font-weight: 700; }
+    .iptv-table tbody tr:hover { background: var(--el-fill-color-light); }
+    .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; background: var(--el-color-success-light-9); color: var(--el-color-success); border: 1px solid var(--el-color-success-light-5); }
+    .badge.off { background: var(--el-color-danger-light-9); color: var(--el-color-danger); border-color: var(--el-color-danger-light-5); }
+
+    /* 播放器控制条 */
+    .player-bar {
+      position: absolute; left: 200px; right: 0; bottom: 0; height: 56px;
+      display: flex; align-items: center; gap: 12px; padding: 0 16px;
+      background: var(--el-bg-color); border-top: 1px solid var(--el-border-color-light);
+      box-shadow: var(--el-box-shadow-light); backdrop-filter: blur(10px);
+    }
+    .player-bar .ctrl { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; background: var(--el-fill-color); border: 1px solid var(--el-border-color-light); }
+    .player-bar .ctrl.play { background: var(--el-color-primary); color: #fff; border: none; }
+    .player-bar .meta { font-size: 13px; color: var(--el-text-color-regular); }
+    .player-bar .progress { flex: 1; height: 6px; border-radius: 3px; background: var(--el-fill-color); position: relative; }
+    .player-bar .progress .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 38%; background: var(--el-color-primary); border-radius: 3px; }
+
+    .section-title { font-size: 14px; font-weight: 700; margin: 0 0 12px; color: var(--el-text-color-primary); }
+    .form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .form-row .lbl { width: 120px; font-size: 13px; color: var(--el-text-color-regular); }
+  </style>
+</head>
+<body>
+  <!-- 主题切换控制条 -->
+  <div class="preview-bar">
+    <span class="title">🎨 主题预览</span>
+    <button class="theme-btn" data-theme="default">默认蓝</button>
+    <button class="theme-btn" data-theme="winxp">Windows XP</button>
+    <button class="theme-btn" data-theme="frosted">磨砂玻璃</button>
+    <span class="spacer"></span>
+    <span class="hint">点击上方按钮实时切换主题，查看 WinXP 与磨砂玻璃 精修效果</span>
+  </div>
+
+  <!-- 应用外壳 -->
+  <div class="app-shell">
+    <div class="app-bg">
+      <!-- 顶部栏 -->
+      <div class="app-header">
+        <span class="logo-text">IPTV Core PRO MAX</span>
+        <div class="header-right">
+          <button class="el-button el-button--default"><span>最小化</span></button>
+          <button class="el-button el-button--primary"><span>全屏</span></button>
+        </div>
+      </div>
+
+      <!-- 侧边栏 -->
+      <div class="sidebar">
+        <ul class="fake-menu el-menu">
+          <li class="el-menu-item">📺 频道管理</li>
+          <li class="el-menu-item">🔍 抓取源</li>
+          <li class="el-menu-item">✅ 在线检测</li>
+          <li class="el-menu-item">📡 EPG 节目单</li>
+          <li class="el-menu-item">🔗 订阅源</li>
+          <li class="el-menu-item is-active">⚙️ 系统设置</li>
+        </ul>
+      </div>
+
+      <!-- 主内容 -->
+      <div class="main-content">
+        <!-- 统计卡片 -->
+        <div class="stats-row">
+          <div class="stat-card"><div class="num">1,286</div><div class="lbl">频道总数</div></div>
+          <div class="stat-card"><div class="num">1,041</div><div class="lbl">可用</div></div>
+          <div class="stat-card"><div class="num">245</div><div class="lbl">高清</div></div>
+          <div class="stat-card"><div class="num">38ms</div><div class="lbl">平均延迟</div></div>
+        </div>
+
+        <!-- 设置卡片 -->
+        <div class="el-card">
+          <div class="el-card__header"><span class="section-title" style="margin:0">系统设置 · 播放器</span></div>
+          <div class="el-card__body" style="padding:16px">
+            <div class="form-row">
+              <span class="lbl">默认音量</span>
+              <div class="el-input" style="width:220px">
+                <div class="el-input__wrapper"><input class="el-input__inner" value="75" /></div>
+              </div>
+              <span style="color:var(--el-text-color-secondary);font-size:12px">%</span>
+            </div>
+            <div class="form-row">
+              <span class="lbl">键盘快捷键</span>
+              <div class="el-switch is-checked"><span class="el-switch__core" style="width:40px;height:20px"></span></div>
+              <span style="color:var(--el-text-color-secondary);font-size:12px">空格播放/暂停 · ←/→ 快进 · ↑/↓ 音量</span>
+            </div>
+            <div class="form-row">
+              <span class="lbl">播放器路径</span>
+              <div class="el-input" style="width:320px">
+                <div class="el-input__wrapper"><input class="el-input__inner" placeholder="留空则自动检测，或手动指定 .exe 路径" /></div>
+              </div>
+              <button class="el-button el-button--default"><span>浏览</span></button>
+            </div>
+            <div class="form-row" style="gap:10px">
+              <button class="el-button el-button--primary"><span>保存设置</span></button>
+              <button class="el-button el-button--default"><span>恢复默认</span></button>
+              <span class="el-tag">内部播放器</span>
+              <span class="el-tag">VLC</span>
+              <span class="el-tag">PotPlayer</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 频道表格 -->
+        <div class="el-card" style="margin-top:14px">
+          <div class="el-card__header"><span class="section-title" style="margin:0">频道列表（示例）</span></div>
+          <div class="el-card__body" style="padding:8px 12px 12px">
+            <table class="iptv-table">
+              <thead>
+                <tr><th>频道</th><th>状态</th><th>延迟</th><th>分辨率</th><th>分组</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>CCTV-1 综合</td><td><span class="badge">可用</span></td><td>32ms</td><td>1920×1080</td><td>央视</td></tr>
+                <tr><td>湖南卫视</td><td><span class="badge">可用</span></td><td>41ms</td><td>1920×1080</td><td>卫视</td></tr>
+                <tr><td>凤凰中文</td><td><span class="badge off">失效</span></td><td>—</td><td>—</td><td>港澳台</td></tr>
+                <tr><td>浙江卫视</td><td><span class="badge">可用</span></td><td>38ms</td><td>1280×720</td><td>卫视</td></tr>
+                <tr><td>Discovery</td><td><span class="badge">可用</span></td><td>55ms</td><td>1920×1080</td><td>纪录片</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 播放器控制条 -->
+    <div class="player-bar">
+      <div class="ctrl">⏮</div>
+      <div class="ctrl play">▶</div>
+      <div class="ctrl">⏭</div>
+      <div class="meta">CCTV-1 综合 · 1920×1080</div>
+      <div class="progress"><div class="fill"></div></div>
+      <div class="ctrl">🔊</div>
+    </div>
+  </div>
+
+  <script>
+    const themes = {
+      default: null,
+      winxp: '/themes/winxp-theme.css',
+      frosted: '/themes/light-frosted-glass.css'
+    };
+    let linkEl = null;
+    function applyTheme(key) {
+      const href = themes[key];
+      if (linkEl) { linkEl.remove(); linkEl = null; }
+      if (href) {
+        linkEl = document.createElement('link');
+        linkEl.rel = 'stylesheet';
+        linkEl.href = href + '?t=' + Date.now();
+        document.head.appendChild(linkEl);
+      }
+      document.querySelectorAll('.theme-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.theme === key);
+      });
+    }
+    document.querySelectorAll('.theme-btn').forEach(b => {
+      b.addEventListener('click', () => applyTheme(b.dataset.theme));
+    });
+    applyTheme('winxp');
+  </script>
+</body>
+</html>

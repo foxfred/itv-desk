@@ -1,0 +1,46 @@
+# 依赖
+node_modules/
+frontend-new/node_modules/
+
+# 构建产物
+dist/
+build/
+frontend-new/dist/
+frontend-new/dist_*/
+dist_electron/
+dist_electron_v2/
+dist_electron_bak/
+release/*.zip
+
+# 运行期数据（用户本地状态，不入库）
+*.db
+*.log
+settings.json
+channels_cache.json
+channel_tags.json
+fake_live_tags.json
+epg_history.json
+url_history.json
+mirror_history.json
+logos_online_index.json
+repair_history.jsonl
+logos/
+导出*.m3u
+
+# 临时/归档
+_bak_*/
+_trash_*/
+*.tmp
+*.bak
+
+# 工具/IDE 内部目录
+.workbuddy/
+__pycache__/
+*.pyc
+
+# 个人/内部文件，禁止发布到远程仓库
+AGENTS.md
+ELECTRON_MIGRATION.md
+方案书-*.md
+*.spec
+frontend-new/.env.*

@@ -1,0 +1,407 @@
+/* ============================================
+   macOS 风格主题 - IPTV Core
+   设计灵感：macOS Sonoma / Ventura
+   主色：#007AFF (macOS 系统蓝)
+   ============================================ */
+
+:root {
+  /* ---- 主色调（macOS 系统蓝） ---- */
+  --el-color-primary: #007AFF;
+  --el-color-primary-light-3: #4DA2FF;
+  --el-color-primary-light-5: #80BFFF;
+  --el-color-primary-light-7: #B3D9FF;
+  --el-color-primary-light-8: #CCE5FF;
+  --el-color-primary-light-9: #E5F2FF;
+  --el-color-primary-dark-2: #0066D6;
+
+  /* ---- 成功 / 警告 / 危险 / 信息 ---- */
+  --el-color-success: #34C759;
+  --el-color-success-light-3: #6FD98A;
+  --el-color-success-light-5: #9AE4AE;
+  --el-color-success-light-7: #C5EFD2;
+  --el-color-success-light-8: #DAF5E3;
+  --el-color-success-light-9: #EFFAF2;
+  --el-color-warning: #FF9500;
+  --el-color-warning-light-3: #FFB54D;
+  --el-color-warning-light-5: #FFCA80;
+  --el-color-warning-light-7: #FFDFB3;
+  --el-color-warning-light-8: #FFE9CC;
+  --el-color-warning-light-9: #FFF4E5;
+  --el-color-danger: #FF3B30;
+  --el-color-danger-light-3: #FF7A73;
+  --el-color-danger-light-5: #FF9C97;
+  --el-color-danger-light-7: #FFBDBA;
+  --el-color-danger-light-8: #FFD1CF;
+  --el-color-danger-light-9: #FFE5E4;
+  --el-color-info: #8E8E93;
+  --el-color-info-light-3: #ABABB0;
+  --el-color-info-light-5: #BEBEC2;
+  --el-color-info-light-7: #D1D1D4;
+  --el-color-info-light-8: #DEDEE0;
+  --el-color-info-light-9: #EBEBEC;
+
+  /* ---- 背景色 ---- */
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: #F5F5F7;
+  --el-bg-color-overlay: #FFFFFF;
+  --el-fill-color: #F2F2F7;
+  --el-fill-color-light: #F5F5F7;
+  --el-fill-color-lighter: #FAFAFC;
+  --el-fill-color-extra-light: #FDFDFE;
+  --el-fill-color-blank: #FFFFFF;
+
+  /* ---- 文字颜色 ---- */
+  --el-text-color-primary: #1D1D1F;
+  --el-text-color-regular: #424245;
+  --el-text-color-secondary: #86868B;
+  --el-text-color-placeholder: #AEAEB2;
+  --el-text-color-disabled: #C7C7CC;
+
+  /* ---- 边框颜色 ---- */
+  --el-border-color: #D2D2D7;
+  --el-border-color-light: #E5E5EA;
+  --el-border-color-lighter: #ECECF0;
+  --el-border-color-extra-light: #F2F2F7;
+  --el-border-color-dark: #C7C7CC;
+
+  /* ---- 圆角（macOS 偏大圆角） ---- */
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-border-radius-round: 20px;
+
+  /* ---- 阴影（macOS 柔和阴影） ---- */
+  --el-box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --el-box-shadow-light: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --el-box-shadow-lighter: 0 1px 1px rgba(0, 0, 0, 0.02);
+  --el-box-shadow-dark: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* ============================================
+   全局字体（SF Pro 风格）
+   ============================================ */
+* {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "SF Pro Text", "Helvetica Neue", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   页面背景（macOS 桌面灰）
+   ============================================ */
+.main-content,
+.el-main {
+  background: #F5F5F7 !important;
+}
+
+/* ============================================
+   侧边栏（macOS 毛玻璃风格）
+   ============================================ */
+.sidebar,
+.el-aside {
+  background: rgba(245, 245, 247, 0.85) !important;
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+/* 侧边栏菜单项 */
+.el-menu {
+  background: transparent !important;
+  border-right: none !important;
+}
+.el-menu-item {
+  border-radius: 8px;
+  margin: 2px 8px;
+  height: 40px !important;
+  line-height: 40px !important;
+  transition: all 0.2s ease;
+}
+.el-menu-item:hover {
+  background: rgba(0, 122, 255, 0.08) !important;
+}
+.el-menu-item.is-active {
+  background: rgba(0, 122, 255, 0.12) !important;
+  color: #007AFF !important;
+  font-weight: 500;
+}
+.el-menu-item.is-active .el-icon {
+  color: #007AFF !important;
+}
+
+/* ============================================
+   卡片（macOS 圆角白卡 + 柔和阴影）
+   ============================================ */
+.el-card {
+  border-radius: 12px !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.03) !important;
+  background: #FFFFFF !important;
+}
+.el-card__header {
+  border-bottom: 1px solid #E5E5EA !important;
+  padding: 16px 20px !important;
+}
+.el-card__body {
+  padding: 20px !important;
+}
+
+/* ============================================
+   按钮（macOS 胶囊风格）
+   ============================================ */
+.el-button {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+  border: none !important;
+}
+.el-button--primary {
+  background: #007AFF !important;
+  box-shadow: 0 1px 2px rgba(0, 122, 255, 0.3) !important;
+}
+.el-button--primary:hover {
+  background: #0066D6 !important;
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.4) !important;
+}
+.el-button--primary:active {
+  background: #0055B3 !important;
+  transform: scale(0.98);
+}
+.el-button--default {
+  background: #F2F2F7 !important;
+  color: #1D1D1F !important;
+  border: 1px solid #D2D2D7 !important;
+}
+.el-button--default:hover {
+  background: #E5E5EA !important;
+  border-color: #C7C7CC !important;
+  color: #1D1D1F !important;
+}
+.el-button--danger {
+  background: #FF3B30 !important;
+  box-shadow: 0 1px 2px rgba(255, 59, 48, 0.3) !important;
+}
+.el-button--success {
+  background: #34C759 !important;
+  box-shadow: 0 1px 2px rgba(52, 199, 89, 0.3) !important;
+}
+
+/* ============================================
+   输入框（macOS 简洁风格）
+   ============================================ */
+.el-input__wrapper {
+  border-radius: 6px !important;
+  background: #F5F5F7 !important;
+  box-shadow: 0 0 0 1px #D2D2D7 inset !important;
+  transition: all 0.2s ease !important;
+}
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px #007AFF inset !important;
+}
+.el-input__wrapper.is-focus {
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 2px #007AFF inset, 0 0 0 4px rgba(0, 122, 255, 0.15) !important;
+}
+.el-textarea__inner {
+  border-radius: 6px !important;
+  background: #F5F5F7 !important;
+  box-shadow: 0 0 0 1px #D2D2D7 inset !important;
+  transition: all 0.2s ease !important;
+}
+.el-textarea__inner:focus {
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 2px #007AFF inset, 0 0 0 4px rgba(0, 122, 255, 0.15) !important;
+}
+
+/* ============================================
+   下拉选择器
+   ============================================ */
+.el-select__wrapper {
+  border-radius: 6px !important;
+  background: #F5F5F7 !important;
+  box-shadow: 0 0 0 1px #D2D2D7 inset !important;
+}
+.el-select__wrapper.is-focused {
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 2px #007AFF inset !important;
+}
+
+/* ============================================
+   表格（macOS 简洁表格）
+   ============================================ */
+.el-table {
+  background: transparent !important;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.el-table th.el-table__cell {
+  background: #F5F5F7 !important;
+  color: #86868B !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid #E5E5EA !important;
+}
+.el-table tr {
+  background: #FFFFFF !important;
+}
+.el-table tr:hover > td {
+  background: rgba(0, 122, 255, 0.04) !important;
+}
+.el-table td.el-table__cell {
+  border-bottom: 1px solid #ECECF0 !important;
+}
+
+/* ============================================
+   分页器
+   ============================================ */
+.el-pagination .el-pager li {
+  border-radius: 6px !important;
+  margin: 0 2px !important;
+  background: transparent !important;
+  color: #424245 !important;
+}
+.el-pagination .el-pager li.is-active {
+  background: #007AFF !important;
+  color: #FFFFFF !important;
+}
+.el-pagination button {
+  border-radius: 6px !important;
+  background: transparent !important;
+}
+
+/* ============================================
+   标签页（macOS 分段控件风格）
+   ============================================ */
+.el-tabs__item {
+  font-weight: 500 !important;
+  color: #86868B !important;
+  transition: color 0.2s ease !important;
+}
+.el-tabs__item.is-active {
+  color: #007AFF !important;
+}
+.el-tabs__active-bar {
+  background: #007AFF !important;
+  height: 2px !important;
+  border-radius: 1px !important;
+}
+.el-tabs__nav-wrap::after {
+  background: #E5E5EA !important;
+  height: 1px !important;
+}
+
+/* ============================================
+   开关（macOS Toggle 风格）
+   ============================================ */
+.el-switch.is-checked .el-switch__core {
+  background: #34C759 !important;
+  border-color: #34C759 !important;
+}
+.el-switch__core {
+  border-radius: 16px !important;
+}
+
+/* ============================================
+   消息提示（macOS 通知风格）
+   ============================================ */
+.el-message {
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none !important;
+  padding: 12px 20px !important;
+}
+
+/* ============================================
+   弹窗 / 对话框（macOS Sheet 风格）
+   ============================================ */
+.el-dialog {
+  border-radius: 14px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+  overflow: hidden;
+}
+.el-dialog__header {
+  padding: 16px 20px !important;
+  border-bottom: 1px solid #E5E5EA !important;
+}
+.el-dialog__title {
+  font-weight: 600 !important;
+  color: #1D1D1F !important;
+}
+
+/* ============================================
+   表单项
+   ============================================ */
+.el-form-item__label {
+  color: #424245 !important;
+  font-weight: 500 !important;
+}
+
+/* ============================================
+   滚动条（macOS 细滚动条）
+   ============================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* ============================================
+   数字输入框
+   ============================================ */
+.el-input-number {
+  border-radius: 6px !important;
+}
+.el-input-number .el-input__wrapper {
+  border-radius: 6px !important;
+}
+
+/* ============================================
+   复选框 / 单选框
+   ============================================ */
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-radio__input.is-checked .el-radio__inner {
+  background: #007AFF !important;
+  border-color: #007AFF !important;
+}
+.el-checkbox__inner,
+.el-radio__inner {
+  border-radius: 4px !important;
+  border-color: #C7C7CC !important;
+}
+.el-radio__inner {
+  border-radius: 50% !important;
+}
+
+/* ============================================
+   统计卡片（macOS 圆角强调）
+   ============================================ */
+.stat-card {
+  border-radius: 10px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ============================================
+   顶部标题栏（macOS 窗口风格）
+   ============================================ */
+.app-header,
+.el-header {
+  background: rgba(245, 245, 247, 0.85) !important;
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}

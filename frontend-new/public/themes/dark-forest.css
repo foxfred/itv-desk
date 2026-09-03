@@ -1,0 +1,187 @@
+/* ============================================
+   暗夜森林 - IPTV Core 暗黑主题
+   设计灵感：Forest Night / 深夜密林
+   主色：#4ADE80 (翠绿)
+   背景：#0D1A0D (深绿黑)
+   ============================================ */
+
+:root {
+  --el-color-primary: #4ADE80;
+  --el-color-primary-light-3: #78E8A0;
+  --el-color-primary-light-5: #9CF0BC;
+  --el-color-primary-light-7: #BEF5D4;
+  --el-color-primary-light-8: #D0F8E0;
+  --el-color-primary-light-9: #E5FAED;
+  --el-color-primary-dark-2: #2AB85C;
+
+  --el-color-success: #22C55E;
+  --el-color-success-light-3: #5ED68A;
+  --el-color-success-light-5: #8AE3AC;
+  --el-color-success-light-7: #B2EFC8;
+  --el-color-success-light-8: #C8F4D8;
+  --el-color-success-light-9: #E0F9EA;
+  --el-color-warning: #FBBF24;
+  --el-color-warning-light-3: #FCCF5A;
+  --el-color-warning-light-5: #FDDC8A;
+  --el-color-warning-light-7: #FEE9B2;
+  --el-color-warning-light-8: #FEF0CC;
+  --el-color-warning-light-9: #FFF7E5;
+  --el-color-danger: #EF4444;
+  --el-color-danger-light-3: #F37676;
+  --el-color-danger-light-5: #F69A9A;
+  --el-color-danger-light-7: #F9BBBB;
+  --el-color-danger-light-8: #FACDCD;
+  --el-color-danger-light-9: #FDE5E5;
+  --el-color-info: #6B8A6B;
+  --el-color-info-light-3: #90A890;
+  --el-color-info-light-5: #ACBCAC;
+  --el-color-info-light-7: #C5D0C5;
+  --el-color-info-light-8: #D4DCD4;
+  --el-color-info-light-9: #E5E9E5;
+
+  --el-bg-color: #142014;
+  --el-bg-color-page: #0D1A0D;
+  --el-bg-color-overlay: #1A2A1A;
+  --el-fill-color: #1A2A1A;
+  --el-fill-color-light: #203320;
+  --el-fill-color-lighter: #283D28;
+  --el-fill-color-extra-light: #304830;
+  --el-fill-color-blank: #142014;
+
+  --el-text-color-primary: #D8E8D8;
+  --el-text-color-regular: #A8C0A8;
+  --el-text-color-secondary: #789878;
+  --el-text-color-placeholder: #587058;
+  --el-text-color-disabled: #405040;
+
+  --el-border-color: #2A3D2A;
+  --el-border-color-light: #223322;
+  --el-border-color-lighter: #1A2A1A;
+  --el-border-color-extra-light: #152015;
+  --el-border-color-dark: #3A503A;
+
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-border-radius-round: 18px;
+
+  --el-box-shadow: 0 2px 8px rgba(0,0,0,0.40), 0 0 0 1px rgba(74,222,128,0.05);
+  --el-box-shadow-light: 0 1px 4px rgba(0,0,0,0.35);
+  --el-box-shadow-lighter: 0 1px 2px rgba(0,0,0,0.25);
+  --el-box-shadow-dark: 0 4px 20px rgba(0,0,0,0.50);
+}
+
+* {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif !important;
+}
+
+.main-content, .el-main, .app-content { background: #0D1A0D !important; }
+
+.sidebar, .el-aside, .app-aside {
+  background: #0A150A !important;
+  border-right: 1px solid #2A3D2A !important;
+}
+
+.el-menu { background: transparent !important; border-right: none !important; }
+.el-menu-item {
+  border-radius: 6px; margin: 2px 8px; height: 38px !important; line-height: 38px !important;
+  color: #A8C0A8 !important;
+}
+.el-menu-item:hover { background: rgba(74,222,128,0.08) !important; color: #4ADE80 !important; }
+.el-menu-item.is-active {
+  background: rgba(74,222,128,0.12) !important;
+  color: #4ADE80 !important;
+  border-left: 2px solid #4ADE80;
+}
+
+.el-card {
+  border-radius: 8px !important;
+  border: 1px solid #2A3D2A !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
+  background: #142014 !important;
+}
+.el-card__header { border-bottom: 1px solid #2A3D2A !important; }
+
+.el-button { border-radius: 6px !important; font-weight: 500 !important; }
+.el-button--primary {
+  background: #4ADE80 !important; border: none !important;
+  box-shadow: 0 2px 6px rgba(74,222,128,0.25) !important;
+  color: #0D1A0D !important;
+}
+.el-button--primary:hover { background: #2AB85C !important; }
+.el-button--default {
+  background: #1A2A1A !important; color: #A8C0A8 !important;
+  border: 1px solid #2A3D2A !important;
+}
+.el-button--default:hover { border-color: #4ADE80 !important; color: #4ADE80 !important; }
+
+.el-input__wrapper {
+  border-radius: 6px !important; background: #0A150A !important;
+  box-shadow: 0 0 0 1px #2A3D2A inset !important;
+}
+.el-input__wrapper:hover { box-shadow: 0 0 0 1px #4ADE80 inset !important; }
+.el-input__wrapper.is-focus { box-shadow: 0 0 0 2px #4ADE80 inset !important; }
+.el-input__inner { color: #D8E8D8 !important; }
+.el-input__inner::placeholder { color: #587058 !important; }
+.el-textarea__inner {
+  border-radius: 6px !important; background: #0A150A !important;
+  box-shadow: 0 0 0 1px #2A3D2A inset !important; color: #D8E8D8 !important;
+}
+.el-textarea__inner:focus { box-shadow: 0 0 0 2px #4ADE80 inset !important; }
+
+.el-select__wrapper {
+  border-radius: 6px !important; background: #0A150A !important;
+  box-shadow: 0 0 0 1px #2A3D2A inset !important;
+}
+.el-select__wrapper.is-focused { box-shadow: 0 0 0 2px #4ADE80 inset !important; }
+
+.el-table { background: transparent !important; color: #A8C0A8 !important; }
+.el-table th.el-table__cell {
+  background: #0A150A !important; color: #789878 !important;
+  font-weight: 600 !important; font-size: 12px !important;
+  border-bottom: 1px solid #2A3D2A !important;
+}
+.el-table tr:hover > td { background: rgba(74,222,128,0.04) !important; }
+.el-table td.el-table__cell { border-bottom: 1px solid #1A2A1A !important; }
+
+.el-pagination .el-pager li { background: transparent !important; color: #A8C0A8 !important; }
+.el-pagination .el-pager li.is-active { background: #4ADE80 !important; color: #0D1A0D !important; }
+
+.el-tabs__item { color: #789878 !important; }
+.el-tabs__item.is-active { color: #4ADE80 !important; }
+.el-tabs__active-line { background: #4ADE80 !important; }
+
+.app-header, .el-header {
+  background: #0A150A !important;
+  border-bottom: 1px solid #2A3D2A !important;
+}
+
+.el-dialog {
+  border-radius: 10px !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.50) !important;
+  background: #142014 !important;
+}
+.el-dialog__title { color: #D8E8D8 !important; }
+.el-dialog__header { border-bottom: 1px solid #2A3D2A !important; }
+
+.el-form-item__label { color: #A8C0A8 !important; }
+
+.el-checkbox__label { color: #A8C0A8 !important; }
+.el-checkbox__input.is-checked .el-checkbox__inner { background: #4ADE80 !important; border-color: #4ADE80 !important; }
+.el-checkbox__inner { background: #0A150A !important; border-color: #2A3D2A !important; }
+.el-radio__label { color: #A8C0A8 !important; }
+.el-radio__input.is-checked .el-radio__inner { background: #4ADE80 !important; border-color: #4ADE80 !important; }
+.el-radio__inner { background: #0A150A !important; border-color: #2A3D2A !important; }
+
+.el-switch.is-checked .el-switch__core { background: #22C55E !important; border-color: #22C55E !important; }
+.el-switch__core { background: #2A3D2A !important; border-color: #2A3D2A !important; }
+
+.el-message {
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.40) !important;
+  background: #1A2A1A !important; border: 1px solid #2A3D2A !important;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0D1A0D; }
+::-webkit-scrollbar-thumb { background: #2A3D2A; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4ADE80; }

@@ -1,0 +1,18 @@
+{
+  "name": "itv-desk",
+  "version": "3.0.0",
+  "private": true,
+  "description": "ITV Desk 桌面版（Electron 壳 + FastAPI 后端 + Vue3 前端）",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:frontend": "cd frontend-new && npm run build",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --dir --win",
+    "dist:folder": "set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder --dir --win"
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  }
+}

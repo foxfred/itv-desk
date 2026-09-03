@@ -1,0 +1,255 @@
+/* ============================================
+   WinXP 风格主题 - IPTV Core (精修版)
+   设计灵感：Windows XP Luna Blue
+   主色：#0058E6 (XP Luna 蓝)
+   改动：更顺滑的渐变、XP 高亮选单项、按压态、过渡动画、
+        标题栏高光、卡片顶部反光、表格斑马纹与更强对比。
+   ============================================ */
+
+:root {
+  --el-color-primary: #0058E6;
+  --el-color-primary-light-3: #4D85EE;
+  --el-color-primary-light-5: #80A5F2;
+  --el-color-primary-light-7: #B3C8F8;
+  --el-color-primary-light-8: #CCDAFB;
+  --el-color-primary-light-9: #E5EDFD;
+  --el-color-primary-dark-2: #0045B8;
+
+  --el-color-success: #2E8B2E;
+  --el-color-success-light-3: #6BAC6B;
+  --el-color-success-light-5: #97B997;
+  --el-color-success-light-7: #BED6BE;
+  --el-color-success-light-8: #D2E2D2;
+  --el-color-success-light-9: #E5F0E5;
+  --el-color-warning: #E6A800;
+  --el-color-warning-light-3: #EEBE4D;
+  --el-color-warning-light-5: #F0D080;
+  --el-color-warning-light-7: #F5E0B3;
+  --el-color-warning-light-8: #F7EACC;
+  --el-color-warning-light-9: #FAF5E5;
+  --el-color-danger: #CC0000;
+  --el-color-danger-light-3: #D94040;
+  --el-color-danger-light-5: #DF7373;
+  --el-color-danger-light-7: #EAA5A5;
+  --el-color-danger-light-8: #F0C2C2;
+  --el-color-danger-light-9: #F7E0E0;
+  --el-color-info: #737373;
+  --el-color-info-light-3: #969696;
+  --el-color-info-light-5: #ABABAB;
+  --el-color-info-light-7: #C4C4C4;
+  --el-color-info-light-8: #D3D3D3;
+  --el-color-info-light-9: #E5E5E5;
+
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: #E5EEF8;
+  --el-bg-color-overlay: #FFFFFF;
+  --el-fill-color: #E0EAF5;
+  --el-fill-color-light: #E8F0FA;
+  --el-fill-color-lighter: #F0F5FB;
+  --el-fill-color-extra-light: #F7FAFD;
+  --el-fill-color-blank: #FFFFFF;
+
+  --el-text-color-primary: #1A1A1A;
+  --el-text-color-regular: #333333;
+  --el-text-color-secondary: #55617A;
+  --el-text-color-placeholder: #8A97AE;
+  --el-text-color-disabled: #BBBBBB;
+
+  --el-border-color: #9DBCE6;
+  --el-border-color-light: #C0D4EE;
+  --el-border-color-lighter: #D8E5F5;
+  --el-border-color-extra-light: #ECF2FA;
+  --el-border-color-dark: #7E9FD0;
+
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 3px;
+  --el-border-radius-round: 12px;
+
+  --el-box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  --el-box-shadow-light: 0 1px 3px rgba(0,0,0,0.08);
+  --el-box-shadow-lighter: 0 1px 2px rgba(0,0,0,0.05);
+  --el-box-shadow-dark: 0 6px 20px rgba(0,40,140,0.18);
+}
+
+* {
+  font-family: "Tahoma", "Microsoft YaHei", "Segoe UI", sans-serif !important;
+}
+
+/* 统一过渡，提升顺滑质感 */
+.el-button, .el-menu-item, .el-input__wrapper, .el-textarea__inner,
+.el-card, .el-table tr > td, .el-tag, .el-switch__core {
+  transition: all 0.18s ease !important;
+}
+
+/* 页面背景 - XP 经典天蓝 */
+.main-content, .el-main, .app-content { background: #E5EEF8 !important; }
+
+/* 侧边栏 - XP Luna 蓝渐变 */
+.sidebar, .el-aside, .app-aside {
+  background: linear-gradient(to bottom, #3A8DF0 0%, #0058E6 100%) !important;
+  border-right: 1px solid #0045B8 !important;
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.15);
+}
+
+/* 菜单 - XP 白色文字 */
+.el-menu { background: transparent !important; border-right: none !important; }
+.el-menu-item {
+  border-radius: 4px; margin: 1px 6px; height: 34px !important; line-height: 34px !important;
+  color: #FFFFFF !important;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.30);
+}
+.el-menu-item:hover {
+  background: rgba(255,255,255,0.18) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+}
+/* XP 选单项：蓝色高亮条 + 外发光，摒弃突兀的金色 */
+.el-menu-item.is-active {
+  background: linear-gradient(to bottom, #5BA0FF, #1E6FE0) !important;
+  color: #FFFFFF !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+  border: 1px solid #1A62CC;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.25) inset, 0 0 8px rgba(120,180,255,0.55);
+}
+
+/* 卡片 - XP 白底蓝边 + 顶部反光 */
+.el-card {
+  border-radius: 4px !important;
+  border: 1px solid #9DBCE6 !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.9) !important;
+  background: #FFFFFF !important;
+}
+.el-card__header {
+  background: linear-gradient(to bottom, #EAF1FB, #C6D7EE) !important;
+  border-bottom: 1px solid #9DBCE6 !important;
+}
+
+/* 按钮 - XP Luna 渐变 */
+.el-button {
+  border-radius: 4px !important; font-weight: 400 !important;
+}
+.el-button--primary {
+  background: linear-gradient(to bottom, #5B97F2, #0058E6) !important;
+  border: 1px solid #0045B8 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45) !important;
+  color: #FFFFFF !important;
+}
+.el-button--primary:hover {
+  background: linear-gradient(to bottom, #6BA6FF, #1068F6) !important;
+}
+.el-button--primary:active {
+  background: linear-gradient(to bottom, #004FC8, #003FA8) !important;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.25) !important;
+}
+.el-button--default {
+  background: linear-gradient(to bottom, #FFFFFF, #E4EEFB) !important;
+  border: 1px solid #9DBCE6 !important;
+  color: #1A1A1A !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9) !important;
+}
+.el-button--default:hover {
+  background: linear-gradient(to bottom, #F2F7FD, #C6D7EE) !important;
+  border-color: #0058E6 !important;
+}
+.el-button--default:active {
+  background: linear-gradient(to bottom, #D8E5F5, #EBF2FB) !important;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.12) !important;
+}
+
+/* 输入框 */
+.el-input__wrapper {
+  border-radius: 4px !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #9DBCE6 inset !important;
+}
+.el-input__wrapper:hover { box-shadow: 0 0 0 1px #0058E6 inset !important; }
+.el-input__wrapper.is-focus { box-shadow: 0 0 0 1px #0058E6 inset, 0 0 6px rgba(0,88,230,0.25) !important; }
+.el-textarea__inner {
+  border-radius: 4px !important; background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #9DBCE6 inset !important;
+}
+.el-textarea__inner:focus { box-shadow: 0 0 0 1px #0058E6 inset, 0 0 6px rgba(0,88,230,0.20) !important; }
+
+/* 下拉选择器（与输入框同风格，2026-09-03 补：原缺导致 el-select 不跟皮肤） */
+.el-select__wrapper {
+  border-radius: 4px !important; background: #FFFFFF !important;
+  box-shadow: 0 0 0 1px #9DBCE6 inset !important;
+}
+.el-select__wrapper:hover { box-shadow: 0 0 0 1px #0058E6 inset !important; }
+.el-select__wrapper.is-focused { box-shadow: 0 0 0 1px #0058E6 inset, 0 0 6px rgba(0,88,230,0.25) !important; }
+
+/* 标签 */
+.el-tag {
+  border-radius: 3px !important;
+  background: #E5EDFD !important;
+  border-color: #9DBCE6 !important;
+  color: #0058E6 !important;
+}
+
+/* 表格 */
+.el-table th.el-table__cell {
+  background: linear-gradient(to bottom, #EAF1FB, #C6D7EE) !important;
+  color: #28344c !important; font-weight: 700 !important;
+  border-bottom: 1px solid #9DBCE6 !important;
+}
+.el-table tr:hover > td { background: rgba(0, 88, 230, 0.08) !important; }
+.el-table--striped .el-table__row--striped td.el-table__cell { background: #F2F7FD !important; }
+
+/* 标签页 */
+.el-tabs__item { color: #55617A !important; }
+.el-tabs__item.is-active { color: #0058E6 !important; font-weight: 700; }
+.el-tabs__active-bar { background: #0058E6 !important; }
+
+/* 开关 */
+.el-switch.is-checked .el-switch__core { background: #2E8B2E !important; border-color: #2E8B2E !important; }
+
+/* 顶部栏 - XP 蓝渐变 + 标题栏高光 */
+.app-header, .el-header {
+  background: linear-gradient(to bottom, #4F9BF5 0%, #1E6FE0 45%, #0058E6 100%) !important;
+  border-bottom: 1px solid #0045B8 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+}
+/* 深色顶栏上的控件反白（2026-09-03 补：原顶栏文字按钮/面包屑仍是深色字，蓝底上隐形） */
+.app-header .el-button.is-text { color: #FFFFFF !important; }
+.app-header .el-button.is-text:hover { background: rgba(255,255,255,0.22) !important; color: #FFFFFF !important; }
+.app-header .el-button.is-text .el-icon { color: #FFFFFF !important; }
+.app-header .el-breadcrumb__inner { color: rgba(255,255,255,0.92) !important; font-weight: 400 !important; }
+.app-header .el-breadcrumb__separator { color: rgba(255,255,255,0.6) !important; }
+.app-header .el-breadcrumb__inner.is-link { color: #FFFFFF !important; }
+.app-header .el-dropdown__caret-color, .app-header .el-icon { color: #FFFFFF; }
+.app-header .logo-text,
+.app-header .header-label {
+  color: #FFFFFF !important;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.35);
+}
+
+/* 侧栏 logo 图标：主色蓝压在 Luna 蓝渐变上看不见，改白（2026-09-03 补） */
+.app-aside .logo .el-icon { color: #FFFFFF !important; }
+.app-aside .logo-text { color: #FFFFFF !important; text-shadow: 1px 1px 2px rgba(0,0,0,0.35); }
+
+/* 弹窗 */
+.el-dialog {
+  border-radius: 6px !important;
+  box-shadow: 0 10px 36px rgba(0,40,140,0.25) !important;
+  border: 1px solid #9DBCE6 !important;
+}
+.el-dialog__header {
+  background: linear-gradient(to bottom, #4F9BF5, #0058E6) !important;
+  border-radius: 6px 6px 0 0 !important;
+}
+.el-dialog__title { color: #FFFFFF !important; text-shadow: 1px 1px 2px rgba(0,0,0,0.30); }
+
+/* 消息 */
+.el-message {
+  border-radius: 4px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+}
+
+/* 滚动条 - XP 风格 */
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-track { background: #E5EEF8; border-left: 1px solid #C6D7EE; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, #AEC8EC, #7E9FD0);
+  border-radius: 2px; border: 1px solid #6E8FC0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
+}
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(to right, #0058E6, #0045B8); }

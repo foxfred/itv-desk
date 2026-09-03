@@ -1,0 +1,47 @@
+# ITV Desk — electron-builder 打包配置
+# 先决条件：frontend-new 已 npm run build（dist 就绪）
+# 产物：dist_electron/ 下 NSIS 安装包 + 便携 exe
+appId: com.itvdesk.pro
+productName: ITV Desk
+copyright: Copyright © 2026
+
+directories:
+  output: dist_electron
+
+# 进应用包的内容（asar 内）
+files:
+  - electron/**/*
+  - package.json
+
+# 前端 dist 与后端源码放 extraResources（运行期按相对路径读取，不进 asar）
+extraResources:
+  - from: frontend-new/dist
+    to: frontend-new/dist
+    filter:
+      - "**/*"
+  - from: backend
+    to: backend
+    filter:
+      - "**/*"
+      - "!__pycache__/**"
+      - "!**/__pycache__/**"
+      - "!*.pyc"
+      - "!**/*.pyc"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  # icon: build/icon.ico  # 图标就位后取消注释
+  # 沙箱无管理员权限：跳过 exe 图标/版本信息注入（rcedit），避免 winCodeSign 解压符号链接失败
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: ITV Desk
