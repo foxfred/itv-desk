@@ -4,14 +4,14 @@
   "packages": [
     {
       "name": "ITV Desk 3.0.2.exe",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/ITV%20Desk%203.0.2.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/ITV-Desk-3.0.2.exe",
       "sha256": "ef0ccf6e6ed7fe2e8eb63337c12dabbc79947ba4fd5aaf868c386ec5d6a782af",
       "size": 79121763,
       "role": "main"
     },
     {
       "name": "ITV Desk Setup 3.0.2.exe",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/ITV%20Desk%20Setup%203.0.2.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/ITV-Desk-Setup%203.0.2.exe",
       "sha256": "597c7b13effd9642fb2d2a86b93c990800cc144ebf6ad19e6f973e391e510ec2",
       "size": 79349452,
       "role": "main"
