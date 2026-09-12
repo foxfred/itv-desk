@@ -53,6 +53,36 @@ npm start
 
 打包发布：`npm run dist`（安装包）或 `npm run dist:folder`（解压即用的文件夹版），产物在 `dist_electron/`。
 
+## CI/CD（GitHub Actions）
+
+本仓库内置两套流水线（`.github/workflows/`）：
+
+| 工作流 | 触发 | 作用 |
+|---|---|---|
+| `ci.yml` | push / PR 到 `master` | 前端 vite build + 后端语法/导入校验 + pytest 冒烟 + Electron 自检，拦截低级错误 |
+| `release.yml` | 打 tag `v*`（或手动） | 前端构建 + 后端校验 → Windows runner 上 electron-builder 打 NSIS/便携版 → 自动创建 GitHub Release 并上传安装包 |
+
+### 发版流程（一步到位）
+
+```bash
+# 1. 改完代码推到 master
+git push origin master
+
+# 2. 打 tag（版本号与 backend/app/version.py 的 APP_VERSION 保持一致）
+git tag v3.0.2
+git push origin v3.0.2
+```
+
+之后：
+- 在 GitHub 仓库 → **Releases** 页面等 10-15 分钟，会自动出现 `v3.0.2`，挂着 `ITV Desk Setup 3.0.2.exe`（NSIS 安装包）和 `itv-desk-3.0.2-Portable.exe`（便携版）
+- 仓库内 `release/update.json` 由发版前提交时写好（`packages[].url` 指向上述 GitHub Release 资产），用户端「系统设置 → 更新」即可检测到新版并下载
+
+### 自更新地址
+
+- 默认更新清单：`https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json`
+- 包下载地址在 `update.json` 的 `packages[].url` 字段，**正式发版后指向 GitHub Release 资产**（`https://github.com/foxfred/itv-desk/releases/download/v3.0.2/...`）
+- 用户可在「系统设置 → 更新」里覆盖为自定义清单/下载地址
+
 ## 技术栈
 
 - **桌面壳**: Electron（双 BrowserWindow + IPC 兼容垫片）
@@ -62,6 +92,8 @@ npm start
 
 ## 版本历史
 
+- **v3.0.2** (2026-09-12): **接入 GitHub Actions CI/CD**——新增 `ci.yml`（lint+test 自动校验）与 `release.yml`（打 tag 自动发布到 GitHub Release）；自更新地址正式指向 GitHub Release 资产；新增 `backend/tests/test_smoke.py`（9 用例）与 `electron/tests/self-check.js`；`README` 补充发版与自更新说明
+- **v3.0.1** (2026-09-08): 主窗改自绘顶栏（去系统标题栏/英文菜单，图标+ITV Desk+虚线+中文菜单+窗口按钮，背景跟随皮肤）；播放器停止/静音图标修正
 - **v3.0.0** (2026-09-03): **Electron 重构版**——桌面壳由 PyWebView 迁移至 Electron（根治 frameless 白框/缩放 bug）；双窗口架构（主窗管理 + 独立播放窗）；pywebview 兼容垫片实现前端零改动迁移；播放器新增 ESC 退出、倍速鼠标选择修复；数据备份/恢复 UI 重做（导入/导出实心按钮 + 加密导入导出）；17 套内置皮肤参数与现代控件对齐
 - **v2.0.19** (2026-09-01): 播放器黑方块根因修复（前端 dist 候选顺序 RES_DIR 优先）
 - **v2.0.9** (2026-09-01): 控件圆形样式迁入入口 CSS，绕过 WebView2 懒加载缓存
