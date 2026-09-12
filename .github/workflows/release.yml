@@ -133,8 +133,8 @@ jobs:
           $portSize = if ($portFile) { $portFile.Length } else { 0 }
           $portName = if ($portFile) { [IO.Path]::GetFileName($portFile.FullName) } else { "ITV Desk $ver.exe" }
           $nsisName = if ($nsisFile) { [IO.Path]::GetFileName($nsisFile.FullName) } else { "ITV Desk Setup $ver.exe" }
-          $portUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($portName -replace ' ', '%20')
-          $nsisUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($nsisName -replace ' ', '%20')
+          $portUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($portName -replace ' ', '-')
+          $nsisUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($nsisName -replace ' ', '-')
 
           $update = [ordered]@{
             version = $ver
