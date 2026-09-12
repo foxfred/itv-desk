@@ -117,6 +117,17 @@ jobs:
           path: dist_electron/**
           retention-days: 30
 
+      # 文件夹版：把 win-unpacked 打 zip 挂到 Release（给便携文件夹用户覆盖升级用）
+      - name: 上传文件夹版 zip 到 Release
+        if: ${{ !cancelled() }}
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $zip = "dist_electron/ITV-Desk-$ver-folder.zip"
+          Compress-Archive -Path "dist_electron/win-unpacked/*" -DestinationPath $zip -Force
+          $env:GH_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+          gh release upload "v$ver" $zip --repo foxfred/itv-desk --clobber
+          Write-Host "folder zip uploaded: $zip"
+
       # 回填 release/update.json 里 exe 的真实 sha256 + size，并推回 master
       - name: 回填 update.json 并推送 master
         if: ${{ !cancelled() }}
