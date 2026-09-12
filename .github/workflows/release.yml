@@ -8,10 +8,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "发布版本号（如 v3.0.1）"
-        required: true
 
 concurrency:
   group: release-${{ github.ref }}
