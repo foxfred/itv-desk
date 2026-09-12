@@ -876,19 +876,37 @@ async function doDownloadUpdate() {
   downloading.value = false
 }
 
-// 退出并安装更新：启动内嵌更新器（全自动）
+// 退出并安装更新：优先走 Electron 原生通道（启动安装包 + 整应用退出），无壳时走后端兜底
 async function doInstallUpdate() {
   if (!downloadPaths.value.length) return
-  ElMessageBox.confirm('即将退出程序并自动安装更新（只替换程序文件，你的频道/设置/台标数据将完整保留，更新完成后自动重启）。确定继续？', '安装更新', {
+  ElMessageBox.confirm('即将退出程序并启动安装包完成更新（只替换程序文件，你的频道/设置/台标数据将完整保留）。安装时目录选原来的安装目录即可直接覆盖升级。确定继续？', '安装更新', {
     confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
   }).then(async () => {
+    // 只需一个包：优先安装版（Setup 向导），否则取第一个
+    const target = downloadPaths.value.find((p) => /setup/i.test(p)) || downloadPaths.value[0]
+    const native = window.pywebview && window.pywebview.api && window.pywebview.api.install_update
+    if (native) {
+      try {
+        const res = await window.pywebview.api.install_update(target)
+        if (res === 'OK') {
+          updateInfo.is_installing = true
+          ElMessage.success('安装器已启动，程序即将退出，请在安装向导中完成更新…')
+        } else {
+          ElMessage.error(String(res || '启动安装器失败'))
+        }
+      } catch (e) {
+        ElMessage.error('启动安装器失败：' + (e && e.message))
+      }
+      return
+    }
+    // 无壳兜底：后端拉起安装包并退出
     const { data } = await appApi.applyUpdate(downloadPaths.value)
     if (data && data.ok && data.launched) {
       updateInfo.is_installing = true
-      ElMessage.success('更新器已启动，程序即将退出并自动安装…')
+      ElMessage.success('安装器已启动，程序即将退出，请在安装向导中完成更新…')
       setTimeout(() => { try { window.close() } catch (_) {} }, 800)
     } else {
-      ElMessage.error((data && data.error) || '启动更新器失败')
+      ElMessage.error((data && data.error) || '启动安装器失败')
     }
   }).catch(() => {})
 }
