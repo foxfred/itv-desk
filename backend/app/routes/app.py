@@ -138,19 +138,18 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
 
 
 class ApplyUpdateReq(BaseModel):
-    zip_paths: Optional[list] = None  # 多包路径列表
+    zip_paths: Optional[list] = None  # 多包路径列表（兼容旧字段名）
     zip_path: Optional[str] = None   # 兼容旧单包
 
 
 @router.post("/apply-update")
 def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
-    """退出并安装更新：支持多包（main + mpv）。全自动应用更新。
+    """退出并安装更新（exe 直装模式，更新包为 GitHub Release 的安装版/便携版 exe）。
 
-    - 打包态（frozen）：启动 IPTVCore.exe --update-only <zip_paths> 子进程，
-      主进程退出后子进程自动解压替换并重启，零手动。
-    - 开发态（非 frozen）：用本解释器后台启动 run.py --update-only。
+    直接启动下载好的安装包：NSIS 安装向导（用户选目录后覆盖旧版，数据文件不在程序
+    包内自动保留）或便携 exe；随后后端自行退出。Electron 壳优先走原生 IPC
+    install_update 通道（整应用退出更干净），本接口作为无壳环境兜底。
     """
-    # 统一成列表
     paths = []
     if body.zip_paths:
         paths = [p for p in body.zip_paths if p and os.path.isfile(p)]
@@ -158,34 +157,22 @@ def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
         paths.append(body.zip_path)
     if not paths:
         raise HTTPException(400, "更新包不存在，请先下载")
+
     import subprocess
     import threading
 
-    if getattr(sys, "frozen", False):
-        # 打包态：EXE 自己作为更新器子进程启动
-        exe = sys.executable
-        cmd = [exe, "--update-only"] + paths
-    else:
-        # 开发态：用 run.py --update-only
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        run_py = os.path.join(root, "run.py")
-        if not os.path.isfile(run_py):
-            raise HTTPException(500, "开发态找不到 run.py")
-        python = sys.executable or "python"
-        cmd = [python, run_py, "--update-only"] + paths
+    # 优先安装版（Setup 向导），否则取第一个
+    target = next((p for p in paths if "setup" in os.path.basename(p).lower()), paths[0])
+    try:
+        subprocess.Popen([target], cwd=os.path.dirname(os.path.abspath(target)))
+    except Exception as e:
+        raise HTTPException(500, f"启动安装包失败: {e}")
 
-    # 启动更新器子进程（CREATE_NO_WINDOW），等 2 秒后由更新器接管
-    subprocess.Popen(
-        cmd,
-        creationflags=0x08000000,  # CREATE_NO_WINDOW
-    )
-
-    # 1.5 秒后强制退出主进程（不等前端 window.close，PyWebView 下 window.close 可能无效）
+    # 1.5 秒后退出后端进程（Electron 壳会随后端退出/关窗收尾）
     def _force_quit():
         import time
         time.sleep(1.5)
-        import os
         os._exit(0)
 
     threading.Thread(target=_force_quit, daemon=True).start()
-    return {"ok": True, "launched": True, "mode": "auto", "packages": len(paths)}
+    return {"ok": True, "launched": True, "mode": "installer", "package": os.path.basename(target)}
