@@ -1,6 +1,5 @@
-# ITV Desk — 发布流水线（构建 + 部署 = 打版 + GitHub Release）
-# 桌面应用无服务器部署，"部署"落地为 GitHub Release 自动发布:
-#   打 tag v* → 前端构建 → 后端校验 → electron-builder 打 NSIS/便携版 → 自动上传 Release
+# ITV Desk — 发布流水线（构建 + 自动上传 GitHub Release + 回填 update.json）
+# 打 tag v* → 前端构建 → 后端校验 → electron-builder 打 NSIS/便携版 → 自动上传 Release 资产 → 回填 update.json
 name: Release
 
 on:
@@ -8,6 +7,9 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -54,7 +56,6 @@ jobs:
         working-directory: backend
         run: python -m pytest tests/ -v
 
-      # 把前端产物 + 后端源码带进 Windows 打包 job
       - name: 上传前端 dist + 后端源码
         uses: actions/upload-artifact@v4
         with:
@@ -93,7 +94,7 @@ jobs:
           $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
           npx electron --version
 
-      # electron-builder 检测到 CI + GITHUB_TOKEN 后，会自动创建/更新 Release 并上传资产
+      # electron-builder 带 GITHUB_TOKEN + publish:github 配置，自动上传 Release 资产
       - name: 打包 NSIS + 便携版 + 自动发布到 GitHub Release
         run: |
           $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
@@ -105,9 +106,9 @@ jobs:
 
       - name: 列出产物
         run: |
-          Get-ChildItem -Recurse dist_electron | Select-Object FullName, Length | Format-Table
+          Get-ChildItem -Recurse dist_electron -Filter *.exe | Select-Object FullName, Length | Format-Table
 
-      # 兜底：无论发布成功与否，都把产物上传为 workflow artifact（保留 30 天）
+      # 兜底：产物上传为 workflow artifact（保留 30 天）
       - name: 上传构建产物（兜底）
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -115,3 +116,41 @@ jobs:
           name: itvdesk-build-${{ github.ref_name }}
           path: dist_electron/**
           retention-days: 30
+
+      # 回填 release/update.json 里 exe 的真实 sha256 + size，并推回 master
+      - name: 回填 update.json 并推送 master
+        if: ${{ !cancelled() }}
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          Write-Host "version: $ver"
+
+          $nsisFile = Get-ChildItem -Path dist_electron -Filter "*Setup*.exe" -Recurse | Select-Object -First 1
+          $portFile = Get-ChildItem -Path dist_electron -Filter "*.exe" -Recurse | Where-Object { $_.Name -notlike "*Setup*" -and $_.Name -like "ITV*" } | Select-Object -First 1
+
+          $nsisSha = if ($nsisFile) { (Get-FileHash -Path $nsisFile.FullName -Algorithm SHA256).Hash.ToLower() } else { "PENDING" }
+          $portSha = if ($portFile) { (Get-FileHash -Path $portFile.FullName -Algorithm SHA256).Hash.ToLower() } else { "PENDING" }
+          $nsisSize = if ($nsisFile) { $nsisFile.Length } else { 0 }
+          $portSize = if ($portFile) { $portFile.Length } else { 0 }
+          $portName = if ($portFile) { [IO.Path]::GetFileName($portFile.FullName) } else { "ITV Desk $ver.exe" }
+          $nsisName = if ($nsisFile) { [IO.Path]::GetFileName($nsisFile.FullName) } else { "ITV Desk Setup $ver.exe" }
+          $portUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($portName -replace ' ', '%20')
+          $nsisUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($nsisName -replace ' ', '%20')
+
+          $update = [ordered]@{
+            version = $ver
+            notes = "v$ver：接入 GitHub Actions CI/CD，自更新地址指向 GitHub Release 资产。"
+            packages = @(
+              [ordered]@{ name = $portName; url = $portUrl; sha256 = $portSha; size = $portSize; role = "main" },
+              [ordered]@{ name = $nsisName; url = $nsisUrl; sha256 = $nsisSha; size = $nsisSize; role = "main" }
+            )
+          }
+          $json = $update | ConvertTo-Json -Depth 5
+          [System.IO.File]::WriteAllText("$PWD/release/update.json", $json, (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "update.json written:"
+          Get-Content release/update.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/update.json
+          git commit -m "chore: backfill update.json with real sha256 for v$ver [skip ci]"
+          git push origin HEAD:master
