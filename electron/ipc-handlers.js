@@ -3,7 +3,7 @@
 // 窗口类操作（移动/缩放/置顶/全屏…）作用于「发起调用的窗口」（event.sender），
 // 与原 pywebview 双窗口 js_api 语义一致。
 
-const { ipcMain, dialog, BrowserWindow } = require('electron');
+const { ipcMain, dialog, BrowserWindow, app } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -224,6 +224,29 @@ function registerIpcHandlers(ctx) {
     restore_main_window() {
       const mw = getMainWindow();
       if (mw && !mw.isDestroyed() && mw.isMinimized()) mw.restore();
+      return 'OK';
+    },
+
+    // ---------- 应用自更新：启动下载好的安装包并退出应用 ----------
+    // args: [exePath] —— update_staging 里下载好的 NSIS Setup / 便携 exe。
+    // 流程：detached 启动安装器（可见向导）→ 500ms 后 app.quit()
+    //（window-all-closed → will-quit → 杀后端子进程，整个应用干净退出）。
+    install_update(args) {
+      const [exePath] = args;
+      if (!exePath || !fs.existsSync(exePath)) return 'ERROR: 更新包不存在: ' + exePath;
+      try {
+        const child = spawn(exePath, [], {
+          detached: true,
+          stdio: 'ignore',
+          cwd: path.dirname(exePath),
+        });
+        child.unref();
+      } catch (e) {
+        return 'ERROR: ' + e.message;
+      }
+      setTimeout(() => {
+        try { app.quit(); } catch { /* ignore */ }
+      }, 500);
       return 'OK';
     },
   };
