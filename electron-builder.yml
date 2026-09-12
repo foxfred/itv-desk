@@ -45,3 +45,9 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   shortcutName: ITV Desk
+
+# GitHub 自动发布：打 tag 触发时 electron-builder 自动上传 Release 资产
+publish:
+  provider: github
+  owner: foxfred
+  repo: itv-desk
