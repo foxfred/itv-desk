@@ -77,6 +77,8 @@ def _build_opener(settings=None):
 @router.post("/check-update")
 def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
     # 内置默认更新清单地址（用户可在设置页覆盖）
+    # 默认走仓库内 release/update.json（raw 清单模式，零依赖开箱即用）。
+    # 包地址由 release/update.json 内 packages[].url 指定，可指向 GitHub Release 资产（zip/exe）。
     DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json"
     url = (body.url if body else None) or settings.get("update_url", "") or DEFAULT_UPDATE_URL
     try:
