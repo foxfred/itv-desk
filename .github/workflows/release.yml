@@ -93,52 +93,35 @@ jobs:
           $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
           npx electron --version
 
+      # ---- 打包：--dir 只打文件夹，不自动发 release，避免 electron-builder 尝试自动发布 ----
       - name: 打包 NSIS + 便携版
         run: |
           $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
-          npm run dist:folder
-          npm run dist
+          npx electron-builder --dir --win
+          npx electron-builder --win
 
       - name: 列出产物
         run: |
           Get-ChildItem -Recurse dist_electron | Select-Object FullName, Length | Format-Table
 
-      # ---- 自动创建 GitHub Release 并上传安装包 ----
-      - name: 创建 GitHub Release
-        id: create_release
-        if: github.event_name == 'push'
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: "ITV Desk ${{ github.ref_name }}"
-          draft: false
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
-          generate_release_notes: false
-
-      - name: 列出并打包 Release 资产
-        if: github.event_name == 'push'
-        run: |
-          # 把所有产物打成单个 zip 作为 Release 资产，避免 glob 在 GH Actions 不展开
-          Get-ChildItem dist_electron -Recurse -File | ForEach-Object { $_.FullName }
-          Compress-Archive -Path dist_electron\* -DestinationPath itvdesk-${{ github.ref_name }}.zip -Force
-          Write-Host "打包完成: itvdesk-${{ github.ref_name }}.zip"
-
-      - name: 上传 Release 资产（手动触发时跳过）
-        if: github.event_name == 'push'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: "itvdesk-${{ github.ref_name }}.zip"
-          asset_name: "itvdesk-${{ github.ref_name }}.zip"
-          asset_content_type: application/zip
-
-      # 兜底：无论是否创建 Release，都把产物上传为 workflow artifact 便于排查
-      - name: 上传构建产物（兜底）
-        if: ${{ !cancelled() }}
+      # ---- 上传为 workflow artifact（始终执行，供手动下载或 CI 排查） ----
+      - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: itvdesk-build-${{ github.ref_name }}
           path: dist_electron/**
-          retention-days: 7
+          retention-days: 30
+
+      # ---- 上传 Release 资产（仅在 tag 推送时执行，手动触发不上传） ----
+      - name: 上传 Release 资产
+        if: github.event_name == 'push'
+        run: |
+          # 收集 exe 和 nsis installer
+          $files = Get-ChildItem -Path "dist_electron" -Recurse -File -Include "*.exe","*.zip"
+          Write-Host "共 $($files.Count) 个资产待上传"
+          foreach ($f in $files) {
+            Write-Host "上传: $($f.Name)"
+            gh release upload ${{ github.ref_name }} $f.FullName --repo foxfred/itv-desk --clobber
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
