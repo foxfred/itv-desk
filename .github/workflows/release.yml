@@ -1,0 +1,148 @@
+# ITV Desk — 发布流水线（构建 + 部署 = 打版 + GitHub Release）
+# 桌面应用无服务器部署，"部署"落地为 GitHub Release 自动发布:
+#   打 tag v* → 前端构建 → 后端校验 → electron-builder 打 NSIS/便携版 → 上传 Release
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "发布版本号（如 v3.0.1）"
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ============ 1. 前端构建 + 后端校验 ============
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装根依赖
+        run: npm ci
+
+      - name: 安装前端依赖并构建
+        working-directory: frontend-new
+        run: |
+          npm ci
+          npm run build
+
+      - name: 安装后端依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install httpx pytest
+
+      - name: 后端语法 + 导入校验
+        run: |
+          python -m compileall -q backend
+          python -c "import sys; sys.path.insert(0,'backend'); import app.main; print('后端导入成功')"
+
+      - name: 运行后端冒烟测试
+        working-directory: backend
+        run: python -m pytest tests/ -v
+
+      # 把前端产物 + 后端源码带进 Windows 打包 job
+      - name: 上传前端 dist + 后端源码
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-context
+          path: |
+            frontend-new/dist
+            backend
+          retention-days: 1
+
+  # ============ 2. Windows 打版 + 发布 ============
+  build-and-publish:
+    runs-on: windows-latest
+    needs: prepare
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 恢复前端 dist + 后端源码
+        uses: actions/download-artifact@v4
+        with:
+          name: build-context
+          path: .
+
+      - name: 安装根依赖
+        run: |
+          $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+          npm ci
+
+      - name: 安装 Electron
+        run: |
+          $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+          npx electron --version
+
+      - name: 打包 NSIS + 便携版
+        run: |
+          $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+          npm run dist:folder
+          npm run dist
+
+      - name: 列出产物
+        run: |
+          Get-ChildItem -Recurse dist_electron | Select-Object FullName, Length | Format-Table
+
+      # ---- 自动创建 GitHub Release 并上传安装包 ----
+      - name: 创建 GitHub Release
+        id: create_release
+        if: github.event_name == 'push'
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: "ITV Desk ${{ github.ref_name }}"
+          draft: false
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          generate_release_notes: false
+
+      - name: 列出并打包 Release 资产
+        if: github.event_name == 'push'
+        run: |
+          # 把所有产物打成单个 zip 作为 Release 资产，避免 glob 在 GH Actions 不展开
+          Get-ChildItem dist_electron -Recurse -File | ForEach-Object { $_.FullName }
+          Compress-Archive -Path dist_electron\* -DestinationPath itvdesk-${{ github.ref_name }}.zip -Force
+          Write-Host "打包完成: itvdesk-${{ github.ref_name }}.zip"
+
+      - name: 上传 Release 资产（手动触发时跳过）
+        if: github.event_name == 'push'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: "itvdesk-${{ github.ref_name }}.zip"
+          asset_name: "itvdesk-${{ github.ref_name }}.zip"
+          asset_content_type: application/zip
+
+      # 兜底：无论是否创建 Release，都把产物上传为 workflow artifact 便于排查
+      - name: 上传构建产物（兜底）
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: itvdesk-build-${{ github.ref_name }}
+          path: dist_electron/**
+          retention-days: 7
