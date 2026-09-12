@@ -132,6 +132,7 @@ class Config:
         "mirror": "不使用加速",
         "proxy": "",
         # 应用自更新（内置 GitHub raw 更新清单地址，开箱即用，用户可在设置页修改）
+        # v3.0.2 起：指向 GitHub 仓库 release/update.json（每次发版由 release 流水线自动更新）
         "update_url": "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json",
         # 检查
         "check_timeout": 1.5,
