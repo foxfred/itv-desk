@@ -1,11 +1,18 @@
 {
   "version": "3.0.2",
-  "notes": "v3.0.2：接入 GitHub Actions CI/CD（ci.yml 自动校验 + release.yml 自动发版）；自更新地址正式指向 GitHub Release，发版即下载。",
+  "notes": "v3.0.2：接入 GitHub Actions CI/CD（ci.yml 自动校验 + release.yml 自动发版）；自更新地址正式指向 GitHub Release 资产，发版即下载。",
   "packages": [
     {
-      "name": "itv-desk-3.0.2-portable.exe",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/itv-desk-3.0.2-portable.exe",
-      "sha256": "",
+      "name": "ITV Desk 3.0.2.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/ITV%20Desk%203.0.2.exe",
+      "sha256": "PENDING",
+      "size": 0,
+      "role": "main"
+    },
+    {
+      "name": "ITV Desk Setup 3.0.2.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/ITV%20Desk%20Setup%203.0.2.exe",
+      "sha256": "PENDING",
       "size": 0,
       "role": "main"
     }
