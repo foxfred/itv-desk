@@ -3,8 +3,8 @@
   "notes": "v3.0.2：接入 GitHub Actions CI/CD（ci.yml 自动校验 + release.yml 自动发版）；自更新地址正式指向 GitHub Release，发版即下载。",
   "packages": [
     {
-      "name": "itv-desk-3.0.2-Portable.exe",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/itv-desk-3.0.2-Portable.exe",
+      "name": "itv-desk-3.0.2-portable.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.0.2/itv-desk-3.0.2-portable.exe",
       "sha256": "",
       "size": 0,
       "role": "main"
