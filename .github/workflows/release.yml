@@ -149,7 +149,7 @@ jobs:
 
           $update = [ordered]@{
             version = $ver
-            notes = "v$ver：接入 GitHub Actions CI/CD，自更新地址指向 GitHub Release 资产。"
+            notes = "ITV Desk v$ver 更新。"
             packages = @(
               [ordered]@{ name = $portName; url = $portUrl; sha256 = $portSha; size = $portSize; role = "main" },
               [ordered]@{ name = $nsisName; url = $nsisUrl; sha256 = $nsisSha; size = $nsisSize; role = "main" }
