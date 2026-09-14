@@ -113,17 +113,45 @@ def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
 class DownloadUpdateReq(BaseModel):
     url: str
     filename: Optional[str] = None
+    sha256: Optional[str] = None  # 清单里的期望摘要（有值则必须匹配）
+    size: Optional[int] = None    # 清单里的期望字节数（有值则必须匹配）
+
+
+def _rm_quiet(path):
+    try:
+        if path and os.path.isfile(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def _sha256_file(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 @router.post("/download-update")
 def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), settings=Depends(get_settings)):
+    """下载更新包 + 完整性校验。
+
+    v3.1.2 起必须校验：清单里带 sha256/size 就严格比对，不匹配立即删掉残包并报错。
+    历史 bug：下载中断（GB 级包只下到 9MB）代码不校验、照样进安装环节 →
+    「能检测到更新、点了更新却什么都没装上」。
+    """
     if not body.url:
         raise HTTPException(400, "缺少下载地址")
+    dest = ""
     try:
         os.makedirs(os.path.join(data_dir, "update_staging"), exist_ok=True)
         fn = body.filename or os.path.basename(body.url.split("?")[0]) or "update_package"
         fn = os.path.basename(fn)
         dest = os.path.join(data_dir, "update_staging", fn)
+        # 已有同名残包先清掉，避免旧文件冒充新包
+        _rm_quiet(dest)
         opener = _build_opener(settings)
         req = urllib.request.Request(body.url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
         with opener.open(req, timeout=600) as resp, open(dest, "wb") as f:
@@ -132,9 +160,21 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
                 if not chunk:
                     break
                 f.write(chunk)
-        return {"ok": True, "path": dest, "size": os.path.getsize(dest)}
     except Exception as e:
+        _rm_quiet(dest)
         raise HTTPException(500, f"下载失败: {e}")
+
+    actual = os.path.getsize(dest)
+    if body.size and int(body.size) > 0 and actual != int(body.size):
+        _rm_quiet(dest)
+        got_mb = round(actual / 1048576, 1)
+        want_mb = round(int(body.size) / 1048576, 1)
+        raise HTTPException(500, f"更新包下载不完整（{got_mb}MB / {want_mb}MB），已删除残包，请重试")
+    if body.sha256:
+        if _sha256_file(dest).lower() != str(body.sha256).strip().lower():
+            _rm_quiet(dest)
+            raise HTTPException(500, "更新包校验失败（文件损坏），已删除，请重试下载")
+    return {"ok": True, "path": dest, "size": actual}
 
 
 class ApplyUpdateReq(BaseModel):
@@ -144,11 +184,11 @@ class ApplyUpdateReq(BaseModel):
 
 @router.post("/apply-update")
 def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
-    """退出并安装更新（exe 直装模式，更新包为 GitHub Release 的安装版/便携版 exe）。
+    """无桌面外壳时的兜底：仅支持 exe 安装包直启。
 
-    直接启动下载好的安装包：NSIS 安装向导（用户选目录后覆盖旧版，数据文件不在程序
-    包内自动保留）或便携 exe；随后后端自行退出。Electron 壳优先走原生 IPC
-    install_update 通道（整应用退出更干净），本接口作为无壳环境兜底。
+    文件夹版（*-folder.zip）的覆盖安装必须由 Electron 外壳完成（外壳负责整应用退出 +
+    「等退出→解压覆盖运行目录→自动重启」脚本），后端进程自身文件被占用无法自替换，
+    因此这里明确拒绝，避免再出现"装到别处、版本号没变"的情况。
     """
     paths = []
     if body.zip_paths:
@@ -158,11 +198,15 @@ def apply_update(body: ApplyUpdateReq, data_dir=Depends(get_data_dir)):
     if not paths:
         raise HTTPException(400, "更新包不存在，请先下载")
 
+    exes = [p for p in paths if p.lower().endswith((".exe", ".msi"))]
+    if not exes:
+        raise HTTPException(400, "文件夹版更新需在桌面客户端里点击「立即更新」完成：程序需先整体退出，再由外壳覆盖自身程序目录。")
+
     import subprocess
     import threading
 
     # 优先安装版（Setup 向导），否则取第一个
-    target = next((p for p in paths if "setup" in os.path.basename(p).lower()), paths[0])
+    target = next((p for p in exes if "setup" in os.path.basename(p).lower()), exes[0])
     try:
         subprocess.Popen([target], cwd=os.path.dirname(os.path.abspath(target)))
     except Exception as e:

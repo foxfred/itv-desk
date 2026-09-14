@@ -32,6 +32,7 @@ const METHODS = [
   'show_window',       // 退出画中画恢复播放窗
   'restore_main_window', // 恢复主窗（不抢前台）
   'install_update',    // 应用自更新：启动下载的安装包并退出应用（SettingsView）
+  'apply_folder_update', // 应用自更新（文件夹版）：覆盖当前运行目录后自动重启（SettingsView）
 ];
 
 const api = {};

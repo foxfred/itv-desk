@@ -128,24 +128,22 @@ jobs:
           gh release upload "v$ver" $zip --repo foxfred/itv-desk --clobber
           Write-Host "folder zip uploaded: $zip"
 
-      # 回填 release/update.json 里 exe 的真实 sha256 + size，并推回 master
+      # 回填 release/update.json：只挂「文件夹版 zip」一个包（软件内自更新用的就是这个）。
+      # 为什么只挂 zip：zip 解压后能直接覆盖「当前程序所在目录」，版本号一定会刷新；
+      # 而 exe 安装包会在向导里装到 %LOCALAPPDATA%\Programs 等默认目录，
+      # 与用户实际打开的目录不是一处 —— v3.1.1 的「更新后版本号没变」就是这个原因。
       - name: 回填 update.json 并推送 master
         if: ${{ !cancelled() }}
         run: |
           $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
           Write-Host "version: $ver"
 
-          $nsisFile = Get-ChildItem -Path dist_electron -Filter "*Setup*.exe" -Recurse | Select-Object -First 1
-          $portFile = Get-ChildItem -Path dist_electron -Filter "*.exe" -Recurse | Where-Object { $_.Name -notlike "*Setup*" -and $_.Name -like "ITV*" } | Select-Object -First 1
-
-          $nsisSha = if ($nsisFile) { (Get-FileHash -Path $nsisFile.FullName -Algorithm SHA256).Hash.ToLower() } else { "PENDING" }
-          $portSha = if ($portFile) { (Get-FileHash -Path $portFile.FullName -Algorithm SHA256).Hash.ToLower() } else { "PENDING" }
-          $nsisSize = if ($nsisFile) { $nsisFile.Length } else { 0 }
-          $portSize = if ($portFile) { $portFile.Length } else { 0 }
-          $portName = if ($portFile) { [IO.Path]::GetFileName($portFile.FullName) } else { "ITV Desk $ver.exe" }
-          $nsisName = if ($nsisFile) { [IO.Path]::GetFileName($nsisFile.FullName) } else { "ITV Desk Setup $ver.exe" }
-          $portUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($portName -replace ' ', '-')
-          $nsisUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($nsisName -replace ' ', '-')
+          $zipName = "ITV-Desk-$ver-folder.zip"
+          $zipPath = "dist_electron/$zipName"
+          if (-not (Test-Path $zipPath)) { throw "folder zip 不存在，无法回填 update.json: $zipPath" }
+          $zipSha = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLower()
+          $zipSize = (Get-Item -Path $zipPath).Length
+          $zipUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/$zipName"
 
           # 保留仓库里已写好的更新说明（若为空或过短才退回默认文案）
           $notes = "ITV Desk v$ver 更新。"
@@ -158,8 +156,7 @@ jobs:
             version = $ver
             notes = $notes
             packages = @(
-              [ordered]@{ name = $portName; url = $portUrl; sha256 = $portSha; size = $portSize; role = "main" },
-              [ordered]@{ name = $nsisName; url = $nsisUrl; sha256 = $nsisSha; size = $nsisSize; role = "main" }
+              [ordered]@{ name = $zipName; url = $zipUrl; sha256 = $zipSha; size = $zipSize; role = "folder" }
             )
           }
           $json = $update | ConvertTo-Json -Depth 5

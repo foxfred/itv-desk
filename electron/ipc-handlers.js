@@ -7,6 +7,72 @@ const { ipcMain, dialog, BrowserWindow, app } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+
+// ---------------------------------------------------------------------------
+// 文件夹版自更新脚本（纯 ASCII 内容，路径走 base64 传参 → 彻底避开中文/空格路径的
+// 编码坑；脚本本体不含任何中文，符合 Windows 批处理/脚本编码约束）。
+// 职责：等旧进程完全退出 → 解压新包覆盖程序目录 → 重新打开新版本 → 清理安装包。
+// ---------------------------------------------------------------------------
+const APPLY_PS1 = [
+  "$ErrorActionPreference = 'SilentlyContinue'",
+  "$log = Join-Path $env:TEMP 'itvdesk_update.log'",
+  "function Log([string]$m) { Add-Content -LiteralPath $log -Value ('[' + (Get-Date).ToString('s') + '] ' + $m) -Encoding UTF8 }",
+  "function Dec([string]$s) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($s)) }",
+  "$base = $PSScriptRoot",
+  "$plan = Get-Content -LiteralPath (Join-Path $base 'plan.json') -Raw -Encoding UTF8 | ConvertFrom-Json",
+  "$zip = Dec $plan.zip_b64",
+  "$target = Dec $plan.target_b64",
+  "$exe = Dec $plan.exe_b64",
+  "$appPid = [int]$plan.app_pid",
+  "Log '=== update start ==='",
+  "Log ('ver=' + $plan.version)",
+  "Log ('zip=' + $zip)",
+  "Log ('target=' + $target)",
+  "for ($i = 0; $i -lt 240; $i++) {",
+  "  if (-not (Get-Process -Id $appPid -ErrorAction SilentlyContinue)) { break }",
+  "  Start-Sleep -Milliseconds 500",
+  "}",
+  "Start-Sleep -Seconds 2",
+  "Log 'old process exited, extracting'",
+  "$ok = $false",
+  "$tar = Join-Path $env:SystemRoot 'System32\\tar.exe'",
+  "for ($i = 0; $i -lt 20; $i++) {",
+  "  if (Test-Path $tar) {",
+  "    & $tar -xf $zip -C $target 2>$null",
+  "    if ($LASTEXITCODE -eq 0) { $ok = $true; Log ('extracted by tar (try ' + $i + ')'); break }",
+  "  }",
+  "  try {",
+  "    Expand-Archive -LiteralPath $zip -DestinationPath $target -Force -ErrorAction Stop",
+  "    $ok = $true",
+  "    Log ('extracted by Expand-Archive (try ' + $i + ')')",
+  "    break",
+  "  } catch {",
+  "    Log ('extract retry ' + $i + ': ' + $_.Exception.Message)",
+  "    Start-Sleep -Seconds 2",
+  "  }",
+  "}",
+  "if ($ok) { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue } else { Log 'EXTRACT FAILED' }",
+  "Start-Sleep -Milliseconds 800",
+  "Start-Process -FilePath $exe -WorkingDirectory $target",
+  "Log 'relaunched, done'",
+  "Start-Sleep -Seconds 3",
+  "Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue",
+  "",
+].join("\r\n");
+
+function powershellExe() {
+  const root = process.env.SystemRoot || 'C:\\Windows';
+  const abs = path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return fs.existsSync(abs) ? abs : 'powershell.exe';
+}
+
+function sha256File(p) {
+  const h = crypto.createHash('sha256');
+  h.update(fs.readFileSync(p));
+  return h.digest('hex');
+}
 
 function registerIpcHandlers(ctx) {
   const {
@@ -244,6 +310,68 @@ function registerIpcHandlers(ctx) {
       } catch (e) {
         return 'ERROR: ' + e.message;
       }
+      setTimeout(() => {
+        try { app.quit(); } catch { /* ignore */ }
+      }, 500);
+      return 'OK';
+    },
+
+    // ---------- 应用自更新（文件夹版）：直接覆盖当前运行目录 ----------
+    // args: [zipPath, expectedSha256, expectedSize, version]
+    // 为什么这样做：正在运行的 exe / dll / resources 被系统锁定，进程内无法覆盖自己；
+    // 而 NSIS 安装向导默认装到 %LOCALAPPDATA%\Programs\ITV Desk，和"当前打开的程序目录"
+    // 根本不是一处 —— 这正是「能检测到更新、更新后版本号却没变」的根因。
+    // 现在的链路：校验完整性 → 写「等退出→解压覆盖→自动重开」脚本 → detached 启动
+    // → app.quit() 干净退出（连带杀后端子进程）→ 脚本接管覆盖 → 自动重启新版本。
+    // 程序目录 = 正在运行的 exe 所在目录；频道/设置/台标等数据文件不在更新包内，不受影响。
+    apply_folder_update(args) {
+      const [zipPath, expectedSha256, expectedSize, version] = args || [];
+      if (!zipPath || !fs.existsSync(zipPath)) return 'ERROR: 更新包不存在: ' + zipPath;
+      if (!/\.zip$/i.test(String(zipPath))) return 'ERROR: 不是文件夹版更新包: ' + zipPath;
+      if (!app.isPackaged) return 'ERROR: 开发模式下不执行覆盖更新（请用 npm start 运行，或手动更新）';
+
+      // 1) 完整性校验：尺寸 + sha256，任一项不符立即中止，绝不拿半截包去覆盖程序
+      try {
+        const st = fs.statSync(zipPath);
+        if (expectedSize && Number(expectedSize) > 0 && st.size !== Number(expectedSize)) {
+          return `ERROR: 更新包不完整（${st.size} / ${expectedSize} 字节），已中止更新，请重新下载`;
+        }
+        if (expectedSha256 && sha256File(zipPath) !== String(expectedSha256).trim().toLowerCase()) {
+          return 'ERROR: 更新包校验失败（文件损坏），已中止更新，请重新下载';
+        }
+      } catch (e) {
+        return 'ERROR: 校验更新包失败: ' + e.message;
+      }
+
+      const exePath = process.execPath;              // H:\...\ITV Desk.exe
+      const targetDir = path.dirname(exePath);       // 程序目录（运行目录）
+      const workDir = path.join(os.tmpdir(), `itvdesk_update_${process.pid}_${Date.now()}`);
+      const b64 = (p) => Buffer.from(String(p), 'utf8').toString('base64');
+      try {
+        fs.mkdirSync(workDir, { recursive: true });
+        fs.writeFileSync(path.join(workDir, 'plan.json'), JSON.stringify({
+          zip_b64: b64(zipPath),
+          target_b64: b64(targetDir),
+          exe_b64: b64(exePath),
+          app_pid: process.pid,
+          version: String(version || ''),
+        }, null, 2), 'ascii');
+        fs.writeFileSync(path.join(workDir, 'apply.ps1'), APPLY_PS1, 'ascii');
+      } catch (e) {
+        return 'ERROR: 写入更新脚本失败: ' + e.message;
+      }
+
+      try {
+        const child = spawn(powershellExe(), [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+          '-File', path.join(workDir, 'apply.ps1'),
+        ], { detached: true, stdio: 'ignore', cwd: workDir, windowsHide: true });
+        child.unref();
+      } catch (e) {
+        return 'ERROR: 启动更新脚本失败: ' + e.message;
+      }
+
+      console.log(`[update] 文件夹版覆盖更新已排队: ${zipPath} -> ${targetDir}`);
       setTimeout(() => {
         try { app.quit(); } catch { /* ignore */ }
       }, 500);

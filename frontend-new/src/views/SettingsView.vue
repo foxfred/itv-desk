@@ -85,16 +85,17 @@
                    <span class="ur-title">发现新版本 v{{ updateInfo.latest }}</span>
                    <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
                    <div class="ur-actions">
-                     <el-button v-if="updateInfo.packages.length" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
-                       下载更新包
+                     <el-button v-if="updateInfo.packages.length && !updateInfo.is_installing" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
+                       {{ downloadPaths.length ? '重新下载更新包' : '下载更新包' }}
                      </el-button>
                      <el-button
                        v-if="downloadPaths.length && !updateInfo.is_installing"
                        type="warning" size="small"
                        @click="doInstallUpdate"
-                     >退出并安装更新</el-button>
-                     <span v-if="updateInfo.is_installing" class="ur-installing">更新器已启动，程序即将退出并自动安装…</span>
+                     >立即更新并重启</el-button>
+                     <span v-if="updateInfo.is_installing" class="ur-installing">正在更新：程序即将关闭，覆盖完成会自动重新打开…</span>
                    </div>
+                   <p class="ur-notes">更新会自动覆盖「当前程序所在目录」，无需选择安装路径；频道、设置、台标等数据不会被覆盖。</p>
                  </template>
                  <span v-else class="ur-title">已是最新版本</span>
                </div>
@@ -717,6 +718,7 @@ const checking = ref(false)
 const updateInfo = reactive({ has_update: false, latest: '', notes: '', packages: [], is_installing: false })
 const downloading = ref(false)
 const downloadPaths = ref([])  // 多包下载路径列表
+const downloadPkgs = ref([])   // 与 downloadPaths 一一对应的清单条目（含 sha256/size/role）
 // #59 加密备份 / 恢复
 const encFile = ref(null)
 const encFileInput = ref(null)
@@ -1101,6 +1103,7 @@ async function checkForUpdate() {
   updateInfo.notes = ''
   updateInfo.packages = []
   downloadPaths.value = []
+  downloadPkgs.value = []
   try {
     const { data } = await appApi.checkUpdate(form.update_url || null)
     curVersion.value = data.current || curVersion.value
@@ -1116,47 +1119,97 @@ async function checkForUpdate() {
   checking.value = false
 }
 
-// 下载更新包（多包依次下载）
+// 判断是否「文件夹版整包」（zip）：它才是能直接覆盖当前运行目录的更新包
+function isFolderPkg(pkg) {
+  if (!pkg) return false
+  if (String(pkg.role || '').toLowerCase() === 'folder') return true
+  return /-folder\.zip$/i.test(String(pkg.name || pkg.url || ''))
+}
+
+// 下载更新包：优先只下「文件夹版」整包（下载完校验完整性，不完整直接报错并删残包）
 async function doDownloadUpdate() {
   if (!updateInfo.packages.length) return
   downloading.value = true
   downloadPaths.value = []
+  downloadPkgs.value = []
   try {
-    for (const pkg of updateInfo.packages) {
-      const { data } = await appApi.downloadUpdate(pkg.url, pkg.name || null)
+    const folder = updateInfo.packages.filter(isFolderPkg)
+    const list = folder.length ? folder : updateInfo.packages
+    for (const pkg of list) {
+      const { data } = await appApi.downloadUpdate(pkg.url, pkg.name || null, pkg.sha256 || null, pkg.size || null)
       downloadPaths.value.push(data.path)
+      downloadPkgs.value.push(pkg)
     }
-    ElMessage.success(`已下载 ${downloadPaths.value.length} 个更新包到暂存目录`)
+    const mb = Math.round((downloadPkgs.value.reduce((s, p) => s + (Number(p.size) || 0), 0) / 1048576) * 10) / 10
+    ElMessage.success(`已下载并校验更新包${mb ? `（${mb}MB）` : ''}，可以点「立即更新并重启」`)
   } catch (e) {
+    downloadPaths.value = []
+    downloadPkgs.value = []
     ElMessage.error('下载失败：' + (e.response?.data?.detail || e.message))
   }
   downloading.value = false
 }
 
-// 退出并安装更新：优先走 Electron 原生通道（启动安装包 + 整应用退出），无壳时走后端兜底
+// 立即更新：文件夹版走「覆盖当前运行目录」通道（校验→退出→覆盖→自动重启），无需选目录
 async function doInstallUpdate() {
   if (!downloadPaths.value.length) return
-  ElMessageBox.confirm('即将退出程序并启动安装包完成更新（只替换程序文件，你的频道/设置/台标数据将完整保留）。安装时目录选原来的安装目录即可直接覆盖升级。确定继续？', '安装更新', {
-    confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
-  }).then(async () => {
-    // 只需一个包：优先安装版（Setup 向导），否则取第一个
-    const target = downloadPaths.value.find((p) => /setup/i.test(p)) || downloadPaths.value[0]
-    const native = window.pywebview && window.pywebview.api && window.pywebview.api.install_update
-    if (native) {
-      try {
-        const res = await window.pywebview.api.install_update(target)
-        if (res === 'OK') {
-          updateInfo.is_installing = true
-          ElMessage.success('安装器已启动，程序即将退出，请在安装向导中完成更新…')
-        } else {
-          ElMessage.error(String(res || '启动安装器失败'))
-        }
-      } catch (e) {
-        ElMessage.error('启动安装器失败：' + (e && e.message))
-      }
+  const ver = updateInfo.latest || ''
+  const pkg = downloadPkgs.value[0] || {}
+  const target = pkg.path || downloadPaths.value[0]
+  // 有文件夹版整包 → 覆盖运行目录（唯一能真正把版本号刷新的方式）
+  if (isFolderPkg(pkg) || /\.zip$/i.test(String(downloadPaths.value[0]))) {
+    try {
+      await ElMessageBox.confirm(
+        `即将更新到 v${ver}：\n\n程序会自动关闭，用新版本覆盖「当前程序所在目录」里的程序文件，完成后自动重新打开。\n\n· 不需要选择安装路径，不会再出现“装到别处、版本号没变”\n· 频道、设置、台标、缓存等数据不在更新包内，不会被覆盖删除\n· 更新过程约需十几秒到一分钟，期间请不要手动双击程序\n\n确定现在更新吗？`,
+        `更新到 v${ver}`, { confirmButtonText: '立即更新', cancelButtonText: '取消', type: 'warning' })
+    } catch { return }
+    const native = window.pywebview && window.pywebview.api && window.pywebview.api.apply_folder_update
+    if (!native) {
+      ElMessage.error('当前环境不支持自动覆盖更新，请手动下载更新包解压覆盖程序目录')
       return
     }
-    // 无壳兜底：后端拉起安装包并退出
+    updateInfo.is_installing = true
+    let res = ''
+    try {
+      res = await native(target, pkg.sha256 || null, pkg.size || null, ver)
+    } catch (e) {
+      updateInfo.is_installing = false
+      ElMessage.error('更新失败：' + (e && e.message))
+      return
+    }
+    if (res === 'OK') {
+      ElMessage.success('更新已开始，程序即将关闭，稍后会自动重新打开新版本…')
+    } else {
+      updateInfo.is_installing = false
+      ElMessage.error(String(res || '启动更新失败').replace(/^ERROR:\s*/, ''))
+    }
+    return
+  }
+
+  // 兼容旧格式（exe 安装包）：启动安装向导，需在向导里手动选择原目录
+  try {
+    await ElMessageBox.confirm('即将退出程序并启动安装包。注意：安装向导里请把安装目录改成当前程序所在目录，否则会装到别处、版本号不变。确定继续？', '安装更新', {
+      confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
+    })
+  } catch { return }
+  const exeTarget = downloadPaths.value.find((p) => /setup/i.test(p)) || downloadPaths.value[0]
+  const nativeInstall = window.pywebview && window.pywebview.api && window.pywebview.api.install_update
+  if (nativeInstall) {
+    try {
+      const res = await nativeInstall(exeTarget)
+      if (res === 'OK') {
+        updateInfo.is_installing = true
+        ElMessage.success('安装器已启动，程序即将退出，请在安装向导中完成更新…')
+      } else {
+        ElMessage.error(String(res || '启动安装器失败'))
+      }
+    } catch (e) {
+      ElMessage.error('启动安装器失败：' + (e && e.message))
+    }
+    return
+  }
+  // 无壳兜底：后端拉起安装包并退出
+  try {
     const { data } = await appApi.applyUpdate(downloadPaths.value)
     if (data && data.ok && data.launched) {
       updateInfo.is_installing = true
@@ -1165,7 +1218,9 @@ async function doInstallUpdate() {
     } else {
       ElMessage.error((data && data.error) || '启动安装器失败')
     }
-  }).catch(() => {})
+  } catch (e) {
+    ElMessage.error('启动安装器失败：' + (e.response?.data?.detail || e.message))
+  }
 }
 
 // #59 加密导出备份
