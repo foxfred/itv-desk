@@ -8,3 +8,10 @@ lxml==6.1.1
 aiohttp==3.14.3
 requests>=2.31.0
 PySocks>=1.7.1
+
+# 频道名校正（方案书-频道名自动校正）：本地离线台标/字幕 OCR
+# 选它而不是 PaddleOCR：同为 PaddleOCR 系、但走 onnxruntime，模型约 15MB，
+# 不拖 paddlepaddle 全家桶（后者打包体积 +500MB 以上）。
+rapidocr-onnxruntime==1.4.4
+onnxruntime>=1.30.0
+Pillow>=10.0.0

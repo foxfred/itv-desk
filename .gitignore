@@ -14,23 +14,34 @@ release/*.zip
 # 运行期数据（用户本地状态，不入库）
 *.db
 *.log
+*.tmp
 settings.json
 channels_cache.json
 channel_tags.json
 fake_live_tags.json
 epg_history.json
+epg_cache.json
+epg_source.json
 url_history.json
 mirror_history.json
 logos_online_index.json
 repair_history.jsonl
 logos/
 导出*.m3u
+# 频道名校正 / 别名 / 统计（运行期产物，含用户本地数据）
+channel_alias.json
+namefix_suggestions.json
+namefix_undo.json
+health_history.json
+screenshots/
+screenshots_index.json
+subscriptions.json
 
 # 临时/归档
 _bak_*/
 _trash_*/
-*.tmp
 *.bak
+# 注意：*.tmp 已在「运行期数据」段落统一忽略
 
 # 工具/IDE 内部目录
 .workbuddy/

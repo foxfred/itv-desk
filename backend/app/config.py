@@ -151,6 +151,26 @@ class Config:
         "checker_batch_size": 10,
         # 播放器假直播白名单：URL 命中其中子串或正则时不再提示假直播
         "fake_live_whitelist": [],
+        # URL 黑/白名单（每条为子串或正则）：黑名单永久排除（导入/检测/导出均过滤），白名单豁免检测直接判在线
+        "url_blacklist": [],
+        "url_whitelist": [],
+        # 局域网订阅网关（P1-6）：开启后 /gw/playlist.m3u 与 /gw/epg.xml 可供盒子/手机订阅
+        "gateway_enabled": False,
+        "gateway_token": "",
+        # 频道名校正（方案书-频道名自动校正）：抓帧→台标/字幕 OCR→EPG 交叉验证→改名建议表
+        # strategy：advise=只出建议表人工确认｜auto_high=高置信度自动改名｜auto_all=全自动改名
+        "namefix_strategy": "advise",
+        "namefix_capture_width": 960,   # 抓帧宽度；实测 320 太小会把台标认成乱码，960 起可读
+        "namefix_capture_offset": 3,    # 抓帧偏移秒数（避开首帧公告页/黑屏）
+        "namefix_reuse_screenshot": True,  # 复用已有截图（省一次抓帧，但分辨率可能偏低）
+        "namefix_min_confidence": 0.9,  # auto_high 策略下的自动改名门槛
+        "namefix_fuzzy_threshold": 0.86,  # 名称模糊匹配阈值，低于此值只作提示
+        "namefix_vision_enabled": False,  # 视觉模型兜底（OCR 读不出台标时启用）
+        "namefix_vision_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "namefix_vision_model": "glm-4v-flash",
+        "namefix_vision_key": "",
+        "namefix_vision_timeout": 45,
+        "namefix_workers": 4,           # 并发抓帧+OCR 线程数
         # 网段扫描（复用 http_probe_channel，设置项可配置）
         "scan_timeout": 5,
         "scan_max_workers": 40,

@@ -15,10 +15,20 @@ def _natural_key(name):
 
 
 def _normalize_name(name):
-    """标准化名称：转小写、压缩空白、去除常见符号"""
+    """标准化名称：**先按别名库归一为规范名**，再转小写、压缩空白、去除常见符号
+
+    P1-9：源里叫「央视五套」、节目单里叫「CCTV5」，靠别名库对上。
+    这里只做匹配用的键，不改频道显示名；匹配不上最多是匹配不上，无副作用，
+    所以默认启用（对比之下「去重」用别名是显式开关）。
+    """
     if not name:
         return ''
-    return re.sub(r'[\s\-_\.·]', '', name.lower())
+    try:
+        from app.services.alias_service import canonical
+        name = canonical(name)
+    except Exception:
+        pass
+    return re.sub(r'[\s\-_\.·]', '', str(name).lower())
 
 
 def _name_tokens(name):
@@ -26,6 +36,16 @@ def _name_tokens(name):
     if not name:
         return []
     return [t for t in re.split(r'[^a-z0-9\u4e00-\u9fff]+', name.lower()) if t]
+
+
+def _digits(s):
+    """名称里的数字序列，用于判断两个名字的"频道号"是否一致
+
+    背景：下面的模糊包含匹配会让 'cctv1' 命中 'cctv13'（前缀子串），
+    于是「中央13台」在 EPG 里没有对应频道时会被错误配到 CCTV1。
+    只要两边数字序列不同就判定不是同一频道。
+    """
+    return re.findall(r'\d+', s or '')
 
 
 # 去除频道名后缀中的 HD/4K/高清/标清/FHD 等标识，便于做更宽松的频道名匹配
@@ -391,20 +411,23 @@ class EpgService:
             if _normalize_name(epg_name) == norm:
                 return v
         name_tokens = _name_tokens(name)
+        name_digits = _digits(norm)
         for epg_name, v in self.epg_data.items():
-            if _normalize_name(epg_name) == norm:
+            en = _normalize_name(epg_name)
+            if en == norm:
                 continue
             epg_tokens = _name_tokens(epg_name)
             # 短名称(纯字母数字缩写)要求完全一致；长名称允许包含但不允许单向短子串误配
             if epg_tokens and epg_tokens == name_tokens:
                 return v
-            if len(name) >= 4 and len(epg_name) >= 4 and (
-                _normalize_name(epg_name) in norm or norm in _normalize_name(epg_name)
-            ):
+            # 频道号不同就不是同一个台（挡住 CCTV1 ⊂ CCTV13 / CCTV1 ⊂ CCTV10 这类前缀误配）
+            if _digits(en) != name_digits:
+                continue
+            if len(name) >= 4 and len(epg_name) >= 4 and (en in norm or norm in en):
                 return v
             # 增强匹配：去掉频道名中的 HD/4K/高清/标清/FHD 等后缀，再试包含匹配
-            clean_name = _clean_hd.sub('', _normalize_name(name))
-            clean_epg = _clean_hd.sub('', _normalize_name(epg_name))
+            clean_name = _clean_hd.sub('', norm)
+            clean_epg = _clean_hd.sub('', en)
             if clean_name and clean_epg and (clean_epg in clean_name or clean_name in clean_epg):
                 return v
         return None

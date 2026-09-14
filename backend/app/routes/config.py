@@ -38,7 +38,10 @@ def get_config(settings=Depends(get_settings)):
 @router.post("/config/save")
 def save_config(data: dict, settings=Depends(get_settings)):
     from app import main
-    merged = dict(Config.DEFAULTS)
+    # 以「当前设置」为底再补默认值，最后套用本次提交：避免前端未提交的键（如 URL 黑白名单）被重置为默认值
+    merged = dict(getattr(main, "settings", {}) or {})
+    for k, v in Config.DEFAULTS.items():
+        merged.setdefault(k, v)
     merged.update(data)
     main.settings = merged
     Config.save_settings(merged)

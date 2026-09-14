@@ -55,6 +55,13 @@ def epg_load_batch(body: EpgBatchReq, epg_service=Depends(get_epg_service),
     return epg_service.load_epg_batch(urls)
 
 
+@router.get("/auto-sources")
+def epg_auto_sources():
+    """订阅源 m3u 头部（url-tvg / x-tvg-url）自动发现的 EPG 地址（P0-3，仅登记，不自动覆盖用户配置）"""
+    from app.main import subscription_service
+    return {"sources": subscription_service.auto_epg_sources()}
+
+
 @router.get("/status")
 def epg_status(epg_service=Depends(get_epg_service)):
     return epg_service.get_status()

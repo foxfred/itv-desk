@@ -45,6 +45,12 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   shortcutName: ITV Desk
+  # 与 README / release/update.json 的下载名保持一致：用短横线，不用空格。
+  # 否则 Release 资产名带空格、而 update.json 里的 URL 是短横线 → 软件内自更新 404。
+  artifactName: "ITV-Desk-Setup-${version}.${ext}"
+
+portable:
+  artifactName: "ITV-Desk-${version}.${ext}"
 
 # GitHub 自动发布：打 tag 触发时 electron-builder 自动上传 Release 资产
 publish:

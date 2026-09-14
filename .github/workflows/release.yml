@@ -147,9 +147,16 @@ jobs:
           $portUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($portName -replace ' ', '-')
           $nsisUrl = "https://github.com/foxfred/itv-desk/releases/download/v$ver/" + ($nsisName -replace ' ', '-')
 
+          # 保留仓库里已写好的更新说明（若为空或过短才退回默认文案）
+          $notes = "ITV Desk v$ver 更新。"
+          try {
+            $oldNotes = (Get-Content release/update.json -Raw -Encoding UTF8 | ConvertFrom-Json).notes
+            if ($oldNotes -and "$oldNotes".Length -gt 20) { $notes = $oldNotes }
+          } catch { Write-Host "keep default notes" }
+
           $update = [ordered]@{
             version = $ver
-            notes = "ITV Desk v$ver 更新。"
+            notes = $notes
             packages = @(
               [ordered]@{ name = $portName; url = $portUrl; sha256 = $portSha; size = $portSize; role = "main" },
               [ordered]@{ name = $nsisName; url = $nsisUrl; sha256 = $nsisSha; size = $nsisSize; role = "main" }

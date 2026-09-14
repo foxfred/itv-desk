@@ -45,6 +45,115 @@ def _normalize_sources(ch):
     return [ch.get("url", "")]
 
 
+_MULTI_FIELDS = ("sources", "source_groups", "source_tags", "source_is_fake_live",
+                 "source_health", "source_is_fake", "filter_relaxed")
+
+
+def _strip_multi_fields(ch):
+    """清除频道上的聚合源残留字段（一源一行后这些字段不应再存在）。"""
+    for f in _MULTI_FIELDS:
+        ch.pop(f, None)
+    return ch
+
+
+def _expand_multi(items):
+    """把可能带多源的频道条目展平成「一源一行」的单源条目。
+
+    聚合源功能已彻底移除（聚合后各源无法单独检查/清除，不适合本软件）。
+    此处对旧缓存/旧导出做兜底展平，保证进入频道池的每条记录只有一个 url。
+    多源时名称加 #序号 便于区分，并把原先按源记录的 tag / fake-live 落到对应行。
+    返回新的列表，不修改入参。
+    """
+    out = []
+    for ch in items or []:
+        srcs = _normalize_sources(ch)
+        base = ch.get("name", "")
+        if len(srcs) <= 1:
+            row = dict(ch)
+            row["url"] = srcs[0] if srcs else ch.get("url", "")
+            out.append(_strip_multi_fields(row))
+            continue
+        src_tags = ch.get("source_tags") or {}
+        src_fl = ch.get("source_is_fake_live") or {}
+        for i, u in enumerate(srcs):
+            row = dict(ch)
+            row["url"] = u
+            row["name"] = f"{base} #{i + 1}"
+            row["tag"] = (src_tags.get(u) or ch.get("tag") or "")
+            row["is_fake_live"] = bool(src_fl.get(u)) or bool(ch.get("is_fake_live"))
+            out.append(_strip_multi_fields(row))
+    return out
+
+
+# ==================== 清晰度折算（供健康报告等统计使用） ====================
+# 实测数据形态（586 条缓存统计）：
+#   res      : '-' | '1080P' | '720P' | '3840' | '1920' | '1280' | '854' | '640' | '768x576'
+#   quality  : '-' | '高清' | '标清' | '低清' | '流畅' | '2160' | '1080' | '720' | '480' | '360'
+#   ms       : 字符串（'3251' / '110' / '-'）
+# 关键差异：res 里的裸数字是**宽度**（1280/1920），quality 里的裸数字是**高度**（720/1080）。
+# 两者都按 16:9 折算成高度后再比档位，避免"1280 被当成 1080P"这类误判。
+_TEXT_RANK = {
+    "8k": 8, "4320p": 8, "4k": 7, "2160p": 7, "uhd": 7, "超清": 7, "蓝光": 6,
+    "2k": 6, "1440p": 6, "1080p": 5, "1080i": 5, "fhd": 5, "高清": 5, "全高清": 5,
+    "720p": 3, "hd": 3, "标清": 2, "576p": 2, "480p": 1, "360p": 0, "低清": 0, "流畅": 0,
+}
+
+
+def _rank_of(height):
+    """画面高度 → 清晰度档位（0..7，未知 None → -1）
+
+    注意 0 是合法档位（360P），不能用 `if not height` 判定未知。
+    """
+    if height is None:
+        return -1
+    for bound, rank in ((2160, 7), (1440, 6), (1080, 5), (720, 3), (576, 2), (480, 1), (360, 0)):
+        if height >= bound:
+            return rank
+    return 0
+
+
+def _num_rank(s, is_quality):
+    """含数字的字段 → 档位"""
+    if "x" in s:
+        # 宽x高（'768x576'）：取后一个数字当高度，别把 768 当高度
+        m2 = re.search(r"x\s*(\d{3,5})", s)
+        if m2:
+            return _rank_of(int(m2.group(1)))
+    m = re.search(r"(\d{3,5})", s)
+    if not m:
+        return -1
+    n = int(m.group(1))
+    if re.search(r"[pi]$", s) or is_quality:
+        return _rank_of(n)      # 带 p/i 后缀的是高度；quality 的裸数字也是高度
+    return _rank_of(int(n * 9 / 16))  # res 的裸数字是宽度 → 按 16:9 折成高度
+
+
+def _cue_rank(x, is_quality=False):
+    """把 res / quality 字段折算成清晰度档位（越大越清晰，未知 -1）
+
+    返回值是**档位**不是高度，可直接比较：
+      res '1920' → 5（宽 1920 折算 1080）；res '1280' → 3（折算 720）
+      quality '720' → 3；quality '高清' → 5；'-' → -1
+    """
+    if x is None:
+        return -1
+    s = str(x).strip().lower()
+    if s in ("", "-", "none", "null", "unknown"):
+        return -1
+    if s in _TEXT_RANK:
+        return _TEXT_RANK[s]    # 文本标签直接就是档位
+    return _num_rank(s, is_quality)
+
+
+def _ms_num(v):
+    """延迟字段折算成数字（'3251' → 3251.0）；取不到或非正数返回 None"""
+    try:
+        f = float(v)
+        return f if f > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 class ChannelService:
     """线程安全的频道池管理器。
 
@@ -88,7 +197,8 @@ class ChannelService:
             existing = {normalize_url(ch["url"]) for ch in self.pool}
             added = 0
             dup = 0
-            for ch in parsed_list:
+            # 一源一行：旧数据/旧导出若带多源，先展平成单源条目再入库
+            for ch in _expand_multi(parsed_list):
                 norm = normalize_url(ch["url"])
                 if norm in existing:
                     dup += 1
@@ -99,17 +209,9 @@ class ChannelService:
                     group = Parser.get_channel_group(ch["name"], custom_rules, foreign_name)
                 else:
                     group = ch.get("group", "") or Parser.get_channel_group(ch["name"], custom_rules, foreign_name)
-                # 导入时按持久化 tag_db/fake_live_db 还原每个源的标记
+                # 导入时按持久化 tag_db/fake_live_db 还原该行的标记
                 from app.main import tag_db, fake_live_db
                 primary = ch["url"]
-                srcs = _normalize_sources(ch)
-                st = {}
-                sfl = {}
-                for u in [primary] + list(srcs):
-                    if u in tag_db:
-                        st[u] = tag_db[u]
-                    if fake_live_db.get(u):
-                        sfl[u] = True
                 self.pool.insert(0, {
                     "checked": False,
                     "id": 0,
@@ -125,11 +227,8 @@ class ChannelService:
                     "group": group,
                     "tag": tag_db.get(primary) or ch.get("tag", ""),
                     "is_fake_live": bool(fake_live_db.get(primary)) or bool(ch.get("is_fake_live", False)),
-                    "source_tags": st,
-                    "source_is_fake_live": sfl,
                     "logo": ch.get("logo", ""),
                     "origin": ch.get("origin") or origin or "manual",
-                    "sources": srcs,
                     "url_note": ch.get("url_note", ""),   # 1.5: $ 后标签（如「组播超高清-50fps」），透传展示
                     "health": _new_health()
                 })
@@ -186,36 +285,10 @@ class ChannelService:
         with self.lock:
             for ch in self.pool:
                 if ch["id"] == channel_id:
-                    # 多源字段：去重、去空、保序，且至少保留主 url
-                    if "sources" in kwargs:
-                        raw = kwargs.pop("sources") or []
-                        norm = []
-                        for u in raw:
-                            u = (u or "").strip()
-                            if u and u not in norm:
-                                norm.append(u)
-                        if not norm:
-                            norm = [ch.get("url", "")]
-                        ch["sources"] = norm
-
-                    # 聚合组字段：规范结构、去空，保证成员都在当前 sources 中
-                    if "source_groups" in kwargs:
-                        groups = kwargs.pop("source_groups") or []
-                        cleaned = []
-                        all_srcs = set(ch.get("sources") or [ch.get("url", "")])
-                        for g in groups:
-                            if not isinstance(g, dict):
-                                continue
-                            name = str(g.get("name") or "聚合源").strip() or "聚合源"
-                            urls = []
-                            for u in g.get("urls") or []:
-                                u = (u or "").strip()
-                                if u and u in all_srcs and u not in urls:
-                                    urls.append(u)
-                            if urls:
-                                cleaned.append({"name": name, "urls": urls})
-                        ch["source_groups"] = cleaned
-
+                    # 一源一行：丢弃任何多源字段，避免旧前端把聚合结构写回
+                    kwargs.pop("sources", None)
+                    kwargs.pop("source_groups", None)
+                    _strip_multi_fields(ch)
                     ch.update(kwargs)
                     try:
                         self.store.update_by_norm(normalize_url(ch["url"]), **kwargs)
@@ -411,12 +484,16 @@ class ChannelService:
             s = s[4:]
         return s
 
-    @staticmethod
-    def _norm_name_key(n):
-        """归一化频道名用于去重：去画质后缀 + 仅保留字母数字与中文（去空白符号）。"""
+    def _norm_name_key(self, n):
+        """归一化名称（频道名 / 台标文件名）：去画质后缀 + 仅保留字母数字与中文。
+
+        别名归一**只用于 EPG 匹配**（只读、无副作用，见 epg_service._normalize_name），
+        这里的名称归一不带别名，避免误判把频道真的删掉。
+        """
         if not n:
             return ""
-        s = str(n).lower()
+        s = str(n)
+        s = s.lower()
         for q in ("高清", "超清", "蓝光", "标清", "hd", "fhd", "uhd",
                   "4k", "720p", "1080p", "1080i", "sd", "vr"):
             s = s.replace(q, "")
@@ -427,11 +504,11 @@ class ChannelService:
         return "".join(out)
 
     def _merge_by_key(self, key_fn):
-        """按 key 函数分组去重：同组（key 相同）仅保留首个频道，删除其余重复项。
+        """按 key 函数分组去重：同组（key 相同）仅保留第一个，删除其余重复项。
 
-        只做「去重」，不再把同组频道合并为多源聚合频道——聚合源会使离线源
-        无法单独清除，不适合本软件。移除聚合产生的 sources/source_groups/
-        source_tags/source_health 字段。返回删除的数量。
+        只做「去重」，不再把同组频道合并为多源聚合频道——聚合源会使各源无法
+        单独检查/清除，不适合本软件。同时清理历史聚合残留字段。
+        返回删除的数量。
         """
         with self.lock:
             groups = {}
@@ -456,13 +533,8 @@ class ChannelService:
                 if gk[0] == "__uniq__":
                     new_pool.extend(members)
                     continue
-                # 去重：同 key 保留首个，其余删除（不做多源聚合）
-                keep = dict(members[0])
-                # 清理历史聚合残留字段，确保频道回到单源结构
-                for _f in ("sources", "source_groups", "source_tags",
-                           "source_is_fake_live", "source_health", "source_is_fake"):
-                    keep.pop(_f, None)
-                new_pool.append(keep)
+                # 去重：同 key 只留第一条（不做多源聚合）
+                new_pool.append(_strip_multi_fields(dict(members[0])))
                 merged_removed += (len(members) - 1)
             self.pool = new_pool
             for idx, ch in enumerate(self.pool, 1):
@@ -488,10 +560,7 @@ class ChannelService:
                 is_multi = (ch.get("sources") and len(ch.get("sources")) > 1) or bool(ch.get("source_groups"))
                 if not is_multi:
                     # 单源：仅清理可能的聚合残留字段
-                    for _f in ("sources", "source_groups", "source_tags",
-                               "source_is_fake_live", "source_health", "source_is_fake"):
-                        ch.pop(_f, None)
-                    expanded.append(ch)
+                    expanded.append(_strip_multi_fields(ch))
                     continue
                 src_tags = ch.get("source_tags") or {}
                 src_fl = ch.get("source_is_fake_live") or {}
@@ -500,12 +569,7 @@ class ChannelService:
                 for i, u in enumerate(srcs):
                     row = dict(ch)
                     row["url"] = u
-                    row["sources"] = None
-                    row["source_groups"] = None
-                    row["source_tags"] = None
-                    row["source_is_fake_live"] = None
-                    row["source_health"] = None
-                    row["source_is_fake"] = None
+                    _strip_multi_fields(row)
                     # 多个源时给名称加序号，便于区分；单源沿用原名
                     row["name"] = base_name if len(srcs) == 1 else f"{base_name} #{i + 1}"
                     row["group"] = base_group
@@ -527,14 +591,16 @@ class ChannelService:
             self._store_rebuild()
             return {"split": split_count, "total": len(self.pool)}
 
-    def merge_duplicates(self):
-        """先按 URL 归一归并，再按频道名归一归并（同组聚合为多源）。返回统计。"""
+    def merge_duplicates(self, settings=None):
+        """去重：按 URL 归一归并重复源。返回统计。
+
+        一源一行后**不再按频道名合并**——同名不同源的频道是正常形态（正是"一源
+        一行"要保留的多行），按名合并会把其他可用源误删。
+        """
         removed_url = self._merge_by_key(lambda ch: self._norm_url_key(ch.get("url", "")))
-        removed_name = self._merge_by_key(lambda ch: self._norm_name_key(ch.get("name", "")))
         return {
-            "removed": removed_url + removed_name,
+            "removed": removed_url,
             "removed_by_url": removed_url,
-            "removed_by_name": removed_name,
             "remaining": len(self.pool),
         }
 

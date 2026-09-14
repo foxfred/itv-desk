@@ -6,6 +6,7 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
+from app.utils.helpers import is_url_blacklisted, is_url_whitelisted
 
 
 class CheckerEngine:
@@ -24,12 +25,49 @@ class CheckerEngine:
         "mmst://":  ("MMST",  1755, "tcp"),
     }
 
+    # 广告/占位切片关键字（仅在切片 URI 行匹配，避免误伤普通路径）
+    _AD_KW = re.compile(
+        r'(?:^|[/_\-\.])(ads?|adv|advert|adverts|advertise|guanggao|preroll|promo|tvc)(?:[/_\-\.]|$)',
+        re.I
+    )
+
     def __init__(self, manager, ui_callback, progress_callback, status_callback, stop_event):
         self.manager = manager
         self.ui = ui_callback
         self.progress = progress_callback
         self.status = status_callback
         self.stop = stop_event
+        # 自动识别到的「疑似广告/占位源」：{源URL: 判据}，由 _probe_hls 在已抓取的 manifest 上顺带判定
+        self.ad_flags = {}
+
+    def _detect_placeholder_manifest(self, text):
+        """从已抓取的 HLS manifest 判定疑似广告/占位循环源（零额外网络开销）。
+
+        判据：
+          ① 切片 URI 含广告关键字（ad/advert/guanggao/preroll/promo 等）；
+          ② 极短循环（切片数 ≤ 2 且总时长 ≤ 30s）——占位卡/循环垫片；
+          ③ 有限短片列表（含 #EXT-X-ENDLIST 且总时长 < 15 分钟或切片 ≤ 10）——循环点播占位。
+        返回判据字符串，未命中返回 None。
+        """
+        if not text or '#EXTM3U' not in text[:2048]:
+            return None
+        seg_lines = [l.strip() for l in text.splitlines() if l.strip() and not l.startswith('#')]
+        for s in seg_lines:
+            if self._AD_KW.search(s):
+                return "ad_keyword"
+        durs = []
+        for m in re.findall(r'#EXTINF:\s*([\d.]+)', text):
+            try:
+                durs.append(float(m))
+            except ValueError:
+                pass
+        total = sum(durs)
+        n = len(seg_lines)
+        if n and n <= 2 and total and total <= 30:
+            return "short_loop"
+        if '#EXT-X-ENDLIST' in text and (total < 900 or (n and n <= 10)):
+            return "vod_loop"
+        return None
 
     def run(self, items, thread_num=20, timeout=10, retries=2):
         """执行检查"""
@@ -41,37 +79,31 @@ class CheckerEngine:
         def check_one(ch):
             if self.stop and self.stop.is_set():
                 return None
-            # 多源故障转移：频道可能携带 sources 列表，逐源检测后聚合整体状态
-            sources = ch.get("sources") or []
-            sources = [s for s in sources if s]
-            if not sources:
-                single = ch.get("url", "")
-                if not single:
-                    return (ch["id"], "离线", "无URL", "离线", "-", "-", "-", "-", None)
-                sources = [single]
+            # 一源一行：每个频道只有一条 URL，直接检测该源（聚合源已移除）
+            url = ch.get("url", "")
+            if not url:
+                return (ch["id"], "离线", "无URL", "离线", "-", "-", "-", "-", None)
 
             t0 = time.time()
-            per = []  # (url, (ch_id, status, code, _, ms, res, quality, stack, ff))
-            for s in sources:
-                stream_proto = self._get_stream_protocol(s)
+            # URL 黑白名单优先（P0-5）：黑名单不发请求直接判离线；白名单不探测直接判在线保留
+            if is_url_blacklisted(url):
+                t = (ch["id"], "离线", "黑名单", "离线", "-", "-", "-", "-", None)
+            elif is_url_whitelisted(url):
+                t = (ch["id"], "在线", "白名单", "在线", "-", "-", "-", "-",
+                     self._detect_stack(url), None)
+            else:
+                stream_proto = self._get_stream_protocol(url)
                 if stream_proto:
-                    t = self._check_stream_protocol(ch, s, t0, timeout, retries, stream_proto)
+                    t = self._check_stream_protocol(ch, url, t0, timeout, retries, stream_proto)
                 else:
-                    t = self._check_http_source(ch, s, t0, timeout, retries)
-                per.append((s, t))
-
-            # 聚合：任一源在线则频道在线；展示取首个在线源的数据
-            online = [(u, t) for u, t in per if t[1] == "在线"]
-            best_u, best = (online[0] if online else per[0])
-            source_health = {
-                u: {"status": t[1], "ms": t[4], "res": t[5], "quality": t[6], "code": t[2]}
-                for u, t in per
-            }
+                    t = self._check_http_source(ch, url, t0, timeout, retries)
+            # 广告/占位源自动识别结果：{源URL: 判据}（空字典=本次未命中，覆盖旧结果保持准确）
+            ad_hits = {url: self.ad_flags[url]} if url in self.ad_flags else {}
             try:
-                self.manager.update_channel(ch["id"], source_health=source_health)
+                self.manager.update_channel(ch["id"], ad_suspect=ad_hits)
             except Exception:
                 pass
-            return (ch["id"], best[1], best[2], best[1], best[4], best[5], best[6], best[7], best[8])
+            return (ch["id"], t[1], t[2], t[1], t[4], t[5], t[6], t[7], t[8])
 
         with ThreadPoolExecutor(max_workers=thread_num) as executor:
             futures = {executor.submit(check_one, ch): ch for ch in items}
@@ -239,6 +271,11 @@ class CheckerEngine:
             if not manifest.strip():
                 return False, None, "manifest_empty", "-", "-"
 
+            # 顺带判定广告/占位循环（复用已下载的 manifest，不增加请求）
+            _reason = self._detect_placeholder_manifest(manifest)
+            if _reason:
+                self.ad_flags[url] = _reason
+
             # 从 master playlist 解析最高分辨率
             res, quality = "-", "-"
             if '#EXT-X-STREAM-INF' in manifest:
@@ -268,6 +305,10 @@ class CheckerEngine:
                     vresp = urllib.request.urlopen(vreq, timeout=min(timeout, 8))
                     vdata = vresp.read(65536).decode('utf-8', errors='ignore')
                     vresp.close()
+                    if not _reason:
+                        _r2 = self._detect_placeholder_manifest(vdata)
+                        if _r2:
+                            self.ad_flags[url] = _r2
                     for line in vdata.splitlines():
                         line = line.strip()
                         if line and not line.startswith('#'):

@@ -106,3 +106,50 @@ def find_logo(channel_name):
 
 
 # FileManager 已统一收敛至 app.config.FileManager，本文件不再重复定义。
+
+
+# ==================== URL 黑/白名单（P0-5） ====================
+# 名单条目支持两种写法：纯子串（不区分大小写的包含匹配）或 /正则/ 形式（斜杠包裹）。
+# 命中规则：黑白名单均按「子串或正则」逐条测试。
+
+def url_rule_match(url, patterns):
+    """判断 URL 是否命中名单条目列表（子串或 /正则/）"""
+    if not url or not patterns:
+        return False
+    for p in patterns:
+        if not p:
+            continue
+        p = str(p).strip()
+        if not p:
+            continue
+        if len(p) > 2 and p.startswith('/') and p.endswith('/'):
+            try:
+                if re.search(p[1:-1], url, re.I):
+                    return True
+            except re.error:
+                continue
+        elif p.lower() in url.lower():
+            return True
+    return False
+
+
+def is_url_blacklisted(url, settings=None):
+    """URL 是否进黑名单（永久排除：导入/检测/导出均过滤）"""
+    try:
+        if settings is None:
+            from app.main import settings as _s
+            settings = _s
+        return url_rule_match(url, settings.get("url_blacklist") or [])
+    except Exception:
+        return False
+
+
+def is_url_whitelisted(url, settings=None):
+    """URL 是否进白名单（豁免检测，直接判在线保留）"""
+    try:
+        if settings is None:
+            from app.main import settings as _s
+            settings = _s
+        return url_rule_match(url, settings.get("url_whitelist") or [])
+    except Exception:
+        return False

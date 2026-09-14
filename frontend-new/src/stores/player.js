@@ -15,7 +15,7 @@ export const usePlayerStore = defineStore('player', () => {
   const pipPos = ref(null)       // {x, y} 或 null
 
   // ===== 播放状态（唯一数据源）=====
-  const currentChannel = ref(null) // 当前频道对象 {id,url,name,group,sources,source_groups,tag,is_fake_live,url_note,...}
+  const currentChannel = ref(null) // 当前频道对象 {id,url,name,group,tag,is_fake_live,url_note,...}（一源一行）
   const channelList = ref([])      // 当前视图频道列表快照（上/下一频道导航）
   const channelIndex = ref(-1)     // 当前频道在列表中的下标
   const currentUrl = ref('')       // 实际播放地址（已剥离 $ 后缀）

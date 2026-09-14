@@ -1,4 +1,5 @@
 """M3U 解析器 - 从现有 models.py 和 utils.py 迁移"""
+import io
 import re
 from urllib.parse import urlparse
 from app.utils.network import normalize_url
@@ -301,22 +302,7 @@ def extract_channels(raw_text):
     return channels
 
 
-def _channel_sources(ch):
-    """返回频道全部源 URL 列表（去重保序），单源退化为 [url]。修复：合并频道的其余源此前导出时被丢弃。"""
-    srcs = ch.get("sources") or []
-    out = []
-    for u in srcs:
-        u = (u or "").strip()
-        if u and u not in out:
-            out.append(u)
-    if not out:
-        u = (ch.get("url") or "").strip()
-        if u:
-            out.append(u)
-    return out
-
-
-def _write_m3u_channel(f, ch):
+def _write_m3u_channel(f, ch, with_tvg_name=False):
     grp = ch.get("group", Config.get_setting("unknown_group_name", "未分组"))
     logo = ch.get("logo")
     tag = ch.get("tag") or ""
@@ -324,74 +310,95 @@ def _write_m3u_channel(f, ch):
     if ch.get("is_fake_live") and "假直播" not in tag:
         tag = (tag + ",假直播").strip(",")
     note = ch.get("url_note")
-    srcs = _channel_sources(ch)
-    base_name = ch.get("name", "")
-    for i, u in enumerate(srcs, 1):
-        name = base_name if i == 1 else f"{base_name} (源{i})"
-        parts = [f'#EXTINF:-1 group-title="{grp}"']
-        if logo:
-            parts.append(f'tvg-logo="{logo}"')
-        if tag:
-            parts.append(f'tvg-tag="{tag}"')
-        f.write(" ".join(parts) + f',{name}\n')
-        if note:
-            f.write(f'{u}${note}\n')
-        else:
-            f.write(f'{u}\n')
+    # 一源一行：每条频道只导出自身的 url（聚合源已移除，不再有「源2/源3」展开）
+    u = (ch.get("url") or "").strip()
+    if not u:
+        return
+    name = ch.get("name", "")
+    parts = [f'#EXTINF:-1 group-title="{grp}"']
+    if with_tvg_name and name:
+        # 局域网网关用：TiviMate 等按 tvg-name 匹配 EPG
+        parts.append(f'tvg-name="{name}"')
+    if logo:
+        parts.append(f'tvg-logo="{logo}"')
+    if tag:
+        parts.append(f'tvg-tag="{tag}"')
+    f.write(" ".join(parts) + f',{name}\n')
+    if note:
+        f.write(f'{u}${note}\n')
+    else:
+        f.write(f'{u}\n')
 
 
 def _write_txt_channel(f, ch):
-    srcs = _channel_sources(ch)
-    base_name = ch.get("name", "")
-    for i, u in enumerate(srcs, 1):
-        name = base_name if i == 1 else f"{base_name} (源{i})"
-        f.write(f'{name},{u}\n')
+    u = (ch.get("url") or "").strip()
+    if not u:
+        return
+    f.write(f'{ch.get("name", "")},{u}\n')
 
 
 def _write_xml_channel(f, ch):
-    srcs = _channel_sources(ch)
-    base_name = ch.get("name", "")
+    u = (ch.get("url") or "").strip()
+    if not u:
+        return
     grp = ch.get("group", Config.get_setting("unknown_group_name", "未分组"))
-    for i, u in enumerate(srcs, 1):
-        name = base_name if i == 1 else f"{base_name} (源{i})"
-        f.write('  <channel>\n')
-        f.write(f'    <name>{name}</name>\n')
-        f.write(f'    <url>{u}</url>\n')
-        f.write(f'    <group>{grp}</group>\n')
-        if ch.get("logo"):
-            f.write(f'    <logo>{ch["logo"]}</logo>\n')
-        if ch.get("status"):
-            f.write(f'    <status>{ch["status"]}</status>\n')
-        if ch.get("ms"):
-            f.write(f'    <ms>{ch["ms"]}</ms>\n')
-        if ch.get("res"):
-            f.write(f'    <res>{ch["res"]}</res>\n')
-        f.write('  </channel>\n')
+    f.write('  <channel>\n')
+    f.write(f'    <name>{ch.get("name", "")}</name>\n')
+    f.write(f'    <url>{u}</url>\n')
+    f.write(f'    <group>{grp}</group>\n')
+    if ch.get("logo"):
+        f.write(f'    <logo>{ch["logo"]}</logo>\n')
+    if ch.get("status"):
+        f.write(f'    <status>{ch["status"]}</status>\n')
+    if ch.get("ms"):
+        f.write(f'    <ms>{ch["ms"]}</ms>\n')
+    if ch.get("res"):
+        f.write(f'    <res>{ch["res"]}</res>\n')
+    f.write('  </channel>\n')
+
+
+def _write_playlist(f, channels, format="m3u", url_tvg="", with_tvg_name=False):
+    """把频道列表写入任意文本流（文件 / StringIO 共用，保证导出与网关输出一致）"""
+    if format in ["m3u", "m3u8"]:
+        header = "#EXTM3U"
+        if url_tvg:
+            header += f' url-tvg="{url_tvg}"'
+        f.write(header + "\n")
+        for ch in channels:
+            _write_m3u_channel(f, ch, with_tvg_name=with_tvg_name)
+    elif format == "txt":
+        for ch in channels:
+            _write_txt_channel(f, ch)
+    elif format == "json":
+        import json
+        json.dump(channels, f, ensure_ascii=False, indent=Config.get_setting("json_indent", 2))
+    elif format == "xml":
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+        f.write('<channels>\n')
+        for ch in channels:
+            _write_xml_channel(f, ch)
+        f.write('</channels>\n')
+    else:
+        for ch in channels:
+            _write_txt_channel(f, ch)
+
+
+def render_playlist(channels, format="m3u", url_tvg="", with_tvg_name=False):
+    """渲染播放列表为字符串（供局域网订阅网关在线输出，不落盘）
+
+    url_tvg: 非空时写入 #EXTM3U 头部的 url-tvg，外部播放器据此自动拉取 EPG
+    with_tvg_name: 写入 tvg-name，TiviMate 等按名称匹配节目单时需要
+    """
+    buf = io.StringIO()
+    _write_playlist(buf, channels, format, url_tvg=url_tvg, with_tvg_name=with_tvg_name)
+    return buf.getvalue()
 
 
 def export_playlist(channels, filepath, format="m3u"):
     """导出频道列表为文件"""
     try:
         with open(filepath, "w", encoding="utf-8") as f:
-                if format in ["m3u", "m3u8"]:
-                    f.write("#EXTM3U\n")
-                    for ch in channels:
-                        _write_m3u_channel(f, ch)
-                elif format == "txt":
-                    for ch in channels:
-                        _write_txt_channel(f, ch)
-                elif format == "json":
-                    import json
-                    json.dump(channels, f, ensure_ascii=False, indent=Config.get_setting("json_indent", 2))
-                elif format == "xml":
-                    f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-                    f.write('<channels>\n')
-                    for ch in channels:
-                        _write_xml_channel(f, ch)
-                    f.write('</channels>\n')
-                else:
-                    for ch in channels:
-                        _write_txt_channel(f, ch)
+            _write_playlist(f, channels, format)
         return True, None
     except Exception as e:
         return False, str(e)

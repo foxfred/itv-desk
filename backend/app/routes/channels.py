@@ -13,8 +13,6 @@ class ChannelUpdate(BaseModel):
     group: Optional[str] = None
     tag: Optional[str] = None
     logo: Optional[str] = None
-    sources: Optional[List[str]] = None
-    source_groups: Optional[List[dict]] = None
 
 
 class BatchSelectReq(BaseModel):
@@ -46,16 +44,6 @@ class FakeLiveReq(BaseModel):
 
 class BatchFakeLiveReq(BaseModel):
     ids: List[int]
-    is_fake_live: bool
-
-
-class SourceTagReq(BaseModel):
-    url: str
-    tag: str
-
-
-class SourceFakeLiveReq(BaseModel):
-    url: str
     is_fake_live: bool
 
 
@@ -249,44 +237,32 @@ def delete_by_group(body: DeleteByGroupReq, channel_service=Depends(get_channel_
     return {"removed": removed, "group": group}
 
 
-def _set_source_tag(ch, url, new_tag, tag_db):
-    """按源 URL 设置/清除普通 tag；若 url 为频道主 URL 则同步 ch['tag']。"""
+def _set_tag_channel(ch, new_tag, url, tag_db):
+    """设置频道标记（一源一行后标记直接挂在频道行上）。
+
+    "假直播"不再混进 tag，调用方应走 _set_fake_live_channel。
+    同时按 URL 记入 tag_db，供后续重新导入该源时还原标记。
+    """
     if isinstance(new_tag, str) and "假直播" in new_tag:
         parts = [p.strip() for p in new_tag.split(",") if p.strip() and p.strip() != "假直播"]
         new_tag = ",".join(parts) if parts else ""
-    ch.setdefault("source_tags", {})
-    primary = ch.get("url", "")
-    if new_tag:
-        tag_db[url] = new_tag
-        ch["source_tags"][url] = new_tag
-    else:
-        tag_db.pop(url, None)
-        ch["source_tags"].pop(url, None)
-    if url == primary:
-        ch["tag"] = new_tag
-
-
-def _set_source_fake_live(ch, url, is_fake_live, fake_live_db):
-    """按源 URL 设置/清除假直播标记；若 url 为频道主 URL 则同步 ch['is_fake_live']。"""
-    ch.setdefault("source_is_fake_live", {})
-    primary = ch.get("url", "")
-    flag = bool(is_fake_live)
-    if flag and url:
-        fake_live_db[url] = True
-        ch["source_is_fake_live"][url] = True
-    else:
-        fake_live_db.pop(url, None)
-        ch["source_is_fake_live"].pop(url, None)
-    if url == primary:
-        ch["is_fake_live"] = flag
-
-
-def _set_tag_channel(ch, new_tag, url, tag_db):
-    _set_source_tag(ch, url, new_tag, tag_db)
+    if url:
+        if new_tag:
+            tag_db[url] = new_tag
+        else:
+            tag_db.pop(url, None)
+    ch["tag"] = new_tag
 
 
 def _set_fake_live_channel(ch, is_fake_live, url, fake_live_db):
-    _set_source_fake_live(ch, url, is_fake_live, fake_live_db)
+    """设置假直播标记（一源一行后直接挂在频道行上），并按 URL 记入 fake_live_db。"""
+    flag = bool(is_fake_live)
+    if url:
+        if flag:
+            fake_live_db[url] = True
+        else:
+            fake_live_db.pop(url, None)
+    ch["is_fake_live"] = flag
 
 
 @router.post("/{channel_id}/tag")
@@ -424,40 +400,6 @@ def batch_fake_live(body: BatchFakeLiveReq, channel_service=Depends(get_channel_
     return {"count": count}
 
 
-@router.post("/{channel_id}/source-tag")
-def set_source_tag(channel_id: int, body: SourceTagReq, channel_service=Depends(get_channel_service),
-                   tag_db=Depends(get_tag_db), settings=Depends(get_settings)):
-    from app.config import Config
-    url = (body.url or "").strip()
-    if not url:
-        raise HTTPException(400, "缺少 url")
-    with channel_service.lock:
-        for ch in channel_service.pool:
-            if ch["id"] == channel_id:
-                _set_source_tag(ch, url, body.tag or "", tag_db)
-                Config.save_json(Config.TAG_DB_FILE, tag_db)
-                _save_cache(channel_service, settings)
-                return {"ok": True, "tag": ch.get("source_tags", {}).get(url, ""), "url": url}
-    raise HTTPException(404, "频道不存在")
-
-
-@router.post("/{channel_id}/source-fake-live")
-def set_source_fake_live(channel_id: int, body: SourceFakeLiveReq, channel_service=Depends(get_channel_service),
-                         fake_live_db=Depends(get_fake_live_db), settings=Depends(get_settings)):
-    from app.config import Config
-    url = (body.url or "").strip()
-    if not url:
-        raise HTTPException(400, "缺少 url")
-    with channel_service.lock:
-        for ch in channel_service.pool:
-            if ch["id"] == channel_id:
-                _set_source_fake_live(ch, url, body.is_fake_live, fake_live_db)
-                Config.save_json(Config.FAKE_LIVE_DB_FILE, fake_live_db)
-                _save_cache(channel_service, settings)
-                return {"ok": True, "is_fake_live": ch.get("source_is_fake_live", {}).get(url, False), "url": url}
-    raise HTTPException(404, "频道不存在")
-
-
 @router.post("/batch-group")
 def batch_group(body: BatchGroupReq, channel_service=Depends(get_channel_service),
                 settings=Depends(get_settings)):
@@ -480,31 +422,13 @@ class MatchLogosReq(BaseModel):
 @router.post("/merge-duplicates")
 def merge_duplicates(channel_service=Depends(get_channel_service),
                      log=Depends(get_log), settings=Depends(get_settings)):
-    """智能去重合并：先按 URL 归并，再按频道名归并，同组合并为多源。"""
-    stats = channel_service.merge_duplicates()
+    """去重：按 URL 归一移除重复源（一源一行，不再按频道名合并成多源）。"""
+    stats = channel_service.merge_duplicates(settings)
     if stats["removed"] > 0:
         _save_cache(channel_service, settings)
-        log(f"智能去重合并：移除 {stats['removed']} 个重复频道"
-            f"（URL {stats['removed_by_url']} / 名称 {stats['removed_by_name']}），剩余 {stats['remaining']}")
+        log(f"去重：移除 {stats['removed']} 个重复源，剩余 {stats['remaining']} 条")
     else:
-        log("智能去重合并：未发现重复频道")
-    return {"ok": True, **stats}
-
-
-@router.post("/ungroup-all")
-def ungroup_all(channel_service=Depends(get_channel_service),
-                log=Depends(get_log), settings=Depends(get_settings)):
-    """拆解所有聚合源：把多源聚合频道还原为每个源一个独立单源频道。
-
-    聚合源使离线源无法单独检查/清除，取消合并成源后提供此操作把历史
-    聚合数据恢复为单源列表，方便逐条挑选与删除。
-    """
-    stats = channel_service.ungroup_all()
-    if stats["split"] > 0:
-        _save_cache(channel_service, settings)
-        log(f"拆解聚合源：展开 {stats['split']} 个源，共 {stats['total']} 个频道")
-    else:
-        log("拆解聚合源：无聚合频道需要拆解")
+        log("去重：未发现重复源")
     return {"ok": True, **stats}
 
 

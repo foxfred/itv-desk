@@ -4,6 +4,7 @@
       <template #header><span class="page-title">系统设置</span></template>
       <el-tabs v-model="activeTab" tab-position="left" class="settings-tabs">
         <!-- 常规 -->
+        <!-- 常规 -->
         <el-tab-pane label="常规" name="general">
           <el-form label-width="100px" size="small">
             <el-form-item label="格式后缀">
@@ -49,6 +50,56 @@
               <div class="tip">每行一个EPG地址，保存后自动同步到抓取区列表</div>
             </el-form-item>
           </el-form>
+          <el-divider>启动</el-divider>
+            <el-form label-width="130px" size="small">
+              <el-form-item label="启动时加载频道缓存">
+                <el-switch v-model="form.load_cache_on_startup" />
+                <span class="tip">启动时自动加载上次保存的频道缓存文件</span>
+              </el-form-item>
+              <el-form-item label="退出时保存频道缓存">
+                <el-switch v-model="form.save_cache_on_exit" />
+                <span class="tip">退出程序时自动保存频道缓存到文件</span>
+              </el-form-item>
+              <el-form-item label="保存窗口位置">
+                <el-switch v-model="form.save_window_geometry" />
+                <span class="tip">退出时保存窗口位置和大小，下次启动恢复</span>
+              </el-form-item>
+              <el-form-item label="启动延迟">
+                <el-input-number v-model="form.startup_delay_ms" :min="0" :max="10000" :step="100" style="width:140px" />
+                <span class="unit">毫秒</span>
+              </el-form-item>
+            </el-form>
+          <el-divider>更新</el-divider>
+           <el-form label-width="100px" size="small">
+             <el-form-item label="当前版本">
+               <span class="ver-tag">v{{ curVersion }}</span>
+             </el-form-item>
+             <el-form-item label="更新源地址">
+               <el-input v-model="form.update_url" placeholder="留空使用默认更新源" style="width:340px" />
+               <div class="tip">更新检查清单 JSON 地址，默认指向 GitHub raw</div>
+             </el-form-item>
+             <el-form-item label="检查更新">
+               <el-button type="primary" @click="checkForUpdate" :loading="checking">检查更新</el-button>
+               <div v-if="updateInfo.latest" class="update-result" :class="{ avail: updateInfo.has_update }">
+                 <template v-if="updateInfo.has_update">
+                   <span class="ur-title">发现新版本 v{{ updateInfo.latest }}</span>
+                   <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
+                   <div class="ur-actions">
+                     <el-button v-if="updateInfo.packages.length" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
+                       下载更新包
+                     </el-button>
+                     <el-button
+                       v-if="downloadPaths.length && !updateInfo.is_installing"
+                       type="warning" size="small"
+                       @click="doInstallUpdate"
+                     >退出并安装更新</el-button>
+                     <span v-if="updateInfo.is_installing" class="ur-installing">更新器已启动，程序即将退出并自动安装…</span>
+                   </div>
+                 </template>
+                 <span v-else class="ur-title">已是最新版本</span>
+               </div>
+             </el-form-item>
+           </el-form>
         </el-tab-pane>
 
         <!-- 网络 -->
@@ -62,10 +113,7 @@
               </div>
             </el-form-item>
           </el-form>
-        </el-tab-pane>
-
-        <!-- 抓取 -->
-        <el-tab-pane label="抓取" name="scrape">
+          <el-divider>抓取</el-divider>
           <el-form label-width="100px" size="small">
             <el-form-item label="抓取超时">
               <el-input-number v-model="form.scraper_timeout" :min="5" :max="60" style="width:120px" />
@@ -78,10 +126,82 @@
               <el-input-number v-model="form.scraper_threads" :min="1" :max="50" style="width:120px" />
             </el-form-item>
           </el-form>
+          <el-divider>扫描</el-divider>
+            <el-form label-width="100px" size="small">
+              <el-form-item label="探测超时">
+                <el-input-number v-model="form.scan_timeout" :min="1" :max="30" style="width:120px" />
+                <span class="unit">秒</span>
+              </el-form-item>
+              <el-form-item label="并发数">
+                <el-input-number v-model="form.scan_max_workers" :min="1" :max="200" style="width:120px" />
+              </el-form-item>
+            </el-form>
+          <el-divider>局域网订阅网关</el-divider>
+          <el-form label-width="110px" size="small">
+            <el-form-item label="订阅网关">
+              <div style="display:flex;align-items:center;gap:8px">
+                <el-switch v-model="form.gateway_enabled" size="small" @change="onGatewayToggle" />
+                <span style="font-size:12px;color:var(--el-text-color-secondary)">
+                  开启后，盒子/手机/电视上的播放器可直接订阅本机频道库（需带令牌，不会裸奔）
+                </span>
+              </div>
+            </el-form-item>
+
+            <template v-if="form.gateway_enabled">
+              <el-form-item label="订阅令牌">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <el-input :model-value="gwInfo.token || form.gateway_token" readonly style="width:340px" />
+                  <el-button size="small" @click="rotateGwToken">重新生成</el-button>
+                </div>
+              </el-form-item>
+              <el-form-item label=" ">
+                <span style="font-size:12px;color:var(--el-text-color-secondary)">
+                  重新生成后旧链接立即失效，需要在播放器里重新填地址。
+                </span>
+              </el-form-item>
+
+              <template v-if="gwInfo.playlist_url">
+                <el-divider>播放器订阅地址</el-divider>
+                <el-form-item label="播放列表">
+                  <el-input :model-value="gwInfo.playlist_url" readonly style="width:560px">
+                    <template #append><el-button @click="copyGw(gwInfo.playlist_url)">复制</el-button></template>
+                  </el-input>
+                </el-form-item>
+                <el-form-item label="节目单">
+                  <el-input :model-value="gwInfo.epg_url" readonly style="width:560px">
+                    <template #append><el-button @click="copyGw(gwInfo.epg_url)">复制</el-button></template>
+                  </el-input>
+                </el-form-item>
+                <el-form-item label="当前状态">
+                  <span style="font-size:12px">
+                    可订阅频道 <b>{{ gwInfo.channel_count }}</b> 个；EPG 已载入
+                    <b>{{ gwInfo.epg_count }}</b> 个频道；本机局域网地址
+                    <b>{{ gwInfo.lan_ip }}:{{ gwInfo.port }}</b>
+                  </span>
+                </el-form-item>
+                <el-form-item label="用法">
+                  <div style="font-size:12px;line-height:1.8;color:var(--el-text-color-secondary)">
+                    1. 手机/盒子与本机连同一个路由器（同一局域网）<br />
+                    2. 播放器里选「添加 M3U / 远程订阅」，粘贴上面的播放列表地址<br />
+                    3. 节目单一般会自动跟上；没有的话再单独填「节目单」地址<br />
+                    4. Windows 首次使用会弹防火墙提示，选「允许访问」<br />
+                    5. 地址里的 token 就是你的钥匙，发给别人等于把频道库分享出去
+                  </div>
+                </el-form-item>
+              </template>
+              <el-alert v-else type="info" :closable="false" style="width:560px"
+                title="还没有订阅令牌"
+                description="点上面的「重新生成」拿到令牌，就能得到给盒子/手机用的订阅地址。" />
+            </template>
+
+            <el-alert v-else type="info" :closable="false" style="width:560px"
+              title="订阅网关当前已关闭"
+              description="打开上方开关并点「保存设置」即可启用。启用后必须有令牌才能访问，检测到的死源不会推送给播放器。" />
+          </el-form>
         </el-tab-pane>
 
-        <!-- 检查 -->
-        <el-tab-pane label="检查" name="check">
+        <!-- 检测 -->
+        <el-tab-pane label="检测" name="check">
           <el-form label-width="100px" size="small">
             <el-form-item label="超时时间">
               <el-input-number v-model="form.check_timeout" :min="1" :max="60" style="width:120px" />
@@ -102,97 +222,40 @@
               <span class="tip">对 HLS 源额外检查主索引和切片可达性</span>
             </el-form-item>
             </el-form>
-          </el-tab-pane>
+          <el-divider>修补与阈值</el-divider>
+            <el-form-item label="修补超时">
+              <el-input-number v-model="form.repair_check_timeout" :min="1" :max="30" style="width:120px" />
+              <span class="unit">秒</span>
+            </el-form-item>
+            <el-form-item label="修补重试">
+              <el-input-number v-model="form.repair_max_retries" :min="0" :max="5" style="width:120px" />
+            </el-form-item>
+            <el-form-item label="修补线程数">
+              <el-input-number v-model="form.repair_max_workers" :min="1" :max="50" style="width:120px" />
+            </el-form-item>
+            <el-form-item label="高清阈值">
+              <el-input-number v-model="form.repair_hd_size_threshold" :min="10000" :step="10000" style="width:160px" />
+              <span class="unit">字节</span>
+            </el-form-item>
+            <el-form-item label="标清阈值">
+              <el-input-number v-model="form.repair_sd_size_threshold" :min="10000" :step="10000" style="width:160px" />
+              <span class="unit">字节</span>
+            </el-form-item>
+            <el-form-item label="延迟等级 A 阈值">
+              <el-input-number v-model="form.latency_grade_a_threshold" :min="50" :max="2000" :step="50" style="width:140px" />
+              <span class="unit">毫秒（≤此值=优）</span>
+            </el-form-item>
+            <el-form-item label="延迟等级 B 阈值">
+              <el-input-number v-model="form.latency_grade_b_threshold" :min="100" :max="5000" :step="50" style="width:140px" />
+              <span class="unit">毫秒（≤此值=良）</span>
+            </el-form-item>
+            <el-form-item label="检查批次大小">
+              <el-input-number v-model="form.checker_batch_size" :min="1" :max="50" style="width:120px" />
+            </el-form-item>
+        </el-tab-pane>
 
-          <!-- 自动任务 -->
-          <el-tab-pane label="自动任务" name="scheduler">
-            <el-form label-width="130px" size="small">
-              <el-form-item label="订阅源自动更新">
-                <el-input-number v-model="form.subscription_auto_update_interval" :min="0" :max="86400" :step="60" style="width:140px" />
-                <span class="unit">秒（0=关闭）</span>
-              </el-form-item>
-              <el-form-item label="EPG 定时刷新">
-                <el-input-number v-model="form.epg_auto_refresh_interval" :min="0" :max="86400" :step="60" style="width:140px" />
-                <span class="unit">秒（0=关闭）</span>
-              </el-form-item>
-              <el-form-item label="检查定时任务">
-                <el-input-number v-model="form.check_auto_interval" :min="0" :max="86400" :step="60" style="width:140px" />
-                <span class="unit">秒（0=关闭）</span>
-              </el-form-item>
-              <div class="tip" style="margin-left:130px">
-                设置后保存即时生效：后端会按间隔自动增量更新订阅源 / 刷新 EPG 节目单 / 自动检查频道可用性。例如 3600 = 每小时一次。
-              </div>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- 扫描 -->
-          <el-tab-pane label="扫描" name="scan">
-            <el-form label-width="100px" size="small">
-              <el-form-item label="探测超时">
-                <el-input-number v-model="form.scan_timeout" :min="1" :max="30" style="width:120px" />
-                <span class="unit">秒</span>
-              </el-form-item>
-              <el-form-item label="并发数">
-                <el-input-number v-model="form.scan_max_workers" :min="1" :max="200" style="width:120px" />
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- 启动 -->
-          <el-tab-pane label="启动" name="startup">
-            <el-form label-width="130px" size="small">
-              <el-form-item label="启动时加载频道缓存">
-                <el-switch v-model="form.load_cache_on_startup" />
-                <span class="tip">启动时自动加载上次保存的频道缓存文件</span>
-              </el-form-item>
-              <el-form-item label="退出时保存频道缓存">
-                <el-switch v-model="form.save_cache_on_exit" />
-                <span class="tip">退出程序时自动保存频道缓存到文件</span>
-              </el-form-item>
-              <el-form-item label="保存窗口位置">
-                <el-switch v-model="form.save_window_geometry" />
-                <span class="tip">退出时保存窗口位置和大小，下次启动恢复</span>
-              </el-form-item>
-              <el-form-item label="启动延迟">
-                <el-input-number v-model="form.startup_delay_ms" :min="0" :max="10000" :step="100" style="width:140px" />
-                <span class="unit">毫秒</span>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- 导入导出 -->
-          <el-tab-pane label="导入导出" name="io">
-            <el-form label-width="130px" size="small">
-              <el-form-item label="URL历史上限">
-                <el-input-number v-model="form.url_history_limit" :min="5" :max="200" style="width:120px" />
-              </el-form-item>
-              <el-form-item label="镜像历史上限">
-                <el-input-number v-model="form.mirror_history_limit" :min="5" :max="200" style="width:120px" />
-              </el-form-item>
-              <el-form-item label="EPG历史上限">
-                <el-input-number v-model="form.epg_history_limit" :min="5" :max="200" style="width:120px" />
-              </el-form-item>
-              <el-form-item label="导入后自动检查">
-                <el-switch v-model="form.auto_check_after_import" />
-                <span class="tip">导入/粘贴频道后自动启动可用性检查</span>
-              </el-form-item>
-              <el-form-item label="检查后自动导出">
-                <el-switch v-model="form.auto_export_after_check" />
-                <span class="tip">检查完成后自动导出整理结果</span>
-              </el-form-item>
-              <el-form-item label="检查后自动删除离线">
-                <el-switch v-model="form.auto_delete_invalid_after_check" />
-                <span class="tip">检查完成后自动删除离线频道</span>
-              </el-form-item>
-              <el-form-item label="检查后重置筛选">
-                <el-switch v-model="form.reset_filter_after_check" />
-                <span class="tip">检查完成后自动重置频道列表的筛选条件</span>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- 频道 -->
-          <el-tab-pane label="频道" name="channel">
+        <!-- 频道与节目单 -->
+        <el-tab-pane label="频道与节目单" name="channel">
             <el-form label-width="130px" size="small">
               <el-form-item label="未分组频道组名">
                 <el-input v-model="form.unknown_group_name" placeholder="未分组" style="width:200px" />
@@ -238,15 +301,227 @@
                 <el-switch v-model="form.auto_load_epg" />
                 <span class="tip">启动时自动加载上次保存的 EPG 源</span>
               </el-form-item>
+              <el-form-item label="URL 黑名单">
+                <el-input v-model="urlBlacklistText" type="textarea" :rows="3" style="width:420px"
+                  placeholder="每行一条，支持子串或 /正则/。命中则永久排除：导入、检测、导出均过滤" />
+              </el-form-item>
+              <el-form-item label="URL 白名单">
+                <el-input v-model="urlWhitelistText" type="textarea" :rows="3" style="width:420px"
+                  placeholder="每行一条，支持子串或 /正则/。命中则豁免检测，直接保留为在线" />
+              </el-form-item>
               <el-form-item label="EPG 加载后自动校正">
                 <el-switch v-model="form.auto_correct_after_epg" />
                 <span class="tip">EPG 加载完成后自动校正频道名</span>
               </el-form-item>
+              <el-divider>频道别名库（让「央视五套」能对上「CCTV5」）</el-divider>
+              <el-form-item label="别名条目">
+                <el-input v-model="aliasText" type="textarea" :rows="8" style="width:520px"
+                  placeholder="每行一条：规范名=别名1,别名2&#10;例：CCTV5=央视体育,央视五套,中央5台" />
+              </el-form-item>
+              <el-form-item label=" ">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <el-button size="small" type="primary" @click="saveAliases(false)">保存（合并）</el-button>
+                  <el-button size="small" @click="saveAliases(true)">整体覆盖</el-button>
+                  <el-button size="small" @click="loadAliases">重新载入</el-button>
+                  <el-button size="small" @click="resetAliasSeed">恢复内置</el-button>
+                  <span class="tip">{{ aliasStat }}</span>
+                </div>
+              </el-form-item>
             </el-form>
-          </el-tab-pane>
+          <el-divider>自动分组</el-divider>
+           <el-form label-width="120px" size="small">
+             <el-form-item label="导入自动分组">
+               <el-switch v-model="form.auto_group" />
+               <div class="tip">开启后，导入/粘贴的频道按统一算法自动分组（忽略源自带的分组）；关闭则保留源分组。</div>
+             </el-form-item>
+             <el-form-item label="外国频道组名">
+               <el-input v-model="form.foreign_group_name" style="width:200px"
+                         placeholder="外国频道" />
+               <div class="tip">所有非中文、非港澳台的频道统一归入此组名。</div>
+             </el-form-item>
+             <el-divider>自定义分组规则（最高优先级，关键词命中即归入指定组）</el-divider>
+             <el-form-item label="规则列表">
+               <div style="width:100%">
+                 <div v-for="(rule, idx) in form.custom_group_rules" :key="idx"
+                      style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+                   <el-input v-model="rule.keyword" placeholder="关键词（如 CCTV）" style="width:200px" />
+                   <span>→</span>
+                   <el-input v-model="rule.group" placeholder="目标分组（如 央视频道）" style="width:200px" />
+                   <el-button type="danger" text circle @click="form.custom_group_rules.splice(idx, 1)">
+                     <el-icon><Close /></el-icon>
+                   </el-button>
+                 </div>
+                 <el-button type="primary" text @click="form.custom_group_rules.push({ keyword: '', group: '' })">
+                   + 新增规则
+                 </el-button>
+                 <div class="tip">例如：关键词填 <code>CCTV</code>、目标组填 <code>央视频道</code>，则所有含 CCTV 的频道优先归入央视频道。</div>
+               </div>
+             </el-form-item>
+             <el-divider />
+             <el-form-item label="立即重新分组">
+               <el-button type="warning" text @click="reclassifyNow">对全部频道重新分组</el-button>
+               <div class="tip">按当前算法（含上述规则）对已有频道池重跑分组，解决历史混乱。此操作会修改分组并保存。</div>
+             </el-form-item>
+           </el-form>
+          <el-divider>频道名校正（看画面认台标）</el-divider>
+          <el-form label-width="120px" size="small">
+            <el-form-item label="改名策略">
+              <el-radio-group v-model="form.namefix_strategy">
+                <el-radio label="advise">只出建议，人工确认</el-radio>
+                <el-radio label="auto_high">高置信度自动改名</el-radio>
+                <el-radio label="auto_all">全部自动改名</el-radio>
+              </el-radio-group>
+              <div class="tip">
+                抓一帧真实画面读出画面上的台标/字幕文字，与现有名称比对后改名。<br>
+                <b>只出建议</b>：最稳，识别结果全部列在频道页「名称校正」里由你勾选；<br>
+                <b>高置信度自动改名</b>：置信度达到下面门槛的自动改（仍可整批撤销）；<br>
+                <b>全部自动改名</b>：激进，所有识别出结果的都改，误判风险最高。
+              </div>
+            </el-form-item>
+            <el-form-item label="抓帧分辨率">
+              <el-select v-model="form.namefix_capture_width" style="width:150px">
+                <el-option :value="640" label="640（快，台标易认错）" />
+                <el-option :value="960" label="960（推荐）" />
+                <el-option :value="1280" label="1280（准，较慢）" />
+              </el-select>
+              <div class="tip">实测 320 会把台标认成「民新昆台」这类乱码，960 起才能稳定读出「中天新闻」「江苏综艺」。</div>
+            </el-form-item>
+            <el-form-item label="跳过首帧">
+              <el-input-number v-model="form.namefix_capture_offset" :min="0" :max="30" />
+              <span class="tip" style="margin-left:6px">秒（默认 3）</span>
+              <div class="tip">不少免费源首帧是「扫码下载 APP」公告页或黑屏，跳过几秒才拿到真实节目画面。</div>
+            </el-form-item>
+            <el-form-item label="自动改名门槛">
+              <el-input-number v-model="form.namefix_min_confidence" :min="0.5" :max="0.99"
+                               :step="0.01" :precision="2" />
+              <div class="tip">仅「高置信度自动改名」策略生效，默认 0.90。台标直读通常 0.95+，字幕条推断会封顶在 0.90 以下。</div>
+            </el-form-item>
+            <el-form-item label="模糊匹配阈值">
+              <el-input-number v-model="form.namefix_fuzzy_threshold" :min="0.6" :max="1"
+                               :step="0.01" :precision="2" />
+              <div class="tip">名称相似度低于此值只做提示、不参与判定。默认 0.86。</div>
+            </el-form-item>
+            <el-form-item label="并发线程">
+              <el-input-number v-model="form.namefix_workers" :min="1" :max="12" />
+              <div class="tip">抓帧+识别同时跑几个频道，默认 4。机器好可调高。</div>
+            </el-form-item>
+            <el-form-item label="复用已有画面">
+              <el-switch v-model="form.namefix_reuse_screenshot" />
+              <div class="tip">开启后优先用「画面」列已抓好的截图，省一次抓帧；但若那张图分辨率不够会自动重抓。</div>
+            </el-form-item>
 
-          <!-- 播放器 -->
-          <el-tab-pane label="播放器" name="player">
+            <el-divider>视觉模型兜底（可选）</el-divider>
+            <el-form-item label="启用兜底">
+              <el-switch v-model="form.namefix_vision_enabled" />
+              <div class="tip">
+                画面里一个字都没有时（纯图形台标），本地文字识别无能为力，交给视觉模型认台标。<br>
+                关闭则这类频道只标记「未能判定」，不影响其他频道。
+              </div>
+            </el-form-item>
+            <el-form-item label="接口地址">
+              <el-input v-model="form.namefix_vision_base" style="width:430px"
+                        placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions" />
+              <div class="tip">OpenAI 兼容格式即可（/chat/completions）。</div>
+            </el-form-item>
+            <el-form-item label="模型名">
+              <el-input v-model="form.namefix_vision_model" style="width:250px" placeholder="glm-4v-flash" />
+            </el-form-item>
+            <el-form-item label="API Key">
+              <el-input v-model="form.namefix_vision_key" style="width:430px" show-password
+                        placeholder="留空则不启用兜底" />
+            </el-form-item>
+            <el-form-item label="连通性测试">
+              <el-button type="primary" text :loading="visionTesting" @click="testVision">测试识别</el-button>
+              <span v-if="visionTestMsg" class="tip" style="margin-left:8px">{{ visionTestMsg }}</span>
+              <div class="tip">用已抓到的画面帧试调一次视觉接口，确认地址/模型/Key 配对了。</div>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <!-- 界面 -->
+        <el-tab-pane label="界面" name="ui">
+          <el-form label-width="100px" size="small">
+            <el-form-item label="预设主题">
+              <div class="theme-grid">
+                <div
+                  v-for="t in PRESET_THEMES" :key="t.color"
+                  class="theme-item"
+                  :class="{ active: currentTheme === t.color }"
+                  @click="setTheme(t.color)"
+                >
+                  <div class="theme-color" :style="{ background: t.color }" />
+                  <span>{{ t.name }}</span>
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item label="自定义颜色">
+              <el-color-picker v-model="customColor" @change="onCustomColor" show-alpha />
+            </el-form-item>
+            <el-form-item label="导入皮肤">
+              <el-upload :auto-upload="false" :show-file-list="false" :on-change="onImportSkin" accept=".css">
+                <el-button size="small">选择 Element Plus 皮肤 CSS 文件</el-button>
+              </el-upload>
+              <el-button v-if="currentTheme === '__custom__'" size="small" type="danger" style="margin-left:8px" @click="clearCustomTheme">清除自定义皮肤</el-button>
+              <div class="tip">从 Element Plus 主题编辑器下载的 CSS 文件</div>
+            </el-form-item>
+            <el-form-item label="内置皮肤">
+              <div class="skin-grid">
+                <div class="skin-group">
+                  <div class="skin-group-title">暗黑风格</div>
+                  <div class="skin-list">
+                    <div
+                      v-for="s in BUILTIN_SKINS.filter(s => s.type === 'dark')" :key="s.file"
+                      class="skin-item"
+                      :class="{ active: builtinSkin === s.file }"
+                      @click="onApplyBuiltinSkin(s)"
+                    >
+                      <span>{{ s.name }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="skin-group">
+                  <div class="skin-group-title">亮色风格</div>
+                  <div class="skin-list">
+                    <div
+                      v-for="s in BUILTIN_SKINS.filter(s => s.type === 'light')" :key="s.file"
+                      class="skin-item"
+                      :class="{ active: builtinSkin === s.file }"
+                      @click="onApplyBuiltinSkin(s)"
+                    >
+                      <span>{{ s.name }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item label="暗色模式">
+              <el-switch v-model="darkMode" @change="setDarkMode" />
+            </el-form-item>
+          </el-form>
+          <el-divider>列设置</el-divider>
+          <el-form label-width="100px" size="small">
+            <el-form-item label="显示列">
+              <el-checkbox-group v-model="columnVisibility">
+                <div v-for="col in allCols" :key="col.key" style="display:inline-block;width:33%;margin-bottom:4px">
+                  <el-checkbox :label="col.key" :value="col.key">{{ col.defLabel }}</el-checkbox>
+                </div>
+              </el-checkbox-group>
+            </el-form-item>
+          </el-form>
+          <el-divider>统计卡片</el-divider>
+            <el-form-item label="统计卡片位置">
+              <el-radio-group v-model="form.stats_card_position">
+                <el-radio label="顶部">顶部</el-radio>
+                <el-radio label="底部">底部</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="显示统计卡片">
+              <el-switch v-model="form.stats_card_visible" />
+            </el-form-item>
+        </el-tab-pane>
+
+        <!-- 播放器 -->
+        <el-tab-pane label="播放器" name="player">
             <el-form label-width="140px" size="small">
               <el-form-item label="默认音量">
                 <el-input-number v-model="form.default_volume" :min="0" :max="100" style="width:120px" />
@@ -312,130 +587,56 @@
                 <span class="tip">当播放器不在默认安装位置时，可手动指定 .exe 路径（如 D:\Tools\PotPlayer\PotPlayerMini.exe）</span>
               </el-form-item>
             </el-form>
-          </el-tab-pane>
-
-          <!-- 主题 -->
-          <el-tab-pane label="主题" name="theme">
-          <el-form label-width="100px" size="small">
-            <el-form-item label="预设主题">
-              <div class="theme-grid">
-                <div
-                  v-for="t in PRESET_THEMES" :key="t.color"
-                  class="theme-item"
-                  :class="{ active: currentTheme === t.color }"
-                  @click="setTheme(t.color)"
-                >
-                  <div class="theme-color" :style="{ background: t.color }" />
-                  <span>{{ t.name }}</span>
-                </div>
-              </div>
-            </el-form-item>
-            <el-form-item label="自定义颜色">
-              <el-color-picker v-model="customColor" @change="onCustomColor" show-alpha />
-            </el-form-item>
-            <el-form-item label="导入皮肤">
-              <el-upload :auto-upload="false" :show-file-list="false" :on-change="onImportSkin" accept=".css">
-                <el-button size="small">选择 Element Plus 皮肤 CSS 文件</el-button>
-              </el-upload>
-              <el-button v-if="currentTheme === '__custom__'" size="small" type="danger" style="margin-left:8px" @click="clearCustomTheme">清除自定义皮肤</el-button>
-              <div class="tip">从 Element Plus 主题编辑器下载的 CSS 文件</div>
-            </el-form-item>
-            <el-form-item label="内置皮肤">
-              <div class="skin-grid">
-                <div class="skin-group">
-                  <div class="skin-group-title">暗黑风格</div>
-                  <div class="skin-list">
-                    <div
-                      v-for="s in BUILTIN_SKINS.filter(s => s.type === 'dark')" :key="s.file"
-                      class="skin-item"
-                      :class="{ active: builtinSkin === s.file }"
-                      @click="onApplyBuiltinSkin(s)"
-                    >
-                      <span>{{ s.name }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="skin-group">
-                  <div class="skin-group-title">亮色风格</div>
-                  <div class="skin-list">
-                    <div
-                      v-for="s in BUILTIN_SKINS.filter(s => s.type === 'light')" :key="s.file"
-                      class="skin-item"
-                      :class="{ active: builtinSkin === s.file }"
-                      @click="onApplyBuiltinSkin(s)"
-                    >
-                      <span>{{ s.name }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </el-form-item>
-            <el-form-item label="暗色模式">
-              <el-switch v-model="darkMode" @change="setDarkMode" />
-            </el-form-item>
-          </el-form>
         </el-tab-pane>
 
-        <!-- 列设置 -->
-        <el-tab-pane label="列设置" name="columns">
-          <el-form label-width="100px" size="small">
-            <el-form-item label="显示列">
-              <el-checkbox-group v-model="columnVisibility">
-                <div v-for="col in allCols" :key="col.key" style="display:inline-block;width:33%;margin-bottom:4px">
-                  <el-checkbox :label="col.key" :value="col.key">{{ col.defLabel }}</el-checkbox>
-                </div>
-              </el-checkbox-group>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <!-- 高级 -->
-        <el-tab-pane label="高级" name="advanced">
-          <el-form label-width="120px" size="small">
-            <el-form-item label="修补超时">
-              <el-input-number v-model="form.repair_check_timeout" :min="1" :max="30" style="width:120px" />
-              <span class="unit">秒</span>
-            </el-form-item>
-            <el-form-item label="修补重试">
-              <el-input-number v-model="form.repair_max_retries" :min="0" :max="5" style="width:120px" />
-            </el-form-item>
-            <el-form-item label="修补线程数">
-              <el-input-number v-model="form.repair_max_workers" :min="1" :max="50" style="width:120px" />
-            </el-form-item>
-            <el-form-item label="高清阈值">
-              <el-input-number v-model="form.repair_hd_size_threshold" :min="10000" :step="10000" style="width:160px" />
-              <span class="unit">字节</span>
-            </el-form-item>
-            <el-form-item label="标清阈值">
-              <el-input-number v-model="form.repair_sd_size_threshold" :min="10000" :step="10000" style="width:160px" />
-              <span class="unit">字节</span>
-            </el-form-item>
-            <el-form-item label="统计卡片位置">
-              <el-radio-group v-model="form.stats_card_position">
-                <el-radio label="顶部">顶部</el-radio>
-                <el-radio label="底部">底部</el-radio>
-              </el-radio-group>
-            </el-form-item>
-            <el-form-item label="显示统计卡片">
-              <el-switch v-model="form.stats_card_visible" />
-            </el-form-item>
-            <el-divider>检查引擎</el-divider>
-            <el-form-item label="延迟等级 A 阈值">
-              <el-input-number v-model="form.latency_grade_a_threshold" :min="50" :max="2000" :step="50" style="width:140px" />
-              <span class="unit">毫秒（≤此值=优）</span>
-            </el-form-item>
-            <el-form-item label="延迟等级 B 阈值">
-              <el-input-number v-model="form.latency_grade_b_threshold" :min="100" :max="5000" :step="50" style="width:140px" />
-              <span class="unit">毫秒（≤此值=良）</span>
-            </el-form-item>
-            <el-form-item label="检查批次大小">
-              <el-input-number v-model="form.checker_batch_size" :min="1" :max="50" style="width:120px" />
-            </el-form-item>
-          </el-form>
-         </el-tab-pane>
-
-         <!-- 数据 -->
-         <el-tab-pane label="数据" name="data">
+        <!-- 数据与自动化 -->
+        <el-tab-pane label="数据与自动化" name="data">
+            <el-form label-width="130px" size="small">
+              <el-form-item label="URL历史上限">
+                <el-input-number v-model="form.url_history_limit" :min="5" :max="200" style="width:120px" />
+              </el-form-item>
+              <el-form-item label="镜像历史上限">
+                <el-input-number v-model="form.mirror_history_limit" :min="5" :max="200" style="width:120px" />
+              </el-form-item>
+              <el-form-item label="EPG历史上限">
+                <el-input-number v-model="form.epg_history_limit" :min="5" :max="200" style="width:120px" />
+              </el-form-item>
+              <el-form-item label="导入后自动检查">
+                <el-switch v-model="form.auto_check_after_import" />
+                <span class="tip">导入/粘贴频道后自动启动可用性检查</span>
+              </el-form-item>
+              <el-form-item label="检查后自动导出">
+                <el-switch v-model="form.auto_export_after_check" />
+                <span class="tip">检查完成后自动导出整理结果</span>
+              </el-form-item>
+              <el-form-item label="检查后自动删除离线">
+                <el-switch v-model="form.auto_delete_invalid_after_check" />
+                <span class="tip">检查完成后自动删除离线频道</span>
+              </el-form-item>
+              <el-form-item label="检查后重置筛选">
+                <el-switch v-model="form.reset_filter_after_check" />
+                <span class="tip">检查完成后自动重置频道列表的筛选条件</span>
+              </el-form-item>
+            </el-form>
+          <el-divider>自动任务</el-divider>
+            <el-form label-width="130px" size="small">
+              <el-form-item label="订阅源自动更新">
+                <el-input-number v-model="form.subscription_auto_update_interval" :min="0" :max="86400" :step="60" style="width:140px" />
+                <span class="unit">秒（0=关闭）</span>
+              </el-form-item>
+              <el-form-item label="EPG 定时刷新">
+                <el-input-number v-model="form.epg_auto_refresh_interval" :min="0" :max="86400" :step="60" style="width:140px" />
+                <span class="unit">秒（0=关闭）</span>
+              </el-form-item>
+              <el-form-item label="检查定时任务">
+                <el-input-number v-model="form.check_auto_interval" :min="0" :max="86400" :step="60" style="width:140px" />
+                <span class="unit">秒（0=关闭）</span>
+              </el-form-item>
+              <div class="tip" style="margin-left:130px">
+                设置后保存即时生效：后端会按间隔自动增量更新订阅源 / 刷新 EPG 节目单 / 自动检查频道可用性。例如 3600 = 每小时一次。
+              </div>
+            </el-form>
+          <el-divider>备份</el-divider>
            <el-form label-width="100px" size="small">
              <el-form-item label="数据备份">
                <div style="width:100%">
@@ -473,79 +674,7 @@
                </div>
              </el-form-item>
            </el-form>
-         </el-tab-pane>
-
-         <!-- 分组（#60 分组重构） -->
-         <el-tab-pane label="分组" name="group">
-           <el-form label-width="120px" size="small">
-             <el-form-item label="导入自动分组">
-               <el-switch v-model="form.auto_group" />
-               <div class="tip">开启后，导入/粘贴的频道按统一算法自动分组（忽略源自带的分组）；关闭则保留源分组。</div>
-             </el-form-item>
-             <el-form-item label="外国频道组名">
-               <el-input v-model="form.foreign_group_name" style="width:200px"
-                         placeholder="外国频道" />
-               <div class="tip">所有非中文、非港澳台的频道统一归入此组名。</div>
-             </el-form-item>
-             <el-divider>自定义分组规则（最高优先级，关键词命中即归入指定组）</el-divider>
-             <el-form-item label="规则列表">
-               <div style="width:100%">
-                 <div v-for="(rule, idx) in form.custom_group_rules" :key="idx"
-                      style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
-                   <el-input v-model="rule.keyword" placeholder="关键词（如 CCTV）" style="width:200px" />
-                   <span>→</span>
-                   <el-input v-model="rule.group" placeholder="目标分组（如 央视频道）" style="width:200px" />
-                   <el-button type="danger" text circle @click="form.custom_group_rules.splice(idx, 1)">
-                     <el-icon><Close /></el-icon>
-                   </el-button>
-                 </div>
-                 <el-button type="primary" text @click="form.custom_group_rules.push({ keyword: '', group: '' })">
-                   + 新增规则
-                 </el-button>
-                 <div class="tip">例如：关键词填 <code>CCTV</code>、目标组填 <code>央视频道</code>，则所有含 CCTV 的频道优先归入央视频道。</div>
-               </div>
-             </el-form-item>
-             <el-divider />
-             <el-form-item label="立即重新分组">
-               <el-button type="warning" text @click="reclassifyNow">对全部频道重新分组</el-button>
-               <div class="tip">按当前算法（含上述规则）对已有频道池重跑分组，解决历史混乱。此操作会修改分组并保存。</div>
-             </el-form-item>
-           </el-form>
-         </el-tab-pane>
-
-         <!-- 更新 -->
-         <el-tab-pane label="更新" name="update">
-           <el-form label-width="100px" size="small">
-             <el-form-item label="当前版本">
-               <span class="ver-tag">v{{ curVersion }}</span>
-             </el-form-item>
-             <el-form-item label="更新源地址">
-               <el-input v-model="form.update_url" placeholder="留空使用默认更新源" style="width:340px" />
-               <div class="tip">更新检查清单 JSON 地址，默认指向 GitHub raw</div>
-             </el-form-item>
-             <el-form-item label="检查更新">
-               <el-button type="primary" @click="checkForUpdate" :loading="checking">检查更新</el-button>
-               <div v-if="updateInfo.latest" class="update-result" :class="{ avail: updateInfo.has_update }">
-                 <template v-if="updateInfo.has_update">
-                   <span class="ur-title">发现新版本 v{{ updateInfo.latest }}</span>
-                   <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
-                   <div class="ur-actions">
-                     <el-button v-if="updateInfo.packages.length" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
-                       下载更新包
-                     </el-button>
-                     <el-button
-                       v-if="downloadPaths.length && !updateInfo.is_installing"
-                       type="warning" size="small"
-                       @click="doInstallUpdate"
-                     >退出并安装更新</el-button>
-                     <span v-if="updateInfo.is_installing" class="ur-installing">更新器已启动，程序即将退出并自动安装…</span>
-                   </div>
-                 </template>
-                 <span v-else class="ur-title">已是最新版本</span>
-               </div>
-             </el-form-item>
-           </el-form>
-         </el-tab-pane>
+        </el-tab-pane>
        </el-tabs>
 
 
@@ -558,13 +687,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSettingsStore } from '@/stores/settings'
 import * as configApi from '@/api/config'
 import { exportApi } from '@/api/export'
 import * as appApi from '@/api/app'
 import { reclassifyChannels } from '@/api/channels'
+import * as gwApi from '@/api/gateway'
+import * as aliasApi from '@/api/aliases'
+import * as nfApi from '@/api/namefix'
 import { callNative } from '@/composables/useNative'
 import {
   currentTheme, isDark, PRESET_THEMES, BUILTIN_SKINS,
@@ -591,6 +723,16 @@ const encFileInput = ref(null)
 const importingEnc = ref(false)
 const exportingEnc = ref(false)
 const darkMode = ref(isDark.value)
+
+// URL 黑/白名单在界面上按「每行一条」编辑，与设置里的数组双向转换（P0-5）
+const urlBlacklistText = computed({
+  get: () => (Array.isArray(form.url_blacklist) ? form.url_blacklist : []).join('\n'),
+  set: (v) => { form.url_blacklist = String(v || '').split('\n').map(s => s.trim()).filter(Boolean) }
+})
+const urlWhitelistText = computed({
+  get: () => (Array.isArray(form.url_whitelist) ? form.url_whitelist : []).join('\n'),
+  set: (v) => { form.url_whitelist = String(v || '').split('\n').map(s => s.trim()).filter(Boolean) }
+})
 const customColor = ref(currentTheme.value.startsWith('#') ? currentTheme.value : '#409EFF')
 const builtinSkin = ref(getBuiltinSkinName())
 const urlText = ref('')
@@ -670,7 +812,119 @@ const form = reactive({
   url_history_limit: 50,
   use_proxy: false,
   user_agent: '',
+  // URL 黑/白名单（P0-5）：每行一条，支持子串或 /正则/
+  url_blacklist: [],
+  url_whitelist: [],
+  // 局域网订阅网关（P1-6）
+  gateway_enabled: false,
+  gateway_token: '',
+  // 频道名校正（台标识别）
+  namefix_strategy: 'advise',
+  namefix_capture_width: 960,
+  namefix_capture_offset: 3,
+  namefix_min_confidence: 0.9,
+  namefix_fuzzy_threshold: 0.86,
+  namefix_workers: 4,
+  namefix_reuse_screenshot: true,
+  namefix_vision_enabled: false,
+  namefix_vision_base: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+  namefix_vision_model: 'glm-4v-flash',
+  namefix_vision_key: '',
 })
+
+// ==================== 频道别名库（P1-9） ====================
+// 别名库是独立资源（不是 settings 里的键），所以单独加载/保存，不跟「保存设置」走。
+const aliasText = ref('')
+const aliasStat = ref('')
+
+async function loadAliases() {
+  try {
+    const { data } = await aliasApi.listAliases()
+    const lines = []
+    for (const [canon, aliases] of Object.entries(data.map || {})) {
+      lines.push(aliases && aliases.length ? `${canon}=${aliases.join(',')}` : `${canon}=`)
+    }
+    aliasText.value = lines.join('\n')
+    aliasStat.value = `共 ${data.groups || 0} 组 / ${data.aliases || 0} 个别名`
+  } catch {
+    aliasStat.value = '别名库读取失败'
+  }
+}
+
+async function saveAliases(replace) {
+  try {
+    const { data } = await aliasApi.importAliases(aliasText.value, replace)
+    if (!data.ok) return ElMessage.warning(data.error || '保存失败')
+    aliasStat.value = `共 ${data.groups} 组 / ${data.aliases} 个别名`
+    if (data.errors && data.errors.length) {
+      ElMessage.warning(`已保存，但有 ${data.errors.length} 行没解析成功：${data.errors[0]}`)
+    } else {
+      ElMessage.success(replace ? '已整体覆盖别名库' : '别名已合并保存')
+    }
+    await loadAliases()
+  } catch {
+    ElMessage.error('保存别名失败')
+  }
+}
+
+async function resetAliasSeed() {
+  try {
+    await ElMessageBox.confirm('恢复内置别名会覆盖当前自定义内容，确定？', '恢复内置别名', { type: 'warning' })
+  } catch { return }
+  try {
+    await aliasApi.resetAliases()
+    await loadAliases()
+    ElMessage.success('已恢复内置别名')
+  } catch {
+    ElMessage.error('恢复失败')
+  }
+}
+
+// ==================== 局域网订阅网关（P1-6） ====================
+const gwInfo = ref({ enabled: false, token: '', playlist_url: '', epg_url: '', channel_count: 0, epg_count: 0, lan_ip: '', port: 0 })
+
+async function loadGwInfo() {
+  try {
+    const { data } = await gwApi.getGatewayInfo()
+    gwInfo.value = data
+    // 后端是唯一真相源：开关/令牌以服务端为准，避免前后端不一致
+    if (typeof data.enabled === 'boolean') form.gateway_enabled = data.enabled
+    if (data.token) form.gateway_token = data.token
+  } catch { /* ignore */ }
+}
+
+async function ensureGwToken() {
+  try {
+    const { data } = await gwApi.rotateGatewayToken()
+    gwInfo.value = { ...gwInfo.value, ...data }
+    form.gateway_token = data.token
+    form.gateway_enabled = true
+    ElMessage.success('已生成订阅令牌，记得点「保存设置」')
+  } catch {
+    ElMessage.error('生成令牌失败，请检查后端服务是否运行')
+  }
+}
+
+function onGatewayToggle(v) {
+  // 打开开关但还没令牌 → 直接发一个，省去用户两步操作
+  if (v && !form.gateway_token) ensureGwToken()
+}
+
+async function rotateGwToken() {
+  try {
+    await ElMessageBox.confirm('重新生成令牌会让所有已配置的播放器立刻失效，需要重新填地址。继续？', '重新生成令牌', { type: 'warning' })
+  } catch { return }
+  await ensureGwToken()
+}
+
+async function copyGw(url) {
+  try {
+    await navigator.clipboard.writeText(url)
+    ElMessage.success('已复制到剪贴板')
+  } catch {
+    ElMessage.warning('复制失败，请手动选中地址复制')
+  }
+}
 
 // 暗色模式同步
 watch(darkMode, (val) => {
@@ -701,6 +955,9 @@ onMounted(async () => {
     columnVisibility.value = s.column_visibility.filter((v, i) => v && i < allCols.length).map((_, i) => allCols[i]?.key).filter(Boolean)
   }
   if (s.update_url !== undefined) form.update_url = s.update_url
+  // 局域网网关状态（以服务端为准）
+  loadGwInfo()
+  loadAliases()
   // 拉取应用版本号与更新信息
   try {
     const { data } = await appApi.getAppVersion()
@@ -981,6 +1238,29 @@ function onCustomColor(val) {
 }
 
 // #60 立即重新分组（设置页内一键对整池重跑分组）
+// 视觉兜底连通性自测（用现有一帧试识别）
+const visionTesting = ref(false)
+const visionTestMsg = ref('')
+async function testVision() {
+  visionTesting.value = true
+  visionTestMsg.value = ''
+  try {
+    const { data } = await nfApi.nfVisionTest()
+    if (data.ok) {
+      visionTestMsg.value = `接口正常，示例帧识别结果：${data.answer}`
+      ElMessage.success('视觉接口可用')
+    } else {
+      visionTestMsg.value = data.error || '测试失败'
+      ElMessage.warning(visionTestMsg.value)
+    }
+  } catch {
+    visionTestMsg.value = '请求失败（后端可能已停止）'
+    ElMessage.error(visionTestMsg.value)
+  } finally {
+    visionTesting.value = false
+  }
+}
+
 async function reclassifyNow() {
   try {
     const { data } = await reclassifyChannels()

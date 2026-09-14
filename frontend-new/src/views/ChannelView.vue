@@ -206,6 +206,10 @@
           </el-select>
           <el-checkbox v-model="hideDead" size="small" border>隐藏死源</el-checkbox>
           <span class="filter-info">共 {{ filtered.length }} 条</span>
+          <el-button size="small" :loading="shotRunning" @click="captureShotsBatch">批量抓帧</el-button>
+          <span v-if="shotRunning" class="filter-info">画面 {{ shotDone }}/{{ shotTotal }}</span>
+          <el-button size="small" type="primary" plain :loading="nfRunning" @click="openNamefix">名称校正</el-button>
+          <span v-if="nfRunning" class="filter-info">校正 {{ nfDone }}/{{ nfTotal }}</span>
           <el-button size="small" text style="margin-left:auto" @click="showColumnSettings = true">列设置</el-button>
         </div>
 
@@ -231,13 +235,6 @@
           class="channel-table"
         >
           <el-table-column prop="id" label="#" width="50" sortable="custom" align="center" />
-          <el-table-column label="源" width="52" align="center">
-            <template #default="{ row }">
-              <el-tag size="small" effect="plain" class="src-count">
-                {{ (row.sources && row.sources.length) || 1 }}
-              </el-tag>
-            </template>
-          </el-table-column>
           <el-table-column
             v-for="col in visibleCols"
             :key="col.key"
@@ -247,10 +244,29 @@
             :min-width="col.minWidth"
             :sortable="col.sortable !== false ? 'custom' : false"
             :align="col.align || 'center'"
-            show-overflow-tooltip
+            :show-overflow-tooltip="col.key !== 'screenshot'"
           >
             <template #default="{ row }">
-              <template v-if="col.key === 'status'">
+              <!-- 画面：已抓帧则显示缩略图（点击放大），未抓帧则给个一键抓帧入口 -->
+              <template v-if="col.key === 'screenshot'">
+                <el-image
+                  v-if="shotOf(row)"
+                  :src="shotOf(row)"
+                  :preview-src-list="[shotOf(row)]"
+                  preview-teleported
+                  fit="cover"
+                  class="shot-thumb"
+                  :title="row.name + ' 的实时画面'"
+                />
+                <el-button
+                  v-else
+                  size="small"
+                  text
+                  :loading="shotBusy === row.url"
+                  @click.stop="captureShotOne(row)"
+                >抓帧</el-button>
+              </template>
+              <template v-else-if="col.key === 'status'">
                 <div class="status-cell">
                   <el-tag :type="row.status === '在线' ? 'success' : row.status === '离线' ? 'danger' : 'info'" size="small" effect="dark">
                     {{ row.status }}
@@ -272,6 +288,10 @@
                 </span>
               </template>
               <template v-else-if="col.key === 'tag'">
+                <!-- 自动识别：广告/占位循环源（复用检测阶段的 manifest 判定，非人工标记） -->
+                <el-tooltip v-if="adReason(row)" :content="adReason(row)" placement="top">
+                  <el-tag size="small" effect="dark" type="danger" style="margin-right:4px">疑似广告</el-tag>
+                </el-tooltip>
                 <!-- 统一标记显示：假直播也是普通标记（黄底），不再单独用红底 danger -->
                 <el-tag v-if="row.tag" size="small" effect="dark" type="warning">{{ row.tag }}</el-tag>
                 <el-tag v-else-if="row.is_fake_live" size="small" effect="dark" type="warning">假直播</el-tag>
@@ -382,7 +402,6 @@
       <div class="ctx-sep" />
       <!-- 行操作 -->
       <div class="ctx-item" @click="ctxEdit">编辑</div>
-      <div class="ctx-item" @click="ctxSourceMgr">管理源</div>
       <div class="ctx-item ctx-danger" @click="ctxDelete">删除</div>
     </div>
 
@@ -547,46 +566,6 @@
       </template>
     </el-dialog>
 
-    <!-- 弹窗：源管理 -->
-    <el-dialog v-model="showSourceMgr" title="源管理" width="560px" destroy-on-close>
-      <div class="source-mgr">
-        <div class="sm-toolbar">
-          <el-button size="small" type="primary" plain @click="smAddSource">+ 新增源</el-button>
-        </div>
-
-        <!-- 聚合组 -->
-        <div v-for="(g, gi) in sourceMgrGroups" :key="'g-' + gi" class="sm-group">
-          <div class="sm-group-header" @click="smToggleGroup(gi)">
-            <el-icon class="sm-arrow"><ArrowDown v-if="smExpandedGroups.has(gi)" /><ArrowRight v-else /></el-icon>
-            <el-input v-model="g.name" size="small" class="sm-group-name" @click.stop />
-            <el-button size="small" text type="danger" @click.stop="smRemoveGroup(gi)">解散</el-button>
-          </div>
-          <div v-show="smExpandedGroups.has(gi)" class="sm-group-body">
-            <div v-for="(u, ui) in g.urls" :key="'gu-' + ui" class="sm-row">
-              <el-input :model-value="u" size="small" class="sm-url" @blur="e => smUpdateUrl(u, e.target.value, 'group', gi, ui)" />
-              <el-button size="small" text type="danger" @click="smRemoveGroupMember(gi, ui)">删除</el-button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 独立源 -->
-        <div class="sm-section-title">独立源（未聚合）{{ smStandalone.length ? `共 ${smStandalone.length} 个` : '' }}</div>
-        <el-checkbox-group v-model="smSelected" class="sm-list">
-          <div v-for="(u, i) in smStandalone" :key="'s-' + i" class="sm-row">
-            <el-checkbox :label="u">&nbsp;</el-checkbox>
-            <el-input :model-value="u" size="small" class="sm-url" @blur="e => smUpdateUrl(u, e.target.value, 'standalone', i)" />
-            <el-button size="small" text type="danger" @click="smRemoveStandalone(i)">删除</el-button>
-          </div>
-        </el-checkbox-group>
-        <div v-if="!smStandalone.length && !sourceMgrGroups.length" class="sm-empty">暂无源</div>
-      </div>
-      <template #footer>
-        <el-button @click="showSourceMgr = false">取消</el-button>
-        <el-button type="primary" @click="doSaveSources">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 弹窗：列设置 -->
     <el-dialog v-model="showColumnSettings" title="列设置" width="500px" destroy-on-close>
       <el-checkbox-group v-model="hiddenCols">
         <div v-for="col in allCols" :key="col.key" style="display:inline-block;width:50%;margin-bottom:4px">
@@ -651,6 +630,69 @@
       </template>
     </el-dialog>
   </div>
+    <!-- 频道名校正：抓帧 → 台标/字幕 OCR → EPG 交叉验证 → 改名建议表（人工确认后应用） -->
+    <el-dialog v-model="showNamefix" title="频道名校正" width="1000px" top="6vh" destroy-on-close>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <el-button size="small" type="primary" :loading="nfRunning" @click="startNamefix">开始扫描</el-button>
+        <span v-if="nfRunning" class="filter-info">
+          进度 {{ nfDone }}/{{ nfTotal }}（可判定 {{ nfResolved }} · 源异常 {{ nfJunk }}）
+        </span>
+        <el-button size="small" @click="loadNamefix">刷新</el-button>
+        <el-button size="small" @click="openUndo">撤销改名</el-button>
+        <el-button size="small" type="danger" plain @click="clearNamefix">清空建议</el-button>
+        <span style="margin-left:auto;font-size:12px;opacity:.7">当前策略：{{ nfStrategyLabel }}</span>
+      </div>
+
+      <el-alert
+        v-if="!nfPending.length && !nfRunning"
+        type="info" :closable="false" show-icon
+        title="暂无待确认的改名建议"
+        description="点「开始扫描」，程序会逐台抓一帧真实画面，读出台标/字幕文字，再和现有名称比对；对不上的会列在这里等你确认。" />
+
+      <el-table v-if="nfPending.length" :data="nfPending" size="small" height="430"
+                @selection-change="onNfSelect">
+        <el-table-column type="selection" width="42" />
+        <el-table-column prop="cid" label="#" width="52" align="center" />
+        <el-table-column label="画面" width="96" align="center">
+          <template #default="{ row }">
+            <el-image v-if="row.frame" :src="row.frame" :preview-src-list="[row.frame]"
+                      preview-teleported fit="cover"
+                      style="width:72px;height:40px;border-radius:4px;cursor:zoom-in" />
+            <span v-else style="opacity:.4">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="old" label="当前名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="识别为" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span style="color:#67c23a;font-weight:500">{{ row.new || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="置信度" width="96" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain" :type="nfConfType(row)">
+              {{ ((row.confidence || 0) * 100).toFixed(0) }}%
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="依据" width="92" align="center">
+          <template #default="{ row }">{{ nfKindLabel(row) }}</template>
+        </el-table-column>
+        <el-table-column prop="note" label="说明" min-width="210" show-overflow-tooltip />
+      </el-table>
+
+      <div v-if="nfSummaryOthers" style="margin-top:8px;font-size:12px;opacity:.7">
+        其他判定：{{ nfSummaryOthers }}
+      </div>
+
+      <template #footer>
+        <el-button size="small" @click="dismissSelected">忽略选中</el-button>
+        <el-button size="small" type="primary" :disabled="!nfSelected.length" @click="applySelected">
+          应用选中改名（{{ nfSelected.length }}）
+        </el-button>
+        <el-button size="small" @click="showNamefix = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
 </template>
 
 <script setup>
@@ -669,6 +711,8 @@ import * as epgApi from '@/api/epg'
 import * as rulesApi from '@/api/rules'
 import * as dlnaApi from '@/api/dlna'
 import * as appApi from '@/api/app'
+import * as shotApi from '@/api/screenshots'
+import * as nfApi from '@/api/namefix'
 import { subscribeLogsSSE, subscribeEventsSSE } from '@/api/realtime'
 
 const store = useChannelStore()
@@ -800,11 +844,9 @@ const showColumnSettings = ref(false)
 
 // ==================== 右键菜单 ====================
 const ctx = reactive({ show: false, x: 0, y: 0, row: null, flip: false })
-const ctxSource = reactive({ show: false, x: 0, y: 0, row: null, url: '', flip: false })
 const ctxGroup = reactive({ show: false, x: 0, y: 0, group: '', count: 0, flip: false })
 function onRowCtx(row, column, e) {
   e.preventDefault()
-  ctxSource.show = false
   ctxGroup.show = false
   ctx.row = row
   ctx.x = Math.min(e.clientX, window.innerWidth - 140)
@@ -815,7 +857,6 @@ function onRowCtx(row, column, e) {
 function onGroupCtx(g, e) {
   e.preventDefault()
   ctx.show = false
-  ctxSource.show = false
   ctxGroup.group = g.group
   ctxGroup.count = g.count
   ctxGroup.x = Math.min(e.clientX, window.innerWidth - 140)
@@ -827,7 +868,7 @@ function onHeaderCtx(column, e) {
   e.preventDefault()
   showColumnSettings.value = true
 }
-function hideCtx() { ctx.show = false; ctxSource.show = false; ctxGroup.show = false }
+function hideCtx() { ctx.show = false; ctxGroup.show = false }
 
 // 获取当前应操作的行列表（多选时取所有选中行，否则取右键点击的行）
 function getTargetRows() {
@@ -842,51 +883,38 @@ function ctxPlayExternal() { playExternal(ctx.row); hideCtx() }
 function ctxDlnaCast() { openDlna(ctx.row); hideCtx() }
 function ctxCopyUrl() {
   const rows = getTargetRows()
-  const lines = []
-  for (const r of rows) {
-    const srcs = (r.sources && r.sources.length) ? r.sources : [r.url]
-    for (const u of srcs) lines.push(u)
-  }
+  const lines = rows.map(r => r.url).filter(Boolean)
   navigator.clipboard.writeText(lines.join('\n'))
-  ElMessage.success(`已复制 ${lines.length} 条链接（含多源）`)
+  ElMessage.success(`已复制 ${lines.length} 条链接`)
   hideCtx()
 }
 function ctxCopyNameUrl() {
   const rows = getTargetRows()
-  const lines = []
-  for (const r of rows) {
-    const srcs = (r.sources && r.sources.length) ? r.sources : [r.url]
-    for (const u of srcs) lines.push(`${r.name}\n${u}`)
-  }
+  const lines = rows.filter(r => r.url).map(r => `${r.name}\n${r.url}`)
   navigator.clipboard.writeText(lines.join('\n'))
-  ElMessage.success(`已复制 ${rows.length} 个频道的名称+链接（含多源）`)
+  ElMessage.success(`已复制 ${rows.length} 个频道的名称+链接`)
   hideCtx()
 }
 function ctxCopyInfo() {
   const rows = getTargetRows()
-  const text = rows.map(row => {
-    const srcs = (row.sources && row.sources.length) ? row.sources : [row.url]
-    const srcLines = srcs.map((u, i) => `源${i + 1}: ${u}`).join('\n')
-    return `名称: ${row.name}\n地址: ${row.url}\n分组: ${row.group || ''}\n状态: ${row.status || '未检查'}\n延迟: ${row.ms || ''}ms\n分辨率: ${row.res || ''}\n标记: ${row.tag || ''}\n网络栈: ${row.stack || ''}\n全部源:\n${srcLines}`
-  }).join('\n---\n')
+  const text = rows.map(row =>
+    `名称: ${row.name}\n地址: ${row.url}\n分组: ${row.group || ''}\n状态: ${row.status || '未检查'}\n延迟: ${row.ms || ''}ms\n分辨率: ${row.res || ''}\n标记: ${row.tag || ''}\n网络栈: ${row.stack || ''}`
+  ).join('\n---\n')
   navigator.clipboard.writeText(text)
-  ElMessage.success(`已复制 ${rows.length} 条信息（含多源）`)
+  ElMessage.success(`已复制 ${rows.length} 条信息`)
   hideCtx()
 }
 function ctxCopyM3u() {
   const rows = getTargetRows()
   const m3u = []
   for (const row of rows) {
+    if (!row.url) continue
     const grp = row.group || '自动分组'
-    const srcs = (row.sources && row.sources.length) ? row.sources : [row.url]
-    srcs.forEach((u, i) => {
-      const name = i === 0 ? row.name : `${row.name} (源${i + 1})`
-      m3u.push(`#EXTINF:-1 group-title="${grp}" tvg-logo="${row.logo || ''}",${name}`)
-      m3u.push(u)
-    })
+    m3u.push(`#EXTINF:-1 group-title="${grp}" tvg-logo="${row.logo || ''}",${row.name}`)
+    m3u.push(row.url)
   }
   navigator.clipboard.writeText(m3u.join('\n'))
-  ElMessage.success(`已复制 ${rows.length} 个频道的 M3U（含多源）`)
+  ElMessage.success(`已复制 ${rows.length} 个频道的 M3U`)
   hideCtx()
 }
 function ctxEdit() { editForm.value = { ...ctx.row }; showEdit.value = true; hideCtx() }
@@ -921,6 +949,287 @@ async function ctxDeleteGroup() {
   store.refresh()
   hideCtx()
 }
+// 自动识别到的广告/占位源 → 中文提示（P0-1，数据来自后端检测阶段的 ad_suspect 字段）
+const AD_REASON_TEXT = {
+  ad_keyword: '切片地址含广告关键字',
+  short_loop: '极短循环占位（≤30 秒）',
+  vod_loop: '有限短片循环（点播式占位）',
+}
+function adReason(row) {
+  const m = row?.ad_suspect
+  if (!m || typeof m !== 'object') return ''
+  const keys = Object.keys(m)
+  if (!keys.length) return ''
+  const reasons = [...new Set(keys.map(u => AD_REASON_TEXT[m[u]] || String(m[u])))]
+  return '自动识别：' + reasons.join('、')
+}
+
+// ==================== 画面截图（P0-2）====================
+// 后端用 ffmpeg 抓首帧落盘，前端拿到 {源URL: 静态路径} 索引直接显示。
+// 价值：一眼看穿"CCTV5 播的其实是购物台"这类挂羊头卖狗肉的源。
+const shotIndex = ref({})
+const shotBusy = ref('')
+const shotRunning = ref(false)
+const shotDone = ref(0)
+const shotTotal = ref(0)
+let shotTimer = null
+
+async function loadShots() {
+  try {
+    const { data } = await shotApi.listShots()
+    shotIndex.value = data.index || {}
+    const st = data.status || {}
+    if (st.running) {
+      shotRunning.value = true
+      shotDone.value = st.done || 0
+      shotTotal.value = st.total || 0
+      pollShots()
+    }
+  } catch { /* ignore */ }
+}
+
+// 一源一行：直接用该行自己的 url 取画面
+function shotOf(row) {
+  if (!row || !row.url) return ''
+  return shotIndex.value[row.url] || ''
+}
+
+async function captureShotOne(row) {
+  if (!row?.url || shotBusy.value) return
+  shotBusy.value = row.url
+  try {
+    const { data } = await shotApi.captureShot({ channel_id: row.id, url: row.url })
+    if (data.ok) {
+      shotIndex.value = { ...shotIndex.value, [row.url]: data.path }
+      ElMessage.success(`已抓取画面：${row.name}`)
+    } else {
+      ElMessage.warning(`${row.name}：${data.error || '抓帧失败'}`)
+    }
+  } catch {
+    ElMessage.error('抓帧请求失败（后端可能已停止）')
+  } finally {
+    shotBusy.value = ''
+  }
+}
+
+function pollShots() {
+  if (shotTimer) return
+  shotTimer = setInterval(async () => {
+    try {
+      const { data } = await shotApi.getShotStatus()
+      shotDone.value = data.done || 0
+      shotTotal.value = data.total || 0
+      if (!data.running) {
+        clearInterval(shotTimer); shotTimer = null
+        shotRunning.value = false
+        await loadShots()
+        ElMessage.success(`画面抓取完成，已存画面 ${Object.keys(shotIndex.value).length} 张`)
+      }
+    } catch { /* ignore */ }
+  }, 1500)
+}
+
+// 批量抓帧：默认只抓「还没画面」的源；针对当前筛选结果，先弹确认（耗时可能较长）
+async function captureShotsBatch() {
+  const rows = displayed.value || []
+  const pending = rows.filter(r => r.url && !shotOf(r))
+  if (!pending.length) {
+    return ElMessage.info('当前列表的频道都已有画面，无需重复抓取')
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将对当前列表中的 ${pending.length} 个「还没有画面」的源抓取首帧。\n` +
+      `每个源约 3-10 秒，总计可能需要 ${Math.ceil(pending.length * 6 / 60)} 分钟左右，期间可正常使用软件。`,
+      '批量抓取画面', { type: 'info', confirmButtonText: '开始抓取', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  try {
+    const { data } = await shotApi.captureShotBatch({ ids: pending.map(r => r.id), only_missing: true })
+    if (!data.started) {
+      return ElMessage.warning(data.error || '没有需要抓取的地址')
+    }
+    shotRunning.value = true
+    shotDone.value = 0
+    shotTotal.value = data.total || 0
+    ElMessage.success(`已开始抓取 ${data.total} 个源的首帧`)
+    pollShots()
+  } catch {
+    ElMessage.error('批量抓帧请求失败')
+  }
+}
+
+// ==================== 频道名校正（方案书-频道名自动校正）====================
+// 抓帧 → 本地 OCR 读台标/字幕 → EPG 交叉验证 → 建议表 → 人工确认后应用（可整批撤销）
+const showNamefix = ref(false)
+const nfRunning = ref(false)
+const nfDone = ref(0)
+const nfTotal = ref(0)
+const nfResolved = ref(0)
+const nfJunk = ref(0)
+const nfItems = ref([])
+const nfSummary = ref({})
+const nfSelected = ref([])
+const nfStrategy = ref('advise')
+let nfTimer = null
+
+// 只展示需要人做决定的：有识别结果、且与现名不一致
+const nfPending = computed(() => nfItems.value.filter(it => it.state === 'pending' && it.new))
+
+const NF_KIND = { exact: '台标直读', contain: '台标包含', fuzzy: '模糊匹配', epg: '节目单', vision: '视觉模型' }
+function nfKindLabel(row) {
+  return NF_KIND[row.kind] || ({ top: '台标区', mid: '画面中部', bot: '字幕条' }[row.region] || '—')
+}
+function nfConfType(row) {
+  const c = Number(row.confidence || 0)
+  return c >= 0.9 ? 'success' : c >= 0.7 ? 'warning' : 'info'
+}
+const nfStrategyLabel = computed(() => ({
+  advise: '只出建议，人工确认（最稳）',
+  auto_high: '高置信度自动改名',
+  auto_all: '全部自动改名（激进）'
+}[nfStrategy.value] || nfStrategy.value))
+
+const nfSummaryOthers = computed(() => {
+  const m = nfSummary.value || {}
+  const map = { consistent: '名称一致', unresolved: '未能判定', unreachable: '抓帧失败',
+                junk: '推广/公告页', no_text: '画面无文字', ambiguous: '候选打平',
+                dismissed: '已忽略', applied: '已改名' }
+  const parts = []
+  for (const k in map) {
+    if (m[k]) parts.push(`${map[k]} ${m[k]}`)
+  }
+  return parts.join(' · ')
+})
+
+async function loadNamefix() {
+  try {
+    const [sug, st, cfg] = await Promise.all([
+      nfApi.nfSuggestions(), nfApi.nfStatus(), configApi.getConfig()
+    ])
+    nfItems.value = sug.data.items || []
+    nfSummary.value = sug.data.summary || {}
+    const s = st.data.status || {}
+    nfRunning.value = !!s.running
+    nfDone.value = s.done || 0
+    nfTotal.value = s.total || 0
+    nfResolved.value = s.resolved || 0
+    nfJunk.value = s.junk || 0
+    const c = cfg.data || {}
+    if (c.namefix_strategy) nfStrategy.value = c.namefix_strategy
+    if (s.running) pollNamefix()
+  } catch {
+    ElMessage.error('读取校正数据失败（后端可能已停止）')
+  }
+}
+
+async function openNamefix() {
+  showNamefix.value = true
+  await loadNamefix()
+}
+
+function pollNamefix() {
+  if (nfTimer) return
+  nfTimer = setInterval(async () => {
+    try {
+      const { data } = await nfApi.nfStatus()
+      const s = data.status || {}
+      nfDone.value = s.done || 0
+      nfTotal.value = s.total || 0
+      nfResolved.value = s.resolved || 0
+      nfJunk.value = s.junk || 0
+      if (!s.running) {
+        clearInterval(nfTimer); nfTimer = null
+        nfRunning.value = false
+        await loadNamefix()
+        const applied = s.applied || 0
+        ElMessage.success(applied
+          ? `校正扫描完成，已自动改名 ${applied} 个`
+          : `校正扫描完成，可判定 ${nfResolved.value} 个（按当前策略不自动改名）`)
+      }
+    } catch { /* ignore */ }
+  }, 2000)
+}
+
+async function startNamefix() {
+  const rows = displayed.value || []
+  if (!rows.length) return ElMessage.info('列表为空，先导入频道')
+  try {
+    await ElMessageBox.confirm(
+      `将对当前列表的 ${rows.length} 个频道逐个抓一帧真实画面并做文字识别。\n` +
+      `每个源约 3-10 秒，总计约 ${Math.ceil(rows.length * 5 / 60)} 分钟，期间软件可正常使用。\n\n` +
+      `抓帧与识别全部在本机完成，不上传任何数据。`,
+      '开始名称校正扫描', { type: 'info', confirmButtonText: '开始扫描', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    const { data } = await nfApi.nfScan({ limit: 0 })
+    if (!data.started) return ElMessage.warning(data.error || '扫描未启动')
+    nfRunning.value = true
+    nfDone.value = 0
+    nfTotal.value = data.total || 0
+    ElMessage.success(`已开始扫描 ${data.total} 个频道`)
+    pollNamefix()
+  } catch {
+    ElMessage.error('启动扫描失败')
+  }
+}
+
+function onNfSelect(rows) { nfSelected.value = rows }
+
+async function applySelected() {
+  const ids = nfSelected.value.map(r => r.cid)
+  if (!ids.length) return
+  try {
+    await ElMessageBox.confirm(
+      `将把选中的 ${ids.length} 个频道改为识别出的名称。\n` +
+      `改名前会自动备份频道数据到 _bak_<日期>_改名前/，之后可随时整批撤销。`,
+      '确认改名', { type: 'warning', confirmButtonText: '确认改名' })
+  } catch { return }
+  try {
+    const { data } = await nfApi.nfApply(ids)
+    ElMessage.success(`已改名 ${data.changed || 0} 个` + (data.failed?.length ? `，失败 ${data.failed.length} 个` : ''))
+    await store.refresh()
+    await loadNamefix()
+  } catch {
+    ElMessage.error('改名请求失败')
+  }
+}
+
+async function dismissSelected() {
+  const ids = nfSelected.value.map(r => r.cid)
+  if (!ids.length) return ElMessage.info('先勾选要忽略的项')
+  try {
+    await nfApi.nfDismiss(ids)
+    await loadNamefix()
+  } catch { ElMessage.error('操作失败') }
+}
+
+async function openUndo() {
+  try {
+    const { data } = await nfApi.nfUndoList()
+    const bs = data.batches || []
+    if (!bs.length) return ElMessage.info('没有可撤销的改名记录')
+    const latest = bs[0]
+    await ElMessageBox.confirm(
+      `找到 ${bs.length} 个改名批次，最近一批改动了 ${latest.count} 个频道。\n是否撤销最近这一批？`,
+      '撤销改名', { type: 'warning', confirmButtonText: '撤销最近一批', cancelButtonText: '取消' })
+    const r = await nfApi.nfUndo('')
+    ElMessage.success(`已还原 ${r.data.restored || 0} 个频道名`)
+    await store.refresh()
+    await loadNamefix()
+  } catch { /* 取消 */ }
+}
+
+async function clearNamefix() {
+  try {
+    await ElMessageBox.confirm('清空建议表（不会改动任何频道数据）。', '清空建议',
+                               { type: 'warning', confirmButtonText: '清空' })
+  } catch { return }
+  try {
+    await nfApi.nfClear()
+    await loadNamefix()
+  } catch { ElMessage.error('操作失败') }
+}
+
 // 现有标记库：聚合所有频道已有 tag（普通标记统一管理，不用假直播红底那套）
 const existingTags = computed(() => {
   const set = new Set()
@@ -967,7 +1276,6 @@ async function ctxTagClear() {
   ElMessage.success(`已清除 ${rows.length} 个频道的标记`)
   hideCtx()
 }
-// ==================== 聚合源单行右键菜单（死代码，已清理） ====================
 
 async function applyGroupToRows(group) {
   const rows = getTargetRows()
@@ -1002,7 +1310,7 @@ watch(() => playerStore.currentChannel, (ch) => {
   if (!ch || !ch.id) {
     if (!ch || !ch.url) { playingRowId.value = null; return }
     // 无 id（历史/EPG 播放）按 url 匹配
-    const byUrl = (displayed.value || []).find(r => r.url === ch.url || (r.sources || []).includes(ch.url))
+    const byUrl = (displayed.value || []).find(r => r.url === ch.url)
     playingRowId.value = byUrl ? byUrl.id : null
     return
   }
@@ -1151,12 +1459,8 @@ async function openPlayer(row, sourceUrl = null) {
   const chList = (displayed.value || []).map(ch => ({
     id: ch.id,
     url: ch.url, name: ch.name || '', group: ch.group || '',
-    sources: ch.sources && ch.sources.length ? ch.sources : [ch.url],
-    source_groups: Array.isArray(ch.source_groups) ? ch.source_groups : [],
     tag: ch.tag || '',
     is_fake_live: !!ch.is_fake_live,
-    source_tags: ch.source_tags || {},
-    source_is_fake_live: ch.source_is_fake_live || {},
     url_note: ch.url_note || '',   // 1.5: $ 后标签透传
   }))
   const idx = chList.findIndex(ch => ch.url === playUrl)
@@ -1165,12 +1469,8 @@ async function openPlayer(row, sourceUrl = null) {
     url: playUrl,
     name: row.name,
     group: row.group || '',
-    sources: row.sources && row.sources.length ? row.sources : [row.url],
-    source_groups: Array.isArray(row.source_groups) ? row.source_groups : [],
     tag: row.tag || '',
     is_fake_live: !!row.is_fake_live,
-    source_tags: row.source_tags || {},
-    source_is_fake_live: row.source_is_fake_live || {},
     url_note: row.url_note || '',
   }, chList, idx >= 0 ? idx : 0)
   // 浮层自动展开为 drawer（hidden → drawer）
@@ -1277,6 +1577,7 @@ watch(columnWidths, saveColumnWidths, { deep: true })
 // 应用保存的列宽（使用computed实现响应式更新）
 const COL_DEFS = [
   { key: 'name', prop: 'name', defLabel: '频道', width: 180 },
+  { key: 'screenshot', prop: 'screenshot', defLabel: '画面', width: 90 },
   { key: 'status', prop: 'status', defLabel: '状态', width: 80 },
   { key: 'code', prop: 'code', defLabel: '状态码', width: 90 },
   { key: 'ms', prop: 'ms', defLabel: '延迟', width: 60 },
@@ -1506,106 +1807,6 @@ async function ruleDel(index) {
   } catch { /* ignore */ }
 }
 
-// ==================== 源管理 ====================
-const showSourceMgr = ref(false)
-const sourceMgrRow = ref(null)
-const sourceMgrSources = ref([])
-const sourceMgrGroups = ref([])
-const smSelected = ref([])
-const smExpandedGroups = ref(new Set())
-
-const smStandalone = computed(() => {
-  const grouped = new Set(sourceMgrGroups.value.flatMap(g => g.urls || []))
-  return sourceMgrSources.value.filter(u => !grouped.has(u))
-})
-
-function openSourceMgr(row) {
-  sourceMgrRow.value = row
-  sourceMgrSources.value = [...(row.sources?.length ? row.sources : [row.url])]
-  sourceMgrGroups.value = JSON.parse(JSON.stringify(row.source_groups || []))
-  smSelected.value = []
-  smExpandedGroups.value = new Set(sourceMgrGroups.value.map((_, i) => i))
-  showSourceMgr.value = true
-  hideCtx()
-}
-function ctxSourceMgr() { openSourceMgr(ctx.row) }
-
-function smAddSource() {
-  sourceMgrSources.value.push('')
-}
-function smRemoveStandalone(idx) {
-  const url = smStandalone.value[idx]
-  sourceMgrGroups.value.forEach(g => { g.urls = (g.urls || []).filter(u => u !== url) })
-  sourceMgrSources.value = sourceMgrSources.value.filter(u => u !== url)
-  smSelected.value = smSelected.value.filter(u => u !== url)
-  sourceMgrGroups.value = sourceMgrGroups.value.filter(g => (g.urls || []).length)
-}
-function smRemoveGroup(gi) {
-  sourceMgrGroups.value.splice(gi, 1)
-  smExpandedGroups.value = new Set([...smExpandedGroups.value].filter(i => i !== gi).map(i => i > gi ? i - 1 : i))
-}
-function smRemoveGroupMember(gi, ui) {
-  const url = sourceMgrGroups.value[gi].urls[ui]
-  sourceMgrGroups.value[gi].urls.splice(ui, 1)
-  if (!sourceMgrGroups.value[gi].urls.length) {
-    sourceMgrGroups.value.splice(gi, 1)
-    smExpandedGroups.value = new Set([...smExpandedGroups.value].filter(i => i !== gi).map(i => i > gi ? i - 1 : i))
-  }
-  // 如果该 URL 已不在任何 group 中，仍保留在 sources 里作为独立源
-  const stillGrouped = sourceMgrGroups.value.some(g => (g.urls || []).includes(url))
-  if (!stillGrouped && !sourceMgrSources.value.includes(url)) {
-    sourceMgrSources.value.push(url)
-  }
-}
-function smToggleGroup(gi) {
-  if (smExpandedGroups.value.has(gi)) smExpandedGroups.value.delete(gi)
-  else smExpandedGroups.value.add(gi)
-}
-function smUpdateUrl(oldUrl, newUrl, where, gi, ui) {
-  newUrl = (newUrl || '').trim()
-  if (newUrl === oldUrl) return
-  if (!newUrl) {
-    if (where === 'standalone') {
-      const idx = smStandalone.value.indexOf(oldUrl)
-      if (idx >= 0) smRemoveStandalone(idx)
-    } else {
-      smRemoveGroupMember(gi, ui)
-    }
-    return
-  }
-  sourceMgrSources.value = sourceMgrSources.value.map(u => u === oldUrl ? newUrl : u)
-  sourceMgrGroups.value.forEach(g => {
-    g.urls = (g.urls || []).map(u => u === oldUrl ? newUrl : u)
-  })
-  smSelected.value = smSelected.value.map(u => u === oldUrl ? newUrl : u)
-}
-async function doSaveSources() {
-  if (!sourceMgrRow.value) return
-  sourceMgrSources.value = sourceMgrSources.value.map(u => (u || '').trim()).filter(Boolean)
-  // 去重
-  const seen = new Set()
-  sourceMgrSources.value = sourceMgrSources.value.filter(u => { if (seen.has(u)) return false; seen.add(u); return true })
-  // 清理聚合组：name 非空、urls 至少 2 个且都在 sources 中
-  sourceMgrGroups.value.forEach(g => {
-    g.name = (g.name || '').trim() || '聚合源'
-    g.urls = (g.urls || []).map(u => (u || '').trim()).filter(Boolean).filter(u => sourceMgrSources.value.includes(u))
-    const s = new Set()
-    g.urls = g.urls.filter(u => { if (s.has(u)) return false; s.add(u); return true })
-  })
-  sourceMgrGroups.value = sourceMgrGroups.value.filter(g => g.urls.length >= 2)
-  try {
-    const payload = {
-      url: sourceMgrSources.value[0] || sourceMgrRow.value.url,
-      sources: sourceMgrSources.value,
-      source_groups: sourceMgrGroups.value
-    }
-    await channelApi.updateChannel(sourceMgrRow.value.id, payload)
-    ElMessage.success('已保存')
-    store.refresh()
-    showSourceMgr.value = false
-  } catch { /* ignore */ }
-}
-
 // ==================== 频道编辑 ====================
 const showEdit = ref(false)
 const editForm = ref({})
@@ -1781,22 +1982,6 @@ async function fetchAppVersion() {
   } catch { /* ignore */ }
 }
 
-// #56 智能去重合并
-async function doMergeDuplicates() {
-  try {
-    const { data } = await channelApi.mergeDuplicates()
-    if (data.removed > 0) {
-      ElMessage.success(`已合并 ${data.removed} 个重复频道（URL ${data.removed_by_url} / 名称 ${data.removed_by_name}），剩余 ${data.remaining}`)
-    } else {
-      ElMessage.info('未发现重复频道')
-    }
-    store.refresh()
-  } catch (e) {
-    ElMessage.error('去重合并失败: ' + (e.response?.data?.detail || e.message))
-  }
-}
-
-
 // #57 Logo 自动匹配（默认扫描程序目录下的 logos 文件夹）
 async function doMatchLogos() {
   try {
@@ -1961,6 +2146,7 @@ onMounted(async () => {
       externalPlayerPath.value = (settingsStore.get('external_player') === 'potplayer' ? data.pot : data.vlc) || ''
     }
   } catch { /* ignore */ }
+  loadShots()
   loadLogs()
   logTimer = setInterval(loadLogs, 2000)
   startRealtime()
@@ -2010,6 +2196,7 @@ watch(() => settingsStore.settings, async (s) => {
   } catch { /* ignore */ }
 })
 onUnmounted(() => {
+  if (nfTimer) { clearInterval(nfTimer); nfTimer = null }
   clearInterval(logTimer)
   clearInterval(checkTimer)
   clearInterval(scrapeTimer)
@@ -2185,6 +2372,13 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .ch-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 3px; flex-shrink: 0; background: var(--el-fill-color-light); }
 .ch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 画面截图缩略图（P0-2）：点击可放大预览 */
+.shot-thumb {
+  width: 76px; height: 43px; border-radius: 4px; cursor: zoom-in;
+  border: 1px solid var(--el-border-color-light); background: var(--el-fill-color-light);
+  display: block; margin: 0 auto;
+}
+
 /* 右键菜单 */
 .ctx-menu {
   position: fixed; z-index: 9999; background: var(--el-bg-color);
@@ -2251,22 +2445,6 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   color: var(--el-text-color-secondary); background: var(--el-fill-color-light);
   border-radius: 6px;
 }
-/* 源管理弹窗 */
-.source-mgr { max-height: 480px; overflow-y: auto; }
-.sm-toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-.sm-group { border: 1px solid var(--el-border-color-lighter); border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
-.sm-group-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--el-fill-color-light); cursor: pointer; }
-.sm-group-header .sm-arrow { color: var(--el-text-color-secondary); }
-.sm-group-name { flex: 1; }
-.sm-group-name :deep(.el-input__inner) { background: transparent; }
-.sm-group-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.sm-row { display: flex; align-items: center; gap: 8px; }
-.sm-row .sm-url { flex: 1; }
-.sm-row .el-checkbox { margin-right: 0; flex-shrink: 0; }
-.sm-section-title { font-size: 13px; font-weight: 600; margin: 12px 0 8px; color: var(--el-text-color-primary); }
-.sm-list { display: flex; flex-direction: column; gap: 6px; }
-.sm-empty { text-align: center; color: var(--el-text-color-secondary); padding: 24px 0; font-size: 13px; }
-
 .dlna-device-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
 .dlna-device-card {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
@@ -2279,22 +2457,4 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .dlna-dev-info { min-width: 0; }
 .dlna-dev-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dlna-dev-loc { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
-
-/* 频道列表：合并源展开区 */
-.src-expand { padding: 6px 12px 10px 38px; background: var(--el-fill-color-light); }
-.src-tag-line { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; }
-.src-tag-label { font-size: 12px; color: var(--el-text-color-secondary); }
-.src-tag-value { font-weight: 600; }
-.src-group-name { font-size: 12px; font-weight: 600; color: var(--el-color-primary); margin: 6px 0 4px; }
-.src-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px dashed var(--el-border-color-lighter); }
-.src-row:first-of-type { border-top: none; }
-.src-tag { font-size: 11px; color: #fff; background: var(--el-color-info); border-radius: 3px; padding: 1px 6px; flex-shrink: 0; }
-.src-tag-num { background: var(--el-color-primary); }
-.src-tag-channel { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--el-color-warning); color: var(--el-color-black); }
-.src-tag-fake { background: var(--el-color-danger); color: #fff; }
-.src-url { flex: 1; min-width: 0; font-size: 12px; color: var(--el-text-color-regular); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
-.src-empty { padding: 6px 12px 6px 38px; font-size: 12px; color: var(--el-text-color-secondary); }
-.src-empty .src-tag-line { margin: 0; }
-.src-count { cursor: pointer; font-weight: 600; }
-.src-count:hover { color: var(--el-color-primary); }
 </style>

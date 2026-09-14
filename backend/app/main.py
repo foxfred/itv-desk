@@ -57,7 +57,10 @@ from app.services.export_service import ExportService
 from app.services.subscription_service import SubscriptionService
 from app.services.dlna_service import DlnaService
 from app.services.scan_service import ScanService
-from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router
+from app.services.screenshot_service import ScreenshotService
+from app.services.stats_service import StatsService
+from app.services.namefix_service import NamefixService
+from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router, screenshots, gateway, aliases, stats as stats_router, namefix
 from app.realtime import publish_event
 
 # ==================== FastAPI 应用 ====================
@@ -136,6 +139,9 @@ subscription_service = SubscriptionService(
 )
 dlna_service = DlnaService(log_callback=log)
 scan_service = ScanService(log_callback=log, settings=settings)
+screenshot_service = ScreenshotService(log_callback=log, data_dir=DATA_DIR)
+namefix_service = NamefixService(log_callback=log, data_dir=DATA_DIR)
+stats_service = StatsService(log_callback=log, data_dir=DATA_DIR)
 
 # ==================== SQLite 数据库初始化（播放历史等持久化） ====================
 try:
@@ -224,42 +230,51 @@ def _migrate_fake_live_tags():
         log(f"已迁移 '假直播' 标记：{len(fake_live_db)} 条 URL 写入 fake_live_tags.json，并从 tag 字段移除")
 
 
-def _all_source_urls(ch):
-    """返回频道所有源 URL 列表（主 URL + sources），去重且保留主 URL 在前。"""
-    urls = []
-    primary = ch.get("url", "")
-    if primary:
-        urls.append(primary)
-    for u in ch.get("sources") or []:
-        if u and u not in urls:
-            urls.append(u)
-    return urls
-
-
 def _enrich_channel_tags():
-    """启动时把 tag_db / fake_live_db 按 URL 反写到频道池，
-    并附加 source_tags / source_is_fake_live 供前端按单个源显示与操作。
+    """启动时把 tag_db / fake_live_db 按 URL 反写到频道行。
+
+    一源一行后标记直接挂在频道行上（ch['tag'] / ch['is_fake_live']），不再有
+    按源分表的 source_tags / source_is_fake_live。顺带清理历史聚合残留字段。
     """
     global tag_db, fake_live_db
     with channel_service.lock:
         for ch in channel_service.pool:
-            st = {}
-            sfl = {}
-            for u in _all_source_urls(ch):
-                t = tag_db.get(u)
-                if t:
-                    st[u] = t
-                if fake_live_db.get(u):
-                    sfl[u] = True
-            ch["source_tags"] = st
-            ch["source_is_fake_live"] = sfl
             primary = ch.get("url", "")
             ch["tag"] = tag_db.get(primary) or ch.get("tag", "") or ""
             ch["is_fake_live"] = bool(fake_live_db.get(primary)) or bool(ch.get("is_fake_live"))
+            for f in ("sources", "source_groups", "source_tags",
+                      "source_is_fake_live", "source_health", "source_is_fake"):
+                ch.pop(f, None)
+
+
+def _migrate_multi_sources():
+    """一次性数据迁移：把历史缓存里的聚合多源频道展开为「一源一行」并落盘。
+
+    聚合源功能已彻底移除（聚合后各源无法单独检查/清除）。此处在缓存加载后
+    幂等执行：只对确实携带多源的条目动手，正常数据零改动。
+    """
+    try:
+        stats = channel_service.ungroup_all()
+    except Exception as e:
+        log(f"聚合源展开迁移失败: {e}")
+        return
+    if not stats.get("split"):
+        return
+    log(f"聚合源已展开为一源一行：新增 {stats['split']} 行，当前共 {stats['total']} 条")
+    try:
+        from app.config import FileManager
+        cache_file = (settings or {}).get("cache_file_name", "channels_cache.json")
+        with channel_service.lock:
+            data = channel_service.pool.copy()
+        FileManager.write_json_atomic(cache_file, data)
+        log("展开结果已写回频道缓存")
+    except Exception as e:
+        log(f"展开结果落盘失败（下次启动会重试）: {e}")
 
 
 _load_cached_channels()
 _migrate_fake_live_tags()
+_migrate_multi_sources()
 _enrich_channel_tags()
 
 # ==================== 注册路由 ====================
@@ -282,12 +297,24 @@ app.include_router(rtmp_proxy.router)
 app.include_router(h264_proxy.router)
 app.include_router(scan_router.router)
 app.include_router(app_routes.router)
+app.include_router(screenshots.router)
+app.include_router(namefix.router)
+app.include_router(gateway.router)
+app.include_router(gateway.public)
+app.include_router(aliases.router)
+app.include_router(stats_router.router)
 
 # ==================== Logo 静态资源（用户放入 logos 目录的图片，供频道 logo 显示） ====================
 logos_dir = os.path.join(DATA_DIR, "logos")
 try:
     os.makedirs(logos_dir, exist_ok=True)
     app.mount("/logos", StaticFiles(directory=logos_dir), name="logos")
+except Exception:
+    pass
+
+# ==================== 画面截图静态资源（P0-2：ffmpeg 抓帧落盘 screenshots/） ====================
+try:
+    app.mount("/screenshots", StaticFiles(directory=screenshot_service.dir), name="screenshots")
 except Exception:
     pass
 
@@ -299,12 +326,23 @@ async def _start_realtime_publisher():
     import asyncio as _asyncio
 
     async def _publish_loop():
+        was_checking = False
         while True:
             try:
                 total, online, offline = channel_service.get_stats()
                 publish_event("stats", {"total": total, "online": online, "offline": offline})
                 try:
-                    publish_event("check", check_service.get_status())
+                    st = check_service.get_status()
+                    publish_event("check", st)
+                    # P1-10：一轮检测刚结束就记一次当天健康快照（同一天只记第一次，
+                    # 避免一天内反复覆盖把"趋势"变成"最后时刻"）
+                    running = bool(st.get("running"))
+                    if was_checking and not running:
+                        try:
+                            stats_service.snapshot(channel_service)
+                        except Exception:
+                            pass
+                    was_checking = running
                 except Exception:
                     pass
                 try:

@@ -57,7 +57,6 @@
           <button v-if="!currentIsFakeLiveMarked" class="fl-btn" @click="markCurrentAsFakeLive(true)">标记</button>
           <button v-else class="fl-btn" @click="markCurrentAsFakeLive(false)">取消标记</button>
           <button v-if="isFakeLive && !currentIsFakeLiveMarked" class="fl-btn" @click="trustCurrentSource">信任</button>
-          <button v-if="currentSources.length > 1" class="fl-btn" @click="cycleSource">切换源</button>
           <button class="fl-btn fl-x" @click="fakeLiveDismissed = true">×</button>
         </div>
 
@@ -190,10 +189,6 @@
         <!-- 置顶 -->
         <button class="ico-btn" :class="{ on: topmost }" @click="toggleTopmost" title="置顶">
           <el-icon :size="14"><Top /></el-icon>
-        </button>
-        <!-- 切换源 -->
-        <button v-if="currentSources.length > 1" class="ico-btn" @click="cycleSource" title="切换源">
-          <el-icon :size="14"><Refresh /></el-icon>
         </button>
         <!-- 迷你 -->
         <button class="ico-btn" :class="{ on: miniMode }" @click="toggleMiniMode" title="迷你模式">
@@ -428,10 +423,6 @@ let epgRefreshTimer = null // 每 60 秒重新拉取节目单（节目边界切�
 const pipSupported = ref(typeof document !== 'undefined' && !!document.pictureInPictureEnabled)
 const pipActive = ref(false)
 
-// 多源故障转移：当前频道的全部源 + 当前源下标 + 已尝试失败的源集合
-const currentSources = ref([])
-const sourceIndex = ref(0)
-let triedSources = new Set()
 
 // 假直播检测：当前源疑似点播/循环文件时为 true（用于醒目提示与切换入口）
 const isFakeLive = ref(false)
@@ -446,8 +437,6 @@ const engine = ref('webview')
 const fakeLiveDismissed = ref(false)
 // 用户“信任此源”白名单（会话内有效，可持久化到 settings.fake_live_whitelist）
 const trustedSources = ref(new Set())
-// 当前频道的聚合分组（source_groups：[{label, members:[url...]}]），用于源选择器标注
-const currentSourceGroups = ref([])
 // 当前频道的用户标记（tag，逗号分隔），用于源选择器/标题栏展示（修复：聚合后标记不显示）
 const currentTag = ref('')
 // R3: 收藏星标状态
@@ -484,17 +473,9 @@ function isWhitelisted(url) {
   const wls = (settingsStore.get('fake_live_whitelist', []) || []).concat(Array.from(trustedSources.value))
   return wls.some(w => _wlMatch(url, w))
 }
-// 返回某源所属的聚合分组标签（空串表示未聚合）
-function groupLabelOf(url) {
-  for (const g of currentSourceGroups.value || []) {
-    if ((g.urls || []).includes(url)) return g.name || '聚合'
-  }
-  return ''
-}
 // 是否显示假直播提示条：自动检测命中 或 用户手动标记了当前频道
 const showFakeLiveBar = computed(() => {
   if (playError.value) return false
-  if (currentSources.value.length <= 1 && !currentIsFakeLiveMarked.value) return false
   if (fakeLiveDismissed.value && !currentIsFakeLiveMarked.value) return false
   return isFakeLive.value || currentIsFakeLiveMarked.value
 })
@@ -607,20 +588,9 @@ async function playChannelAtIndex(idx) {
     currentUrl.value = ch.url
     currentName.value = ch.name || '未知频道'
     currentUrlNote.value = ch.url_note || ''
-    const srcs = (ch.sources && ch.sources.length) ? ch.sources : [ch.url]
-    // B1 修复：主 url 不在 sources 时补到头部，保证 index=0 即主源，避免静默用错源
-    const mainIdx = srcs.indexOf(ch.url)
-    if (mainIdx === -1) srcs.unshift(ch.url)
-    currentSources.value = srcs
-    sourceIndex.value = Math.max(0, mainIdx === -1 ? 0 : mainIdx)
-    // 捕获聚合分组（source_groups），用于源选择器标注
-    currentSourceGroups.value = Array.isArray(ch.source_groups)
-      ? ch.source_groups.filter(g => g && Array.isArray(g.urls) && g.urls.length)
-      : []
-    // 捕获用户标记（tag）与手动假直播标记，用于源选择器/标题栏展示
+    // 捕获用户标记（tag）与手动假直播标记，用于标题栏展示
     currentTag.value = ch.tag || ''
     currentIsFakeLiveMarked.value = !!ch.is_fake_live
-    triedSources = new Set()
     refreshEpg(currentName.value)
     nextTick(() => setupHls())
   }
@@ -683,33 +653,6 @@ const epgRemaining = computed(() => {
   return `剩 ${m}m`
 })
 
-// ==================== 多源故障转移 ====================
-function switchSource(toIndex) {
-  const srcs = currentSources.value
-  if (!srcs.length) return
-  const n = srcs.length
-  const i = ((toIndex % n) + n) % n
-  if (srcs[i] === currentUrl.value && i === sourceIndex.value) return
-  sourceIndex.value = i
-  currentUrl.value = srcs[i]
-  errorCount = 0
-  healthReported = false
-  triedSources = new Set()   // B4 修复：手动换源时清空已尝试集合，避免故障转移跳过本可用源
-  isFakeLive.value = false
-  fakeLiveDismissed.value = false
-  // 切换时先停止当前源播放，再加载所选源（A3 修复：先 destroy 旧实例，防回调交叉）
-  if (hls) { hls.destroy(); hls = null }
-  if (flvPlayer) { flvPlayer.destroy(); flvPlayer = null }
-  const v = videoEl.value
-  if (v) { try { v.pause() } catch (_) { /* ignore */ } }
-  nextTick(() => setupHls())
-}
-
-// 从下拉列表中选择指定源切换（停止当前源、加载所选源）
-function onPickSource(i) {
-  switchSource(i)
-}
-
 // 容器型文件扩展名（点播/文件型，对“频道”而言大多为假直播）。
 // 注意：刻意排除 .ts/.m2ts —— 它们是 IPTV 直播切片型后缀，绝大多数真实直播即为 .ts，
 // 此前把它们算作“静态文件”是真实直播被误判为假直播的主因。
@@ -763,10 +706,6 @@ function recomputeFakeLive() {
   isFakeLive.value = false
 }
 
-function cycleSource() {
-  switchSource(sourceIndex.value + 1)
-}
-
 // 信任当前源：加入白名单（会话内 + 持久化到 settings.fake_live_whitelist），
 // 既关闭提示条，又长期避免该真实直播链接被误判为假直播。
 async function markCurrentAsFakeLive(isFake) {
@@ -807,20 +746,9 @@ async function trustCurrentSource() {
   }
 }
 
-// 主源致命失败时自动切到下一个未尝试过的备用源；无可切换则返回 false（由调用方显示错误）
+// 一源一行后每个频道只有一个源，已无「备用源」可切换，恒返回 false，
+// 让上层错误处理继续走原来的失败分支（无需改动 4 处调用点）。
 function maybeFailover() {
-  const srcs = currentSources.value
-  if (srcs.length <= 1) return false
-  for (let i = 0; i < srcs.length; i++) {
-    const idx = (sourceIndex.value + 1 + i) % srcs.length
-    if (!triedSources.has(srcs[idx]) && srcs[idx] !== currentUrl.value) {
-      triedSources.add(currentUrl.value)            // 标记当前源已失败
-      reportPlayHealth(false, 'source_failover')   // 回写失败源健康度
-      ElMessage.info(`源 ${sourceIndex.value + 1} 失败，切换备用源 (${idx + 1}/${srcs.length})`)
-      switchSource(idx)
-      return true
-    }
-  }
   return false
 }
 
@@ -1828,8 +1756,6 @@ async function playRow(row, list = null, idx = -1) {
     channelList = list.map(ch => ({
       id: ch.id,
       url: ch.url, name: ch.name || '未知频道', group: ch.group || '',
-      sources: (ch.sources && ch.sources.length) ? ch.sources : [ch.url],
-      source_groups: Array.isArray(ch.source_groups) ? ch.source_groups : [],
       tag: ch.tag || '',
       is_fake_live: !!ch.is_fake_live,
       url_note: ch.url_note || '',
@@ -1837,26 +1763,14 @@ async function playRow(row, list = null, idx = -1) {
     hasChannelNav.value = true
     channelIndex = idx >= 0 ? idx : (channelList.findIndex(ch => ch.url === row.url))
   }
-  // 多源故障转移：记录当前频道全部源与当前源下标
-  const srcs = (row.sources && row.sources.length) ? row.sources : [row.url]
-  // B1/B5 修复：主 url 不在 sources 时补到头部；same 判定带 source 维度（新旧 url+index 双对比）
+  // 一源一行：url 相同即视为同一次播放，无需再比对源下标
   const oldUrl = currentUrl.value
-  const oldSourceIndex = sourceIndex.value
-  const mainIdx = srcs.indexOf(row.url)
-  if (mainIdx === -1) srcs.unshift(row.url)
-  currentSources.value = srcs
-  sourceIndex.value = Math.max(0, mainIdx === -1 ? 0 : mainIdx)
-  const same = row.url === oldUrl && sourceIndex.value === oldSourceIndex
-  // 捕获聚合分组（source_groups），用于源选择器标注
-  currentSourceGroups.value = Array.isArray(row.source_groups)
-    ? row.source_groups.filter(g => g && Array.isArray(g.urls) && g.urls.length)
-    : []
-  // 捕获用户标记（tag）与手动假直播标记，用于源选择器/标题栏展示
+  const same = row.url === oldUrl
+  // 捕获用户标记（tag）与手动假直播标记，用于标题栏展示
   currentTag.value = row.tag || ''
   currentChannelId.value = row.id != null ? row.id : null  // R3: 收藏星标需要 id
   currentIsFakeLiveMarked.value = !!row.is_fake_live
   fakeLiveDismissed.value = false
-  triedSources = new Set()
   if (!same) {
     nextTick(() => startPlayback())
   } else if (!hls && videoEl.value) {
@@ -1874,7 +1788,6 @@ function resetPlayState() {
   errorCount = 0
   healthReported = false
   isFakeLive.value = false
-  triedSources = new Set()
   // H修复：换台/切源时清零媒体信息，防旧分辨率残留状态栏
   videoInfo.w = 0
   videoInfo.h = 0
