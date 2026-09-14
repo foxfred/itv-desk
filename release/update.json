@@ -5,15 +5,15 @@
     {
       "name": "ITV-Desk-3.1.0.exe",
       "url": "https://github.com/foxfred/itv-desk/releases/download/v3.1.0/ITV-Desk-3.1.0.exe",
-      "sha256": "PENDING",
-      "size": 0,
+      "sha256": "573648758320ce4509ce895298dd13e432daa5f820ea16766b5b6cc0a2c7d382",
+      "size": 79168142,
       "role": "main"
     },
     {
       "name": "ITV-Desk-Setup-3.1.0.exe",
       "url": "https://github.com/foxfred/itv-desk/releases/download/v3.1.0/ITV-Desk-Setup-3.1.0.exe",
-      "sha256": "PENDING",
-      "size": 0,
+      "sha256": "7a772554f1dcb1ae3924402afc571d0cb2e3a7d31cee86e5d0afd0e290e4eb54",
+      "size": 79395808,
       "role": "main"
     }
   ]
