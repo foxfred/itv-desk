@@ -1,19 +1,19 @@
 {
-  "version": "3.1.0",
-  "notes": "ITV Desk v3.1.0：新增「频道名自动校正」（本地 OCR 读台标，比对后给改名建议，可一键撤销）、频道别名库扩到 110 组；新增健康统计报告、局域网订阅网关、播放截图验证；源模型改为「一源一行」（旧数据自动迁移）；设置分类由 17 项精简为 7 项。",
+  "version": "3.1.1",
+  "notes": "ITV Desk v3.1.1：版本号升级版，用于验证软件内「设置 → 更新」的自动检测、下载与安装链路（本版无功能改动）。",
   "packages": [
     {
-      "name": "ITV-Desk-3.1.0.exe",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.1.0/ITV-Desk-3.1.0.exe",
-      "sha256": "573648758320ce4509ce895298dd13e432daa5f820ea16766b5b6cc0a2c7d382",
-      "size": 79168142,
+      "name": "ITV-Desk-3.1.1.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.1.1/ITV-Desk-3.1.1.exe",
+      "sha256": "PENDING",
+      "size": 0,
       "role": "main"
     },
     {
-      "name": "ITV-Desk-Setup-3.1.0.exe",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.1.0/ITV-Desk-Setup-3.1.0.exe",
-      "sha256": "7a772554f1dcb1ae3924402afc571d0cb2e3a7d31cee86e5d0afd0e290e4eb54",
-      "size": 79395808,
+      "name": "ITV-Desk-Setup-3.1.1.exe",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.1.1/ITV-Desk-Setup-3.1.1.exe",
+      "sha256": "PENDING",
+      "size": 0,
       "role": "main"
     }
   ]
