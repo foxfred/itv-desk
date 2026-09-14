@@ -51,11 +51,27 @@ npm start
 
 打包：`npm run dist`（安装包）/ `npm run dist:folder`（文件夹版）。
 
-发版：改 `backend/app/version.py` 与 `package.json` 的版本号 → 提交推送 → 打 tag `v*` 推送，GitHub Actions 会自动构建并发布到 Releases，并回填 `release/update.json` 的校验值。版本号规则见 `backend/app/version.py`。
+发版：改 `backend/app/version.py` 与 `package.json` 的版本号 → **在下方「版本历史」追加一条** → 提交推送 → 打 tag `v*` 推送，GitHub Actions 会自动构建并发布到 Releases，并回填 `release/update.json` 的校验值。版本号规则见 `backend/app/version.py`。
+
+> ⚠️ 「版本历史」小节是留档内容，**任何情况下都不要删除或精简**；每次发版必须追加一条（版本号 + 日期 + 改了什么）。
 
 ## 技术栈
 
 Electron + FastAPI + SQLite + Vue 3 + Element Plus
+
+## 版本历史
+
+> 每次发版在这里追加一条（版本号 + 日期 + 改了什么），**不要删除本小节**。
+
+- **v3.1.0** (2026-09-14): **新增「频道名自动校正」**——本地离线 OCR 读画面台标 → 别名库 / EPG 反查 → 生成改名建议表，人工确认后才应用，可一键撤销；默认只给建议、不乱改，平台水印与栏目角标一律不采纳。频道别名库内置 110 组（央视全系 / 省级卫视 / 港澳台），可在设置页增删与导入；新增健康统计报告、局域网订阅网关、播放截图验证；源模型改为「一源一行」（旧数据自动迁移）；设置分类由 17 项精简为 7 项。修复：咪咕转播的卫视频道（辽宁卫视、宁夏卫视等）被误判为 CCTV4K；浙江系频道被误判为「中国蓝新闻」
+- **v3.0.3** (2026-09-13): 应用内更新改走原生 IPC 通道安装（下载完直接拉起安装包，后端方式作兜底）；修复更新清单里安装包地址带 `%20` 空格导致下载 404（统一改为短横线文件名）；发版流水线补传「文件夹版 zip」
+- **v3.0.2** (2026-09-12): **接入 GitHub Actions CI/CD**——新增 `ci.yml`（lint + test 自动校验）与 `release.yml`（打 tag 自动发布到 GitHub Release）；自更新地址正式指向 GitHub Release 资产；新增 `backend/tests/test_smoke.py`（9 用例）与 `electron/tests/self-check.js`；README 补充发版与自更新说明
+- **v3.0.1** (2026-09-08): 主窗改自绘顶栏（去系统标题栏 / 英文菜单，图标 + ITV Desk + 虚线 + 中文菜单 + 窗口按钮，背景跟随皮肤）；播放器停止 / 静音图标修正
+- **v3.0.0** (2026-09-03): **Electron 重构版**——桌面壳由 PyWebView 迁移至 Electron（根治 frameless 白框 / 缩放 bug）；双窗口架构（主窗管理 + 独立播放窗）；pywebview 兼容垫片实现前端零改动迁移；播放器新增 ESC 退出、倍速鼠标选择修复；数据备份 / 恢复 UI 重做（导入 / 导出实心按钮 + 加密导入导出）；17 套内置皮肤参数与现代控件对齐
+- **v2.0.19** (2026-09-01): 播放器黑方块根因修复（前端 dist 候选顺序 RES_DIR 优先）
+- **v2.0.9** (2026-09-01): 控件圆形样式迁入入口 CSS，绕过 WebView2 懒加载缓存
+- **v2.0.0** (2026-08-24): 正式更名 ITV Desk
+- （v1.x / v2.x 完整历史见旧仓库提交记录）
 
 ## License
 
