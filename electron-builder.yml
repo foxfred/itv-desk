@@ -53,7 +53,12 @@ portable:
   artifactName: "ITV-Desk-${version}.${ext}"
 
 # GitHub 自动发布：打 tag 触发时 electron-builder 自动上传 Release 资产
+# ⚠️ releaseType: release 必须显式声明。
+# electron-builder 的默认行为是创建「草稿（draft）」，草稿里的安装包未登录用户下载会
+# 404 —— 表现就是软件内「设置 → 更新」能检测到新版本、一点下载却失败。
+# v3.1.0 踩过这个坑（release 页面上挂着 Draft 徽章），这里显式改成直接发布。
 publish:
   provider: github
   owner: foxfred
   repo: itv-desk
+  releaseType: release
