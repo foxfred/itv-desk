@@ -53,6 +53,10 @@ npm start
 
 发版：改 `backend/app/version.py` 与 `package.json` 的版本号 → **在下方「版本历史」追加一条** → 提交推送 → 打 tag `v*` 推送，GitHub Actions 会自动构建并发布到 Releases，并回填 `release/update.json` 的校验值。版本号规则见 `backend/app/version.py`。
 
+**Release 命名规范（2026-09-14 起）**：对外显示名统一为 **「ITV Desk vX.Y.Z」**（例：`ITV Desk v3.1.5`），由 `release.yml` 的「统一 Release 标题」步骤在每次发版后自动设置，无需手工改。
+
+> 为什么是「标题」而不是「标签」：git 标签名**不允许包含空格**（refname 规则禁止空格、`~`、`^`、`:`、`*`、`?`、`[`、`\` 等），而更新链路（`release/update.json` 的 url、安装包文件名、CI 里的 `v$ver`）全都依赖 `vX.Y.Z` 形式的标签，因此「ITV Desk vX.Y.Z」这个显示名只能落在 Release 标题上。
+
 > ⚠️ 「版本历史」小节是留档内容，**任何情况下都不要删除或精简**；每次发版必须追加一条（版本号 + 日期 + 改了什么）。
 
 ## 技术栈

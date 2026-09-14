@@ -128,6 +128,19 @@ jobs:
           gh release upload "v$ver" $zip --repo foxfred/itv-desk --clobber
           Write-Host "folder zip uploaded: $zip"
 
+      # Release 标题规范：统一成「ITV Desk vX.Y.Z」（与 v3.0.2 / v3.1.0 等历史版本一致）。
+      # 为什么改标题而不是改标签：git 标签名不允许出现空格（refname 规则禁止空格/~/^/:/* 等），
+      # 而更新链路（update.json 的 url、安装包文件名、CI 里的 v$ver）全都依赖 vX.Y.Z 形式的标签，
+      # 所以「ITV Desk vX.Y.Z」这个对外显示名只能落在 Release 标题上。
+      - name: 统一 Release 标题为「ITV Desk vX.Y.Z」
+        if: ${{ !cancelled() }}
+        run: |
+          $ver = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $env:GH_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+          gh release edit "v$ver" --title "ITV Desk v$ver" --repo foxfred/itv-desk
+          if ($LASTEXITCODE -ne 0) { throw "设置 Release 标题失败: v$ver" }
+          Write-Host "release title set: ITV Desk v$ver"
+
       # 回填 release/update.json：只挂「文件夹版 zip」一个包（软件内自更新用的就是这个）。
       # 为什么只挂 zip：zip 解压后能直接覆盖「当前程序所在目录」，版本号一定会刷新；
       # 而 exe 安装包会在向导里装到 %LOCALAPPDATA%\Programs 等默认目录，
