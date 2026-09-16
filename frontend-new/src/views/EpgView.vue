@@ -1,6 +1,6 @@
 <template>
   <div class="epg-page">
-    <!-- EPG 状态卡片 -->
+    
     <el-card shadow="never" class="epg-status-card">
       <div class="epg-status-row">
         <div class="epg-status-info">
@@ -63,9 +63,9 @@
       </div>
     </el-card>
 
-    <!-- 主内容：左频道列表 / 右节目单 -->
+    
     <div class="epg-main">
-      <!-- 左侧：频道列表 -->
+      
       <el-card shadow="never" class="epg-channels-card">
         <template #header>
           <div class="card-header">
@@ -232,8 +232,7 @@ const filteredChannels = computed(() => {
 
 async function loadEpg() {
   if (!epgSources.value.length && !epgUrl.value.trim()) return ElMessage.warning('请添加 EPG 地址')
-  // 先将输入框内容加入源列表
-  if (epgUrl.value.trim()) addEpgSource()
+    if (epgUrl.value.trim()) addEpgSource()
   if (!epgSources.value.length) return ElMessage.warning('请添加 EPG 地址')
   try {
     epgLoading.value = true
@@ -249,7 +248,6 @@ async function loadEpg() {
   }
 }
 
-// 添加 EPG 源到列表
 function addEpgSource() {
   const url = epgUrl.value.trim()
   if (!url) return
@@ -261,7 +259,6 @@ function addEpgSource() {
   epgUrl.value = ''
 }
 
-// 移除 EPG 源
 function removeEpgSource(idx) {
   epgSources.value.splice(idx, 1)
 }
@@ -404,8 +401,7 @@ async function playChannel(channelName) {
   if (!match || !match.url) {
     return ElMessage.warning(`未在频道列表中找到「${channelName}」的播放地址`)
   }
-  // 双窗口（Phase 1）：EPG 节目播放走经纪人，打开独立播放窗（列表即选源入口）
-  const api = window.pywebview?.api
+    const api = window.pywebview?.api
   if (api && typeof api.play_channel === 'function') {
     await callNative('play_channel', {
       url: match.url, name: match.name, group: match.group || '',
@@ -414,8 +410,7 @@ async function playChannel(channelName) {
     if (playerStore.state === 'hidden') playerStore.state = 'drawer'
     return
   }
-  // 退化：浏览器环境
-  playerStore.open({ url: match.url, name: match.name, group: match.group || '' }, null, -1)
+    playerStore.open({ url: match.url, name: match.name, group: match.group || '' }, null, -1)
   if (playerStore.state === 'hidden') playerStore.setState('drawer')
   else playerStore.exitPip()
 }

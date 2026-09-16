@@ -1,18 +1,3 @@
-"""流中继代理 —— 让内置 HLS 播放器绕过 WebView 跨源 / MSE 边界限制。
-
-问题背景：
-  部分直播源（如 CloudFront 上的主索引 m3u8 + 变体 + 绝对路径 .ts 切片）在
-  PotPlayer 等原生播放器里能正常播放，但在内置 hls.js（运行于桌面 WebView）
-  里会直接致命报错。根因通常是 WebView 运行时的跨源策略 / MSE 边界处理，
-  而非 CORS（实测目标 CDN 已返回 Access-Control-Allow-Origin: *）。
-
-解决：
-  将远端 m3u8 与切片经本地 FastAPI 后端 fetch 后**同源**返回，彻底消除跨源
-  / MSE 边界问题。对 m3u8 清单，还会把内部变体 / 切片地址改写成经本端代理的
-  根相对地址（/api/stream-proxy?url=...），使 hls.js 全程同源拉取。
-
-安全：仅允许 http/https 目标；拦截 localhost / 内网地址，避免被当作 SSRF 跳板。
-"""
 import re
 from urllib.parse import urljoin, quote, urlparse
 
@@ -30,7 +15,6 @@ _PROXY_PATH = "/api/stream-proxy?url="
 
 
 def _is_safe_target(url: str) -> bool:
-    """仅允许 http/https。桌面本地应用，允许访问局域网/内网源（用户自建 IPTV 源）。"""
     if not url:
         return False
     try:
@@ -55,7 +39,6 @@ def _looks_private(host: str) -> bool:
 
 
 def _rewrite_manifest(text: str, base_url: str) -> str:
-    """把清单中的变体 / 切片 / EXT-X-MEDIA URI 改写为经本端代理的根相对地址。"""
     def rewrite_uri(uri: str) -> str:
         u = uri.strip()
         if not u or u.startswith("#") or u.startswith("data:") or u.startswith(_PROXY_PATH):
@@ -111,12 +94,9 @@ async def stream_proxy(url: str, request: Request):
 
     ctype = (resp.headers.get("Content-Type") or "").lower()
     status = resp.status_code
-    # 是否 HLS 清单（需改写内部地址）。以 Content-Type 为主，URL 后缀为辅。
     is_manifest = ("mpegurl" in ctype) or url.rstrip().lower().endswith((".m3u8", ".m3u"))
 
     if is_manifest:
-        # 302 重定向后必须用最终 URL(resp.url) 作为清单内相对地址的拼接基准，
-        # 否则相对变体/切片会被拼回原始 URL 的 host（如内网反代 → 拿不到真实切片）。
         base_for_rewrite = resp.url or url
         try:
             body = b"".join(resp.iter_content(chunk_size=8192)).decode("utf-8", "ignore")
@@ -127,7 +107,6 @@ async def stream_proxy(url: str, request: Request):
             media_type="application/vnd.apple.mpegurl",
         )
 
-    # 二进制切片：流式透传（支持 Range / 206）
     def gen():
         try:
             for chunk in resp.iter_content(chunk_size=64 * 1024):

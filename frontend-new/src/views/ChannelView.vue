@@ -1,6 +1,6 @@
 <template>
   <div class="channel-page">
-    <!-- 统计卡片 -->
+    
     <el-row v-if="statsCardVisible" :gutter="12" class="stats-row" v-show="statsCardPosition === '顶部'">
       <el-col :span="8">
         <el-card shadow="hover" class="stat-card">
@@ -22,7 +22,7 @@
       </el-col>
     </el-row>
 
-    <!-- 检查进度条 -->
+    
     <div v-if="checkRunning" class="check-progress-bar">
       <div class="progress-info">
         <span class="progress-label">检查进度</span>
@@ -38,7 +38,7 @@
       />
     </div>
 
-    <!-- 工具栏 -->
+    
     <div class="toolbar">
       <div class="toolbar-left">
         <el-button size="small" type="primary" @click="checkAll" :disabled="checkRunning">检查全部</el-button>
@@ -247,7 +247,7 @@
             :show-overflow-tooltip="col.key !== 'screenshot'"
           >
             <template #default="{ row }">
-              <!-- 画面：已抓帧则显示缩略图（点击放大），未抓帧则给个一键抓帧入口 -->
+              
               <template v-if="col.key === 'screenshot'">
                 <el-image
                   v-if="shotOf(row)"
@@ -288,11 +288,11 @@
                 </span>
               </template>
               <template v-else-if="col.key === 'tag'">
-                <!-- 自动识别：广告/占位循环源（复用检测阶段的 manifest 判定，非人工标记） -->
+                
                 <el-tooltip v-if="adReason(row)" :content="adReason(row)" placement="top">
                   <el-tag size="small" effect="dark" type="danger" style="margin-right:4px">疑似广告</el-tag>
                 </el-tooltip>
-                <!-- 统一标记显示：假直播也是普通标记（黄底），不再单独用红底 danger -->
+                
                 <el-tag v-if="row.tag" size="small" effect="dark" type="warning">{{ row.tag }}</el-tag>
                 <el-tag v-else-if="row.is_fake_live" size="small" effect="dark" type="warning">假直播</el-tag>
                 <span v-else class="cell-empty">-</span>
@@ -718,10 +718,8 @@ import { subscribeLogsSSE, subscribeEventsSSE } from '@/api/realtime'
 const store = useChannelStore()
 const settingsStore = useSettingsStore()
 const playerStore = usePlayerStore()
-// 外部播放器可执行文件路径（默认 VLC / PotPlayer / mpv 探测结果）
 const externalPlayerPath = ref('')
 
-// ==================== 左侧面板 ====================
 const showLeftPanel = ref(true)
 const cfgUrl = ref('')
 const pageStart = ref(1)
@@ -738,25 +736,21 @@ const epgHistory = ref([])
 const logText = ref('')
 const logSince = ref(0)
 
-// ==================== 统计卡片 ====================
 const statsCardVisible = ref(true)
 const statsCardPosition = ref('顶部')
 
-// ==================== 表格 ====================
 const tableRef = ref()
 const searchKw = ref('')
 const filterStatus = ref('')
-const hideDead = ref(false)   // 隐藏连续失败判定的死源
+const hideDead = ref(false)   
 const filterStack = ref('')
 const page = ref(1)
 const pageSize = ref(100)
 const sortState = reactive(loadSortState())
-// 分组树状态
 const showGroupTree = ref(false)
 const activeGroup = ref(null)
 const groupKw = ref('')
 
-// 预编译排序比较器（避免每次排序新建）
 const _collator = new Intl.Collator('zh-Hans-CN', { numeric: true })
 
 function loadSortState() {
@@ -788,8 +782,7 @@ function saveHiddenCols() {
 
 const filtered = computed(() => {
   let list = store.channels
-  // 分组树过滤：选中分组后仅显示该分组频道
-  if (activeGroup.value) list = list.filter(c => (c.group || '未分组') === activeGroup.value)
+    if (activeGroup.value) list = list.filter(c => (c.group || '未分组') === activeGroup.value)
   if (filterStatus.value) list = list.filter(c => c.status === filterStatus.value)
   if (filterStack.value) list = list.filter(c => c.stack === filterStack.value)
   if (hideDead.value) list = list.filter(c => !(c.health && c.health.dead))
@@ -806,7 +799,6 @@ const filtered = computed(() => {
   return list
 })
 
-// 分组树：从已加载频道池聚合各分组数量（与表格一致，瞬时过滤）
 const groupTree = computed(() => {
   const map = new Map()
   for (const c of store.channels) {
@@ -824,7 +816,6 @@ const filteredGroups = computed(() => {
   return groupTree.value.filter(g => g.group.toLowerCase().includes(kw))
 })
 
-// 切换分组时回到第一页
 watch(activeGroup, () => { page.value = 1 })
 
 const displayed = computed(() => {
@@ -833,7 +824,6 @@ const displayed = computed(() => {
   return f.slice(s, s + pageSize.value)
 })
 
-// 健康度色阶：>=0.7 绿 / >=0.4 橙 / 其余灰
 function healthClass(score) {
   if (score >= 0.7) return 'ok'
   if (score >= 0.4) return 'mid'
@@ -842,7 +832,6 @@ function healthClass(score) {
 
 const showColumnSettings = ref(false)
 
-// ==================== 右键菜单 ====================
 const ctx = reactive({ show: false, x: 0, y: 0, row: null, flip: false })
 const ctxGroup = reactive({ show: false, x: 0, y: 0, group: '', count: 0, flip: false })
 function onRowCtx(row, column, e) {
@@ -870,7 +859,6 @@ function onHeaderCtx(column, e) {
 }
 function hideCtx() { ctx.show = false; ctxGroup.show = false }
 
-// 获取当前应操作的行列表（多选时取所有选中行，否则取右键点击的行）
 function getTargetRows() {
   if (selectedRowIds.value.size > 1 && selectedRowIds.value.has(ctx.row?.id)) {
     return store.channels.filter(c => selectedRowIds.value.has(c.id))
@@ -949,7 +937,6 @@ async function ctxDeleteGroup() {
   store.refresh()
   hideCtx()
 }
-// 自动识别到的广告/占位源 → 中文提示（P0-1，数据来自后端检测阶段的 ad_suspect 字段）
 const AD_REASON_TEXT = {
   ad_keyword: '切片地址含广告关键字',
   short_loop: '极短循环占位（≤30 秒）',
@@ -964,9 +951,6 @@ function adReason(row) {
   return '自动识别：' + reasons.join('、')
 }
 
-// ==================== 画面截图（P0-2）====================
-// 后端用 ffmpeg 抓首帧落盘，前端拿到 {源URL: 静态路径} 索引直接显示。
-// 价值：一眼看穿"CCTV5 播的其实是购物台"这类挂羊头卖狗肉的源。
 const shotIndex = ref({})
 const shotBusy = ref('')
 const shotRunning = ref(false)
@@ -988,7 +972,6 @@ async function loadShots() {
   } catch { /* ignore */ }
 }
 
-// 一源一行：直接用该行自己的 url 取画面
 function shotOf(row) {
   if (!row || !row.url) return ''
   return shotIndex.value[row.url] || ''
@@ -1029,7 +1012,6 @@ function pollShots() {
   }, 1500)
 }
 
-// 批量抓帧：默认只抓「还没画面」的源；针对当前筛选结果，先弹确认（耗时可能较长）
 async function captureShotsBatch() {
   const rows = displayed.value || []
   const pending = rows.filter(r => r.url && !shotOf(r))
@@ -1058,8 +1040,6 @@ async function captureShotsBatch() {
   }
 }
 
-// ==================== 频道名校正（方案书-频道名自动校正）====================
-// 抓帧 → 本地 OCR 读台标/字幕 → EPG 交叉验证 → 建议表 → 人工确认后应用（可整批撤销）
 const showNamefix = ref(false)
 const nfRunning = ref(false)
 const nfDone = ref(0)
@@ -1072,7 +1052,6 @@ const nfSelected = ref([])
 const nfStrategy = ref('advise')
 let nfTimer = null
 
-// 只展示需要人做决定的：有识别结果、且与现名不一致
 const nfPending = computed(() => nfItems.value.filter(it => it.state === 'pending' && it.new))
 
 const NF_KIND = { exact: '台标直读', contain: '台标包含', fuzzy: '模糊匹配', epg: '节目单', vision: '视觉模型' }
@@ -1216,7 +1195,7 @@ async function openUndo() {
     ElMessage.success(`已还原 ${r.data.restored || 0} 个频道名`)
     await store.refresh()
     await loadNamefix()
-  } catch { /* 取消 */ }
+  } catch {  }
 }
 
 async function clearNamefix() {
@@ -1230,7 +1209,6 @@ async function clearNamefix() {
   } catch { ElMessage.error('操作失败') }
 }
 
-// 现有标记库：聚合所有频道已有 tag（普通标记统一管理，不用假直播红底那套）
 const existingTags = computed(() => {
   const set = new Set()
   for (const c of store.channels) {
@@ -1242,15 +1220,13 @@ const existingTags = computed(() => {
   }
   return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
 })
-// EPG 规范分组（默认提供的常用分组，取自 epg_service.update_groups 规则）
 const epgGroups = ['央视频道', '地方卫视', '港澳台', '影院剧场', '体育竞技', '少儿动漫', '轮播专区']
 
 async function applyTagToRows(tag) {
   const rows = getTargetRows()
   if (rows.length === 0) return
   const ids = rows.map(r => r.id)
-  // 统一普通标记：假直播也作为普通 tag 写入，不再触发 is_fake_live 红底逻辑
-  await channelApi.batchTagAdd(ids, tag)
+    await channelApi.batchTagAdd(ids, tag)
   store.refresh()
   ElMessage.success(`已为 ${rows.length} 个频道添加标记：${tag}`)
 }
@@ -1269,8 +1245,7 @@ async function ctxTagClear() {
   if (rows.length === 0) { hideCtx(); return }
   const ids = rows.map(r => r.id)
   await channelApi.batchTagClear(ids)
-  // 统一清除：不管普通标记还是假直播红底，一并清掉（假直播用 is_fake_live 独立字段表示）
-  const idsWithFake = rows.filter(r => r.is_fake_live).map(r => r.id)
+    const idsWithFake = rows.filter(r => r.is_fake_live).map(r => r.id)
   if (idsWithFake.length) await channelApi.batchFakeLive(idsWithFake, false)
   store.refresh()
   ElMessage.success(`已清除 ${rows.length} 个频道的标记`)
@@ -1296,27 +1271,21 @@ async function ctxGroupCustom() {
   hideCtx()
 }
 
-// 右键「智能粘贴」：复用顶部工具栏已有的 smartPaste（读取剪贴板 → 智能解析导入）
 function ctxSmartPaste() { smartPaste(); hideCtx() }
 
-// ==================== 选择行管理（去掉选框列后） ====================
 const selectedRowIds = ref(new Set())
 
-// R1: 正在播放的频道 id（播放器换台后列表高亮跟随 + 定位）
 const playingRowId = ref(null)
 
-// R1: watch 播放器当前频道 → 高亮 + scrollIntoView 定位
 watch(() => playerStore.currentChannel, (ch) => {
   if (!ch || !ch.id) {
     if (!ch || !ch.url) { playingRowId.value = null; return }
-    // 无 id（历史/EPG 播放）按 url 匹配
-    const byUrl = (displayed.value || []).find(r => r.url === ch.url)
+        const byUrl = (displayed.value || []).find(r => r.url === ch.url)
     playingRowId.value = byUrl ? byUrl.id : null
     return
   }
   playingRowId.value = ch.id
-  // 定位到可见行（虚拟滚动大列表用 scrollIntoView 兜底）
-  nextTick(() => {
+    nextTick(() => {
     const el = document.querySelector(`.el-table__body tr[data-row-key="${ch.id}"]`)
     if (el && el.scrollIntoView) {
       try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) } catch (_) { /* ignore */ }
@@ -1334,8 +1303,7 @@ function toggleRowSelect(row) {
 function rowClassName({ row }) {
   const cls = []
   if (selectedRowIds.value.has(row.id)) cls.push('selected-row')
-  // R1: 正在播放的频道行高亮（含子源命中当前播放地址）
-  if (playingRowId.value === row.id) cls.push('playing-row')
+    if (playingRowId.value === row.id) cls.push('playing-row')
   return cls.join(' ')
 }
 
@@ -1387,7 +1355,6 @@ async function clearAllChannels() {
   await channelApi.clearAll(); store.refresh()
 }
 
-// ==================== 导出（弹出框选择格式和位置） ====================
 const showExport = ref(false)
 const exportFormat = ref('m3u')
 const exportScope = ref('all')
@@ -1429,13 +1396,11 @@ async function openPlayer(row, sourceUrl = null) {
     return
   }
   const playUrl = sourceUrl || row.url
-  // 设置开启「默认使用外部播放」时，直接调用外部播放器
-  if (settingsStore.get('prefer_external_player')) {
+    if (settingsStore.get('prefer_external_player')) {
     await playExternal(sourceUrl ? { ...row, url: sourceUrl } : row)
     return
   }
-  // 双窗口（Phase 1）：经纪人转发到独立播放窗（run.py Api.play_channel），列表即唯一选源入口
-  const api = window.pywebview?.api
+    const api = window.pywebview?.api
   if (api && typeof api.play_channel === 'function') {
     await callNative('play_channel', {
       url: playUrl,
@@ -1443,8 +1408,7 @@ async function openPlayer(row, sourceUrl = null) {
       group: row.group || '',
       id: row.id,
     })
-    // 主窗口保留「正在播放」高亮（跨窗口状态不共享，列表侧自己记）
-    playerStore.currentChannel = {
+        playerStore.currentChannel = {
       id: row.id,
       url: playUrl,
       name: row.name,
@@ -1455,13 +1419,12 @@ async function openPlayer(row, sourceUrl = null) {
     if (playerStore.state === 'hidden') playerStore.state = 'drawer'
     return
   }
-  // 退化：浏览器/无原生桥 → 旧单窗口路径（仅 dev 预览）
-  const chList = (displayed.value || []).map(ch => ({
+    const chList = (displayed.value || []).map(ch => ({
     id: ch.id,
     url: ch.url, name: ch.name || '', group: ch.group || '',
     tag: ch.tag || '',
     is_fake_live: !!ch.is_fake_live,
-    url_note: ch.url_note || '',   // 1.5: $ 后标签透传
+    url_note: ch.url_note || '',   
   }))
   const idx = chList.findIndex(ch => ch.url === playUrl)
   playerStore.open({
@@ -1473,9 +1436,8 @@ async function openPlayer(row, sourceUrl = null) {
     is_fake_live: !!row.is_fake_live,
     url_note: row.url_note || '',
   }, chList, idx >= 0 ? idx : 0)
-  // 浮层自动展开为 drawer（hidden → drawer）
-  if (playerStore.state === 'hidden') playerStore.setState('drawer')
-  else playerStore.exitPip()  // pip 态回到 drawer（列表视图播放）
+    if (playerStore.state === 'hidden') playerStore.setState('drawer')
+  else playerStore.exitPip()  
 }
 
 async function playExternal(row) {
@@ -1483,8 +1445,7 @@ async function playExternal(row) {
     ElMessage.info('请先选择或双击一个频道')
     return
   }
-  // 优先使用手动配置路径（settings.external_player_path），其次自动探测
-  let path = externalPlayerPath.value || settingsStore.get('external_player_path') || ''
+    let path = externalPlayerPath.value || settingsStore.get('external_player_path') || ''
   if (!path) {
     try {
       const { data } = await configApi.getPlayers()
@@ -1504,14 +1465,11 @@ async function playExternal(row) {
   }
 }
 
-// ==================== 双击播放 ====================
 function handleRowDblClick(row) {
-  // Phase 5：设置项「双击频道自动播放」关闭时，双击不触发播放（可用顶栏/右键播放）
-  if (settingsStore.get('double_click_auto_play') === false) return
+    if (settingsStore.get('double_click_auto_play') === false) return
   openPlayer(row)
 }
 
-// ==================== 合并频道：列表内展开子源，逐条播放/删除 ====================
 function shortUrl(u) {
   if (!u) return ''
   try {
@@ -1522,10 +1480,8 @@ function shortUrl(u) {
     return u.length > 48 ? u.slice(0, 48) + '…' : u
   }
 }
-// ==================== Ctrl/Shift 点击多选 ====================
 function onRowClick(row, column, event) {
-  // 阻止浏览器默认的文本选择行为（Shift+click触发）
-  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    if (event.shiftKey || event.ctrlKey || event.metaKey) {
     window.getSelection().removeAllRanges()
   }
   if (event.ctrlKey || event.metaKey) {
@@ -1549,7 +1505,6 @@ function onRowClick(row, column, event) {
   }
 }
 
-// ==================== 列宽持久化 ====================
 const columnWidths = ref(loadColumnWidths())
 
 function loadColumnWidths() {
@@ -1571,10 +1526,8 @@ function onHeaderDragEnd(newWidth, oldWidth, column) {
   }
 }
 
-// 自动保存列宽（任何修改都落盘，含拖拽后）
 watch(columnWidths, saveColumnWidths, { deep: true })
 
-// 应用保存的列宽（使用computed实现响应式更新）
 const COL_DEFS = [
   { key: 'name', prop: 'name', defLabel: '频道', width: 180 },
   { key: 'screenshot', prop: 'screenshot', defLabel: '画面', width: 90 },
@@ -1595,7 +1548,6 @@ const allCols = computed(() => COL_DEFS.map(col => {
   return { ...col }
 }))
 
-// ==================== 检查状态轮询 ====================
 const checkRunning = ref(false)
 const checkProcessed = ref(0)
 const checkTotal = ref(0)
@@ -1615,8 +1567,7 @@ function pollCheck() {
       if (!data.running) {
         checkRunning.value = false
         clearInterval(checkTimer)
-        // 延迟一下再刷新，让用户看到100%
-        setTimeout(() => {
+                setTimeout(() => {
           checkProcessed.value = 0
           checkTotal.value = 0
           checkStatus.value = ''
@@ -1627,7 +1578,6 @@ function pollCheck() {
   }, 500)
 }
 
-// ==================== 抓取状态轮询 ====================
 let scrapeTimer = null
 function pollScrape() {
   scrapeTimer = setInterval(async () => {
@@ -1642,10 +1592,8 @@ function pollScrape() {
   }, 1000)
 }
 
-// ==================== 抓取 ====================
 function getScrapeParams() {
-  // 代理和加速源互斥：开代理时不用加速源，用加速源时清空代理
-  if (useProxy.value) {
+    if (useProxy.value) {
     return { proxy: cfgProxy.value, mirror: '不使用加速' }
   }
   return { proxy: '', mirror: cfgMirror.value }
@@ -1663,8 +1611,7 @@ async function toggleScrape() {
         suffix_list: cfgSuffix.value, proxy, mirror
       })
       if (data.error) return ElMessage.warning(data.error)
-      // 扫描的网址自动存入历史（去重+置顶），下次下拉可直接选
-      pushUrlHistory(cfgUrl.value)
+            pushUrlHistory(cfgUrl.value)
       scraping.value = true; pollScrape()
     } catch { /* ignore */ }
   }
@@ -1674,7 +1621,6 @@ async function doSingleUrl() {
   await toggleScrape()
 }
 
-// ==================== 多网址 ====================
 const showUrlPool = ref(false)
 const urlPoolText = ref('')
 async function doUrlPool() {
@@ -1684,13 +1630,11 @@ async function doUrlPool() {
     const { proxy, mirror } = getScrapeParams()
     const { data } = await scrapeApi.scrapeBatch({ urls, suffix_list: cfgSuffix.value, proxy, mirror })
     if (data.error) return ElMessage.warning(data.error)
-    // 多网址批量保存历史
-    pushUrlHistoryBatch(urls)
+        pushUrlHistoryBatch(urls)
     scraping.value = true; showUrlPool.value = false; pollScrape()
   } catch { /* ignore */ }
 }
 
-// 把单个 URL 存入扫描历史（本地即时更新 + 持久化）
 function pushUrlHistory(url) {
   const u = (url || '').trim()
   if (!u) return
@@ -1698,7 +1642,6 @@ function pushUrlHistory(url) {
   exportApi.saveUrlHistory(u).catch(() => {})
 }
 
-// 把多个 URL 存入扫描历史（去重置顶 + 批量持久化）
 function pushUrlHistoryBatch(urls) {
   const list = (urls || []).map(s => s.trim()).filter(Boolean)
   if (!list.length) return
@@ -1710,7 +1653,6 @@ function pushUrlHistoryBatch(urls) {
   exportApi.saveUrlHistoryBatch(urlHistory.value).catch(() => {})
 }
 
-// ==================== 导入 ====================
 const showImport = ref(false)
 async function onImportFile(file) {
   const text = await file.raw.text()
@@ -1725,7 +1667,6 @@ async function onImportFile(file) {
   store.refresh(); showImport.value = false
 }
 
-// ==================== 粘贴 ====================
 async function smartPaste() {
   try {
     const text = await navigator.clipboard.readText()
@@ -1736,7 +1677,6 @@ async function smartPaste() {
   } catch { ElMessage.error('读取剪贴板失败') }
 }
 
-// ==================== 乱码修补 ====================
 const showRepair = ref(false)
 const repairText = ref('')
 const repairMode = ref('纯净模式')
@@ -1747,8 +1687,7 @@ async function doRepair() {
   if (!repairText.value.trim()) return ElMessage.warning('请输入文本')
   repairBusy.value = true
   try {
-    // 开关关闭时（导入列表），强制使用最新完整修补规则
-    const mode = repairSaveOnly.value ? repairMode.value : '完整增强'
+        const mode = repairSaveOnly.value ? repairMode.value : '完整增强'
     const resp = await exportApi.repair({
       text: repairText.value, mode: mode,
       save_only: repairSaveOnly.value, fmt: repairFmt.value
@@ -1769,7 +1708,6 @@ async function doRepair() {
   repairBusy.value = false
 }
 
-// ==================== 查找替换 ====================
 const showFindReplace = ref(false)
 const frFind = ref('')
 const frReplace = ref('')
@@ -1782,7 +1720,6 @@ async function doFindReplace() {
   } catch { /* ignore */ }
 }
 
-// ==================== 规则管理 ====================
 const showRules = ref(false)
 const rulesList = ref([])
 const ruleForm = reactive({ from: '', to: '', index: null })
@@ -1807,7 +1744,6 @@ async function ruleDel(index) {
   } catch { /* ignore */ }
 }
 
-// ==================== 频道编辑 ====================
 const showEdit = ref(false)
 const editForm = ref({})
 async function doEdit() {
@@ -1843,7 +1779,6 @@ async function loadEpg() {
   } catch (e) { ElMessage.error('EPG 加载失败: ' + (e.response?.data?.detail || e.message)) }
 }
 
-// ==================== 搜索节目 ====================
 const showSearchProg = ref(false)
 const searchProgKw = ref('')
 const searchProgResults = ref([])
@@ -1858,7 +1793,6 @@ function searchProgPlay(row) {
   openPlayer(row); showSearchProg.value = false
 }
 
-// ==================== DLNA 投屏 ====================
 const showDlna = ref(false)
 const dlnaDevices = ref([])
 const dlnaSelectedDevice = ref(null)
@@ -1882,8 +1816,7 @@ async function doDlnaDiscover() {
     const { data } = await dlnaApi.discoverDevices()
     dlnaDevices.value = Array.isArray(data) ? data : []
     if (dlnaDevices.value.length > 0) {
-      // 自动选中第一个设备
-      dlnaSelectedDevice.value = dlnaDevices.value[0]
+            dlnaSelectedDevice.value = dlnaDevices.value[0]
     }
   } catch { ElMessage.error('发现设备失败') }
   dlnaDiscovering.value = false
@@ -1909,7 +1842,6 @@ async function doDlnaStop() {
   dlnaStopping.value = false
 }
 
-// ==================== 日志 ====================
 const showLogs = ref(false)
 const logBox = ref(null)
 async function loadLogs() {
@@ -1957,11 +1889,9 @@ async function copyLogs() {
   }
 }
 
-// ==================== 弹窗 ====================
 const showAbout = ref(false)
 const appVersion = ref('7.0.1')
 
-// #58 在线台标补全（后台任务 + 轮询进度）
 const showOnlineLogos = ref(false)
 const onlineStarted = ref(false)
 const onlineDone = ref(false)
@@ -1974,7 +1904,6 @@ const onlinePercent = computed(() => {
   return Math.min(100, Math.round((onlineStatus.done / onlineStatus.total) * 100))
 })
 
-// 应用版本号（后端单一真相源）
 async function fetchAppVersion() {
   try {
     const { data } = await appApi.getAppVersion()
@@ -1982,7 +1911,6 @@ async function fetchAppVersion() {
   } catch { /* ignore */ }
 }
 
-// #57 Logo 自动匹配（默认扫描程序目录下的 logos 文件夹）
 async function doMatchLogos() {
   try {
     const { data } = await channelApi.matchLogos(null)
@@ -1997,10 +1925,8 @@ async function doMatchLogos() {
   }
 }
 
-// #58 在线台标补全（后台任务 + 轮询进度）
 function doOnlineLogos() {
-  // 打开对话框并重置状态
-  onlineStarted.value = false
+    onlineStarted.value = false
   onlineDone.value = false
   onlineError.value = ''
   Object.assign(onlineStatus, { total: 0, done: 0, found: 0, downloaded: 0, failed: 0 })
@@ -2040,8 +1966,7 @@ async function pollOnlineLogos() {
       }
     }
   } catch (e) {
-    // 轮询失败（任务可能已过期）不阻断，继续下一次
-  }
+      }
 }
 
 function finishOnlineLogos() {
@@ -2052,7 +1977,6 @@ function finishOnlineLogos() {
 
 onUnmounted(() => { if (onlineTimer) clearInterval(onlineTimer) })
 
-// #60 重新自动分组（对整池按统一算法重跑分组，解决历史混乱 / 外国频道统一）
 async function doReclassify() {
   try {
     const { data } = await channelApi.reclassifyChannels()
@@ -2067,7 +1991,6 @@ async function doReclassify() {
   }
 }
 
-// 频道 logo 加载失败时不显示破图标
 function onLogoError(e) {
   e.target.style.display = 'none'
 }
@@ -2079,25 +2002,20 @@ const shortcutList = [
   { cat: '通用', key: 'Ctrl+F1', desc: '打开快捷键参考' },
 ]
 
-// ==================== 列设置持久化 ====================
 watch(hiddenCols, saveHiddenCols, { deep: true })
 
-// ==================== 排序 ====================
 function onSortChange({ prop, order }) {
   sortState.prop = prop; sortState.order = order
   saveSortState()
   page.value = 1
 }
 
-// 自动保存排序状态（含清空排序的 undefined 场景）
 watch(() => ({ prop: sortState.prop, order: sortState.order }), saveSortState, { deep: true })
 
-// ==================== 生命周期 ====================
 let logTimer = null
 let logES = null
 let evtES = null
 
-// 实时推送（SSE）；连接成功则停掉 2s 日志轮询，失败自动回退轮询，绝不破坏既有路径。
 function startRealtime() {
   try {
     logES = subscribeLogsSSE({
@@ -2108,7 +2026,7 @@ function startRealtime() {
       },
       onError: () => { if (!logTimer) { loadLogs(); logTimer = setInterval(loadLogs, 2000) } },
     })
-  } catch (e) { /* 回退轮询 */ }
+  } catch (e) {  }
 
   try {
     evtES = subscribeEventsSSE({
@@ -2128,16 +2046,14 @@ function startRealtime() {
         }
       },
     })
-  } catch (e) { /* 忽略 */ }
+  } catch (e) {  }
 }
 
 onMounted(async () => {
   await store.fetchIfNeeded()
   await settingsStore.fetchSettings()
   fetchAppVersion()
-  // 探测外部播放器路径（VLC / PotPlayer / mpv），供「用外部播放器打开」使用
-  // 优先读手动配置路径，其次自动探测
-  try {
+      try {
     const manual = settingsStore.get('external_player_path')
     if (manual) {
       externalPlayerPath.value = manual
@@ -2151,8 +2067,7 @@ onMounted(async () => {
   logTimer = setInterval(loadLogs, 2000)
   startRealtime()
   document.addEventListener('click', hideCtx)
-  // 检查是否有正在运行的检查任务
-  try {
+    try {
     const { data } = await checkApi.getCheckStatus()
     if (data.running) {
       checkRunning.value = true
@@ -2164,20 +2079,16 @@ onMounted(async () => {
   } catch { /* ignore */ }
 })
 
-// 监听设置变化，实时同步到抓取面板（设置保存后自动生效，无需刷新页面）
 watch(() => settingsStore.settings, async (s) => {
   if (!s || !Object.keys(s).length) return
-  // 同步抓取配置项
-  if (s.suffix_list) cfgSuffix.value = s.suffix_list
+    if (s.suffix_list) cfgSuffix.value = s.suffix_list
   if (s.proxy !== undefined) cfgProxy.value = s.proxy
   if (s.mirror) cfgMirror.value = s.mirror
   if (s.use_proxy !== undefined) useProxy.value = s.use_proxy
   if (s.default_epg) cfgEpg.value = s.default_epg
-  // 同步统计卡片设置
-  statsCardVisible.value = s.stats_card_visible !== false
+    statsCardVisible.value = s.stats_card_visible !== false
   statsCardPosition.value = s.stats_card_position || '顶部'
-  // 同步历史列表（加速源、EPG、URL历史）
-  try {
+    try {
     const { data } = await exportApi.getHistory()
     if (data) {
       urlHistory.value = data.url || []
@@ -2185,8 +2096,7 @@ watch(() => settingsStore.settings, async (s) => {
       epgHistory.value = data.epg || []
     }
   } catch { /* ignore */ }
-  // 外部播放器路径随设置同步（手动路径优先，其次 external_player 切换 VLC/PotPlayer 自动探测）
-  try {
+    try {
     if (s.external_player_path) {
       externalPlayerPath.value = s.external_player_path
     } else {
@@ -2206,7 +2116,6 @@ onUnmounted(() => {
   document.removeEventListener('click', hideCtx)
 })
 
-// 键盘快捷键
 async function onKeydown(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return
   if (e.ctrlKey && e.key === 'a') { e.preventDefault(); selectAll() }
@@ -2291,7 +2200,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .scrape-btn-item :deep(.el-form-item__content) { margin-left: 0 !important; width: 100%; }
 .scrape-btn-wrapper { display: flex; justify-content: center; width: 100%; }
 .scrape-btn { padding: 0 30px; height: 40px; font-size: 16px; font-weight: 700; letter-spacing: 2px; }
-/* 覆盖 Element Plus 输入数字框的最小宽度，使页码输入框紧凑 */
+
 .form-row .el-input-number--small { min-width: 40px; width: 40px; }
 .form-row .el-input-number--small .el-input__wrapper { padding: 0 2px; }
 .form-row .el-input-number--small .el-input__inner { padding: 0; text-align: center; }
@@ -2315,7 +2224,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 }
 .panel-toggle:hover { background: var(--el-fill-color); }
 
-/* 分组树 */
+
 .group-tree {
   width: 200px; flex-shrink: 0; display: flex; flex-direction: column;
   background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter);
@@ -2354,7 +2263,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
 .pager { flex-shrink: 0; margin-top: 8px; }
 
-/* 播放健康度指示 */
+
 .status-cell { display: flex; align-items: center; gap: 6px; }
 .health-dead {
   font-size: 11px; color: #fff; background: #f56c6c; border-radius: 3px;
@@ -2367,19 +2276,19 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
 .mx-1 { margin: 0 4px; font-size: 12px; }
 
-/* 频道名 + Logo 缩略图 */
+
 .name-cell { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .ch-logo { width: 22px; height: 22px; object-fit: contain; border-radius: 3px; flex-shrink: 0; background: var(--el-fill-color-light); }
 .ch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 画面截图缩略图（P0-2）：点击可放大预览 */
+
 .shot-thumb {
   width: 76px; height: 43px; border-radius: 4px; cursor: zoom-in;
   border: 1px solid var(--el-border-color-light); background: var(--el-fill-color-light);
   display: block; margin: 0 auto;
 }
 
-/* 右键菜单 */
+
 .ctx-menu {
   position: fixed; z-index: 9999; background: var(--el-bg-color);
   border: 1px solid var(--el-border-color); border-radius: 6px;
@@ -2388,7 +2297,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .ctx-item { padding: 6px 16px; font-size: 13px; cursor: pointer; }
 .ctx-item:hover { background: var(--el-fill-color-light); }
 .ctx-sep { height: 1px; background: var(--el-border-color-lighter); margin: 4px 0; }
-/* 二级子菜单（复制 / 标记 / 设置分组） */
+
 .ctx-item.has-sub { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .ctx-arrow { font-size: 11px; opacity: .55; }
 .ctx-sub {
@@ -2402,7 +2311,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .ctx-menu.ctx-sub-left .ctx-sub { left: auto; right: 100%; margin-left: 0; margin-right: 4px; }
 .ctx-danger:hover { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
 
-/* 选中行高亮 */
+
 :deep(.el-table__body tr.selected-row > td) {
   background-color: var(--el-color-primary-light-9) !important;
   border-top: 1px solid var(--el-color-primary-light-5) !important;
@@ -2415,7 +2324,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   border-right: 1px solid var(--el-color-primary-light-5) !important;
 }
 
-/* R1: 正在播放行高亮（区别于选中态，绿色弱底） */
+
 :deep(.el-table__body tr.playing-row > td) {
   background-color: rgba(74, 222, 128, 0.08) !important;
 }
@@ -2423,10 +2332,10 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   box-shadow: inset 3px 0 0 var(--el-color-success) !important;
 }
 
-/* 单网址/多网址按钮宽度统一 */
+
 .form-row .el-button--small { width: 70px; }
 
-/* 禁止表格内文字选中（Shift多选时避免选中单元格文本） */
+
 .channel-table :deep(.el-table__body-wrapper) {
   user-select: none;
   -webkit-user-select: none;
@@ -2434,7 +2343,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   -ms-user-select: none;
 }
 
-/* DLNA 投屏弹窗 */
+
 .dlna-body { display: flex; flex-direction: column; gap: 12px; }
 .dlna-target { display: flex; align-items: center; gap: 8px; }
 .dlna-label { font-size: 13px; color: var(--el-text-color-secondary); white-space: nowrap; }

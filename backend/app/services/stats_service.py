@@ -1,13 +1,3 @@
-"""频道健康统计服务（P1-10）
-
-把「检测完就只剩一个当前状态」升级为**按天快照**，从而能回答：
-  - 在线率这几天的趋势（源是不是在慢慢死）
-  - 失效 Top（哪些台反复出问题）
-  - 延迟分布 / 清晰度分布（整体质量）
-
-落盘 DATA_DIR/health_history.json，结构 {YYYY-MM-DD: 快照}：
-同一天重复记录会**覆盖当天**（而不是无限追加），文件大小天然有界。
-"""
 import os
 import json
 import threading
@@ -15,7 +5,6 @@ from datetime import datetime, timedelta
 
 from app.services.channel_service import _cue_rank, _ms_num
 
-# 延迟分桶（毫秒）：最后一个桶是"超过 3000 或未知"
 _LATENCY_BUCKETS = [
     ("<200ms", lambda ms: ms is not None and ms < 200),
     ("200-500ms", lambda ms: ms is not None and 200 <= ms < 500),
@@ -34,7 +23,6 @@ class StatsService:
         self.log = log_callback or (lambda m: None)
         self._lock = threading.RLock()
 
-    # -------------------- 采集 --------------------
     def _snapshot_from_pool(self, channel_service):
         with getattr(channel_service, "lock", None) or _null():
             pool = [dict(c) for c in (getattr(channel_service, "pool", []) or [])]
@@ -78,7 +66,6 @@ class StatsService:
 
     @staticmethod
     def _top_failing(pool, limit=20):
-        """失效 Top：优先死源，其次离线，再其次高延迟"""
         def bad_rank(c):
             h = c.get("health") or {}
             ms = _ms_num(c.get("ms"))
@@ -103,7 +90,6 @@ class StatsService:
             "last_error": ((c.get("health") or {}).get("last_error") or "")[:120],
         } for c in bad[:limit]]
 
-    # -------------------- 快照读写 --------------------
     def _load(self):
         try:
             with open(self.path, "r", encoding="utf-8") as f:
@@ -124,11 +110,6 @@ class StatsService:
             self.log(f"健康快照保存失败：{e}")
 
     def snapshot(self, channel_service, force=False):
-        """记录今天的快照（同一天覆盖）。
-
-        force=False 时，若今天已有快照就不再记——检测任务每轮完成都会调用，
-        避免一天之内反复覆盖导致"趋势"变成"最后时刻"。
-        """
         snap = self._snapshot_from_pool(channel_service)
         with self._lock:
             history = self._load()
@@ -139,7 +120,6 @@ class StatsService:
         return {"recorded": True, **snap}
 
     def report(self, channel_service, days=7):
-        """健康报告：按天趋势 + 当前失效 Top + 分布"""
         days = max(1, min(int(days or 7), 90))
         with self._lock:
             history = self._load()

@@ -711,22 +711,18 @@ const exporting = ref(false)
 const importing = ref(false)
 const backupFile = ref(null)
 const backupFileInput = ref(null)
-// 应用版本与更新
 const curVersion = ref('1.0.0')
-// #58 更新
 const checking = ref(false)
 const updateInfo = reactive({ has_update: false, latest: '', notes: '', packages: [], is_installing: false })
 const downloading = ref(false)
-const downloadPaths = ref([])  // 多包下载路径列表
-const downloadPkgs = ref([])   // 与 downloadPaths 一一对应的清单条目（含 sha256/size/role）
-// #59 加密备份 / 恢复
+const downloadPaths = ref([])  
+const downloadPkgs = ref([])   
 const encFile = ref(null)
 const encFileInput = ref(null)
 const importingEnc = ref(false)
 const exportingEnc = ref(false)
 const darkMode = ref(isDark.value)
 
-// URL 黑/白名单在界面上按「每行一条」编辑，与设置里的数组双向转换（P0-5）
 const urlBlacklistText = computed({
   get: () => (Array.isArray(form.url_blacklist) ? form.url_blacklist : []).join('\n'),
   set: (v) => { form.url_blacklist = String(v || '').split('\n').map(s => s.trim()).filter(Boolean) }
@@ -742,8 +738,7 @@ const mirrorText = ref('不使用加速')
 const epgText = ref('')
 
 const form = reactive({
-  // 自动任务 / 检查
-  auto_check_after_import: false,
+    auto_check_after_import: false,
   auto_correct_after_epg: false,
   auto_delete_invalid_after_check: false,
   auto_export_after_check: false,
@@ -814,14 +809,11 @@ const form = reactive({
   url_history_limit: 50,
   use_proxy: false,
   user_agent: '',
-  // URL 黑/白名单（P0-5）：每行一条，支持子串或 /正则/
-  url_blacklist: [],
+    url_blacklist: [],
   url_whitelist: [],
-  // 局域网订阅网关（P1-6）
-  gateway_enabled: false,
+    gateway_enabled: false,
   gateway_token: '',
-  // 频道名校正（台标识别）
-  namefix_strategy: 'advise',
+    namefix_strategy: 'advise',
   namefix_capture_width: 960,
   namefix_capture_offset: 3,
   namefix_min_confidence: 0.9,
@@ -834,8 +826,6 @@ const form = reactive({
   namefix_vision_key: '',
 })
 
-// ==================== 频道别名库（P1-9） ====================
-// 别名库是独立资源（不是 settings 里的键），所以单独加载/保存，不跟「保存设置」走。
 const aliasText = ref('')
 const aliasStat = ref('')
 
@@ -882,15 +872,13 @@ async function resetAliasSeed() {
   }
 }
 
-// ==================== 局域网订阅网关（P1-6） ====================
 const gwInfo = ref({ enabled: false, token: '', playlist_url: '', epg_url: '', channel_count: 0, epg_count: 0, lan_ip: '', port: 0 })
 
 async function loadGwInfo() {
   try {
     const { data } = await gwApi.getGatewayInfo()
     gwInfo.value = data
-    // 后端是唯一真相源：开关/令牌以服务端为准，避免前后端不一致
-    if (typeof data.enabled === 'boolean') form.gateway_enabled = data.enabled
+        if (typeof data.enabled === 'boolean') form.gateway_enabled = data.enabled
     if (data.token) form.gateway_token = data.token
   } catch { /* ignore */ }
 }
@@ -908,8 +896,7 @@ async function ensureGwToken() {
 }
 
 function onGatewayToggle(v) {
-  // 打开开关但还没令牌 → 直接发一个，省去用户两步操作
-  if (v && !form.gateway_token) ensureGwToken()
+    if (v && !form.gateway_token) ensureGwToken()
 }
 
 async function rotateGwToken() {
@@ -928,7 +915,6 @@ async function copyGw(url) {
   }
 }
 
-// 暗色模式同步
 watch(darkMode, (val) => {
   setDarkMode(val)
 })
@@ -957,17 +943,14 @@ onMounted(async () => {
     columnVisibility.value = s.column_visibility.filter((v, i) => v && i < allCols.length).map((_, i) => allCols[i]?.key).filter(Boolean)
   }
   if (s.update_url !== undefined) form.update_url = s.update_url
-  // 局域网网关状态（以服务端为准）
-  loadGwInfo()
+    loadGwInfo()
   loadAliases()
-  // 拉取应用版本号与更新信息
-  try {
+    try {
     const { data } = await appApi.getAppVersion()
     if (data && data.version) curVersion.value = data.version
   } catch { /* ignore */ }
   darkMode.value = isDark.value
-  // 加载历史到多行文本框
-  try {
+    try {
     const { getHistory } = await import('@/api/export')
     const { data } = await getHistory()
     if (data.url && data.url.length) {
@@ -985,8 +968,7 @@ onMounted(async () => {
 async function saveAll() {
   saving.value = true
   try {
-    // 1. 先保存历史数据（避免 watcher 在 settings 更新后读到旧历史）
-    const mirrors = mirrorText.value.split('\n').map(s => s.trim()).filter(Boolean)
+        const mirrors = mirrorText.value.split('\n').map(s => s.trim()).filter(Boolean)
     if (mirrors.length > 0) {
       try {
         const { saveMirrorHistoryBatch } = await import('@/api/export')
@@ -1013,11 +995,9 @@ async function saveAll() {
         console.warn('同步EPG历史失败:', e)
       }
     }
-    // 2. 同步加速源/EPG 首行为默认选中值
-    if (mirrors.length > 0) form.mirror = mirrors[0]
+        if (mirrors.length > 0) form.mirror = mirrors[0]
     if (epgs.length > 0) form.default_epg = epgs[0]
-    // 3. 最后保存设置（触发 watcher 时历史已是最新）
-    const data = {
+        const data = {
       ...form,
       column_visibility: allCols.map(c => columnVisibility.value.includes(c.key)),
     }
@@ -1047,8 +1027,7 @@ async function exportBackup() {
       exporting.value = false
       return
     }
-    // 通过原生保存对话框把服务器端临时 zip 保存到用户指定位置（二进制安全）
-    const dest = await callNative('save_file_from', data.path, data.filename || 'iptv_backup.zip')
+        const dest = await callNative('save_file_from', data.path, data.filename || 'iptv_backup.zip')
     if (dest) ElMessage.success('备份已保存')
     else ElMessage.info('取消保存')
   } catch {
@@ -1063,11 +1042,9 @@ function pickBackupFile() {
 
 function onBackupFileChange(e) {
   const f = e.target && e.target.files && e.target.files[0]
-  // 允许重复选择同一文件（重置 input value）
-  if (e.target) e.target.value = ''
+    if (e.target) e.target.value = ''
   if (!f) return
-  // 一步到位：选完文件确认后立即导入
-  ElMessageBox.confirm(`确定用「${f.name}」恢复数据吗？恢复会覆盖当前全部数据。`, '导入备份', {
+    ElMessageBox.confirm(`确定用「${f.name}」恢复数据吗？恢复会覆盖当前全部数据。`, '导入备份', {
     confirmButtonText: '确定恢复', cancelButtonText: '取消', type: 'warning',
   }).then(() => { importBackup(f) }).catch(() => {})
 }
@@ -1083,8 +1060,7 @@ async function importBackup(file) {
     const { data } = await exportApi.importBackup(f, 'overwrite')
     ElMessage.success(`恢复成功，共恢复 ${data.restored && data.restored.length ? data.restored.length : 0} 项`)
     await settingsStore.fetchSettings()
-    // 刷新频道列表
-    try {
+        try {
       const { useChannelStore } = await import('@/stores/channels')
       useChannelStore().refresh()
     } catch { /* ignore */ }
@@ -1095,7 +1071,6 @@ async function importBackup(file) {
   backupFile.value = null
 }
 
-// #58 应用自更新：检查更新
 async function checkForUpdate() {
   checking.value = true
   updateInfo.has_update = false
@@ -1119,14 +1094,12 @@ async function checkForUpdate() {
   checking.value = false
 }
 
-// 判断是否「文件夹版整包」（zip）：它才是能直接覆盖当前运行目录的更新包
 function isFolderPkg(pkg) {
   if (!pkg) return false
   if (String(pkg.role || '').toLowerCase() === 'folder') return true
   return /-folder\.zip$/i.test(String(pkg.name || pkg.url || ''))
 }
 
-// 下载更新包：优先只下「文件夹版」整包（下载完校验完整性，不完整直接报错并删残包）
 async function doDownloadUpdate() {
   if (!updateInfo.packages.length) return
   downloading.value = true
@@ -1150,14 +1123,12 @@ async function doDownloadUpdate() {
   downloading.value = false
 }
 
-// 立即更新：文件夹版走「覆盖当前运行目录」通道（校验→退出→覆盖→自动重启），无需选目录
 async function doInstallUpdate() {
   if (!downloadPaths.value.length) return
   const ver = updateInfo.latest || ''
   const pkg = downloadPkgs.value[0] || {}
   const target = pkg.path || downloadPaths.value[0]
-  // 有文件夹版整包 → 覆盖运行目录（唯一能真正把版本号刷新的方式）
-  if (isFolderPkg(pkg) || /\.zip$/i.test(String(downloadPaths.value[0]))) {
+    if (isFolderPkg(pkg) || /\.zip$/i.test(String(downloadPaths.value[0]))) {
     try {
       await ElMessageBox.confirm(
         `即将更新到 v${ver}：\n\n程序会自动关闭，用新版本覆盖「当前程序所在目录」里的程序文件，完成后自动重新打开。\n\n· 不需要选择安装路径，不会再出现“装到别处、版本号没变”\n· 频道、设置、台标、缓存等数据不在更新包内，不会被覆盖删除\n· 更新过程约需十几秒到一分钟，期间请不要手动双击程序\n\n确定现在更新吗？`,
@@ -1186,8 +1157,7 @@ async function doInstallUpdate() {
     return
   }
 
-  // 兼容旧格式（exe 安装包）：启动安装向导，需在向导里手动选择原目录
-  try {
+    try {
     await ElMessageBox.confirm('即将退出程序并启动安装包。注意：安装向导里请把安装目录改成当前程序所在目录，否则会装到别处、版本号不变。确定继续？', '安装更新', {
       confirmButtonText: '安装', cancelButtonText: '取消', type: 'warning',
     })
@@ -1208,8 +1178,7 @@ async function doInstallUpdate() {
     }
     return
   }
-  // 无壳兜底：后端拉起安装包并退出
-  try {
+    try {
     const { data } = await appApi.applyUpdate(downloadPaths.value)
     if (data && data.ok && data.launched) {
       updateInfo.is_installing = true
@@ -1223,7 +1192,6 @@ async function doInstallUpdate() {
   }
 }
 
-// #59 加密导出备份
 async function exportEncrypted() {
   let pass = ''
   try {
@@ -1252,12 +1220,10 @@ function pickEncFile() {
 
 function onEncFileChange(e) {
   const f = e.target && e.target.files && e.target.files[0]
-  // 允许重复选择同一文件（重置 input value）
-  if (e.target) e.target.value = ''
+    if (e.target) e.target.value = ''
   if (!f) return
   encFile.value = f
-  // 一步到位：选完文件后输入口令并立即恢复
-  ElMessageBox.prompt('输入导出时设置的加密口令', '导入加密备份', {
+    ElMessageBox.prompt('输入导出时设置的加密口令', '导入加密备份', {
     inputType: 'password', inputPlaceholder: '请输入口令',
     confirmButtonText: '解密恢复', cancelButtonText: '取消',
   }).then(({ value }) => {
@@ -1266,7 +1232,6 @@ function onEncFileChange(e) {
   }).catch(() => {})
 }
 
-// #59 加密恢复（解密导入）
 async function importEncrypted(file, pass) {
   const f = file || encFile.value
   if (!f) { ElMessage.warning('请先选择 .enc 文件'); return }
@@ -1292,8 +1257,6 @@ function onCustomColor(val) {
   if (val && val.startsWith('#')) setTheme(val)
 }
 
-// #60 立即重新分组（设置页内一键对整池重跑分组）
-// 视觉兜底连通性自测（用现有一帧试识别）
 const visionTesting = ref(false)
 const visionTestMsg = ref('')
 async function testVision() {
@@ -1356,8 +1319,7 @@ async function browsePlayerPath() {
   const path = await callNative('select_file', '选择外部播放器', 'Executable Files (*.exe)|All Files (*.*)')
   if (path && typeof path === 'string' && !path.startsWith('ERROR')) {
     form.external_player_path = path
-    // 自动识别播放器类型
-    const lower = path.toLowerCase()
+        const lower = path.toLowerCase()
     if (lower.includes('potplayer') || lower.includes('potplayermini')) {
       form.external_player = 'potplayer'
     } else if (lower.includes('mpv')) {

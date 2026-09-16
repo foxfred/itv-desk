@@ -1,4 +1,3 @@
-"""历史记录路由"""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from app.config import Config
@@ -51,7 +50,6 @@ def save_url_history(body: ImportUrlReq, settings=Depends(get_settings)):
 
 @router.post("/history/url-batch")
 def save_url_history_batch(body: ImportUrlsReq, settings=Depends(get_settings)):
-    """批量保存URL历史 - 直接覆盖"""
     urls = [u.strip() for u in body.urls if u.strip()]
     limit = max(1, int(settings.get("url_history_limit", 20)))
     Config.save_json(Config.HISTORY_FILE, urls[:limit], max_len=limit)
@@ -66,7 +64,6 @@ def save_mirror_history(body: ImportUrlReq, settings=Depends(get_settings)):
 
 @router.post("/history/mirror-batch")
 def save_mirror_history_batch(body: ImportUrlsReq, settings=Depends(get_settings)):
-    """批量保存镜像历史 - 直接覆盖"""
     urls = [u.strip() for u in body.urls if u.strip()]
     limit = max(1, int(settings.get("mirror_history_limit", 20)))
     Config.save_json(Config.MIRROR_HISTORY_FILE, urls[:limit], max_len=limit)
@@ -81,7 +78,6 @@ def save_epg_history(body: ImportUrlReq, settings=Depends(get_settings)):
 
 @router.post("/history/epg-batch")
 def save_epg_history_batch(body: ImportUrlsReq, settings=Depends(get_settings)):
-    """批量保存EPG历史 - 直接覆盖"""
     urls = [u.strip() for u in body.urls if u.strip()]
     limit = max(1, int(settings.get("epg_history_limit", 20)))
     Config.save_json(Config.EPG_HISTORY_FILE, urls[:limit], max_len=limit)

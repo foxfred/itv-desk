@@ -1,4 +1,3 @@
-"""乱码修补 + 查找替换路由"""
 import os
 import re
 from fastapi import APIRouter, HTTPException, Depends
@@ -62,7 +61,6 @@ def get_settings():
 
 
 def _save_cache(settings, channel_service):
-    """保存频道缓存到磁盘（原子写，避免并发/崩溃截断损坏）"""
     from app.config import FileManager
     try:
         cache_file = settings.get("cache_file_name", "channels_cache.json")

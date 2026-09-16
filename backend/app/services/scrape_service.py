@@ -1,4 +1,3 @@
-"""抓取服务 - 包装 ScraperEngine 的调用"""
 import sys
 import os
 import threading
@@ -10,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class ScrapeService:
-    """管理抓取状态和后台抓取任务"""
 
     def __init__(self, channel_service, log_callback=None, save_cache_callback=None):
         self.channel_service = channel_service
@@ -26,7 +24,6 @@ class ScrapeService:
             return dict(self._state)
 
     def _run_scrape_engine(self, url, start, end, suffix_list, proxy, mirror):
-        """运行单个抓取任务"""
         logs = []
 
         def log_cb(msg):
@@ -48,7 +45,6 @@ class ScrapeService:
         return "".join(l + "\n" for l in logs)
 
     def _scrape_worker(self, tasks, suffix_list, proxy, mirror):
-        """后台抓取工作线程"""
         with self._lock:
             self._state = {
                 "running": True, "done": False, "error": None,
@@ -81,7 +77,6 @@ class ScrapeService:
             self.log_callback("抓取任务结束")
 
     def run_scrape(self, url, start, end, suffix_list, proxy, mirror):
-        """启动单个抓取任务"""
         with self._lock:
             if self._state["running"]:
                 return False, "已有抓取在进行中"
@@ -94,7 +89,6 @@ class ScrapeService:
         return True, None
 
     def run_scrape_batch(self, urls, suffix_list, proxy, mirror):
-        """启动批量抓取任务"""
         with self._lock:
             if self._state["running"]:
                 return False, "已有抓取在进行中"

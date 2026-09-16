@@ -1,4 +1,3 @@
-"""抓取/导入路由"""
 import os
 import re
 from urllib.parse import urlparse
@@ -75,7 +74,6 @@ def get_settings():
 
 
 def _save_cache(settings, channel_service):
-    """保存频道缓存到磁盘（原子写，避免并发/崩溃截断损坏）"""
     from app.config import FileManager
     try:
         cache_file = settings.get("cache_file_name", "channels_cache.json")
@@ -191,7 +189,6 @@ def import_text(body: ImportTextReq, channel_service=Depends(get_channel_service
 @router.post("/import-channels")
 def import_channels(body: ImportChannelsReq, channel_service=Depends(get_channel_service),
                     log=Depends(get_log), settings=Depends(get_settings)):
-    """导入完整频道对象（保留分组、logo等元数据）"""
     channels = [ch.dict() for ch in body.channels]
     added, dup = channel_service.add_channels(channels, origin="manual")
     if added > 0:
@@ -205,7 +202,6 @@ def smart_paste(body: ImportTextReq, channel_service=Depends(get_channel_service
                 log=Depends(get_log), settings=Depends(get_settings),
                 check_state=Depends(get_check_state),
                 check_service=Depends(get_check_service)):
-    """智能粘贴：完全复刻原版 _smart_paste 逻辑"""
     text = body.text.strip()
     if not text:
         return {"error": "剪贴板为空"}
@@ -230,7 +226,6 @@ def smart_paste(body: ImportTextReq, channel_service=Depends(get_channel_service
             return True
         try:
             p = urlparse(u)
-            # 只要是有合法流媒体协议scheme的URL都接受
             if p.scheme in ('http', 'https', 'rtmp', 'rtsp', 'udp', 'mms'):
                 return True
             return False

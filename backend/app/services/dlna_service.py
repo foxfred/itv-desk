@@ -1,11 +1,3 @@
-"""DLNA 投屏服务 - SSDP 发现 + UPnP AVTransport 控制。
-
-说明：
-- 发现基于 SSDP 多播（239.255.255.250:1900），仅找 MediaRenderer 设备；
-- 播放基于 UPnP AVTransport 的 SetAVTransportURI + Play（SOAP）；
-- 全程 try/except 包裹，任何网络异常都不会击穿主流程；
-- 沙箱/无设备环境下 discover() 返回空列表且不抛错，真实局域网中可用。
-"""
 import os
 import time
 import socket
@@ -25,7 +17,6 @@ DISCOVER_MSG = (
     '\r\n'
 )
 
-# UPnP 设备/服务命名空间
 _UPNP_NS = {'u': 'urn:schemas-upnp-org:device-1-0'}
 
 
@@ -34,9 +25,7 @@ class DlnaService:
         self.log_callback = log_callback or (lambda m: None)
         self.devices = []
 
-    # -------------------- 发现 --------------------
     def discover(self, timeout=3):
-        """SSDP 发现局域网内 MediaRenderer 设备，返回设备列表（含 control_url）"""
         found = {}
         sock = None
         try:
@@ -91,12 +80,10 @@ class DlnaService:
 
     @staticmethod
     def _local(tag):
-        """取元素 local name（忽略命名空间前缀/默认命名空间）"""
         return tag.split('}')[-1]
 
     @staticmethod
     def _find_local(el, local_name):
-        """在 el 后代中按 local name 查找文本（命名空间无关，UPnP 描述前缀多变）"""
         for child in el.iter():
             if child is el:
                 continue
@@ -142,7 +129,6 @@ class DlnaService:
         p = urlparse(base)
         return f"{p.scheme}://{p.netloc}{path}"
 
-    # -------------------- 控制（SOAP） --------------------
     def _soap(self, control_url, action, body_inner):
         import http.client
         u = urlparse(control_url)
@@ -164,7 +150,6 @@ class DlnaService:
         return resp.status, data
 
     def play(self, device, url):
-        """向设备推送并播放指定直播源（SetAVTransportURI + Play）"""
         if isinstance(device, str):
             device = next((d for d in self.devices if d.get("name") == device), None)
         if not isinstance(device, dict):
@@ -197,7 +182,6 @@ class DlnaService:
             return {"error": str(e)}
 
     def stop(self, device):
-        """停止设备当前播放"""
         if isinstance(device, str):
             device = next((d for d in self.devices if d.get("name") == device), None)
         if not isinstance(device, dict):
@@ -215,7 +199,6 @@ class DlnaService:
         except Exception as e:
             return {"error": str(e)}
 
-    # -------------------- 工具 --------------------
     @staticmethod
     def _esc(s):
         return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")

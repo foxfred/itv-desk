@@ -1,9 +1,7 @@
-"""Rule 模型 - 用于 channel_rules.json 的规则管理（非数据库模型）"""
 from typing import Optional
 
 
 class Rule:
-    """频道名替换规则"""
     def __init__(self, frm: str = "", to: str = "", mode: str = "包含", index: Optional[int] = None):
         self.frm = frm
         self.to = to

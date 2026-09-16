@@ -1,4 +1,3 @@
-"""网络工具函数 - 从现有 utils.py 迁移"""
 import re
 import time
 import ssl
@@ -19,7 +18,6 @@ def normalize_url(url):
 
 
 def format_github_raw_url(url, mirror_addr=""):
-    """将 GitHub 链接转换为使用镜像加速的 raw 链接"""
     if not url:
         return url
     low = url.lower()
@@ -55,24 +53,18 @@ def format_github_raw_url(url, mirror_addr=""):
 
 
 def build_link_pattern(suffix_list):
-    """构建链接提取正则，支持 href / src / markdown / 纯文本URL 等多种格式"""
     suffix_regex = "|".join(suffix_list)
     return re.compile(
         rf'(?:'
-        rf'(https?://[^\s<>"\']+?\.({suffix_regex})(?:\?[^\s<>"\']*)?)'  # 纯文本完整URL
-        rf'|(?:href|src)=["\']([^"\']+?\.({suffix_regex})(?:\?[^"\']*)?)["\']'  # href/src 属性
-        rf'|\[[^\]]*\]\(([^)]+?\.({suffix_regex})(?:\?[^)]*)?)\)'  # Markdown 链接
+        rf'(https?://[^\s<>"\']+?\.({suffix_regex})(?:\?[^\s<>"\']*)?)'
+        rf'|(?:href|src)=["\']([^"\']+?\.({suffix_regex})(?:\?[^"\']*)?)["\']'
+        rf'|\[[^\]]*\]\(([^)]+?\.({suffix_regex})(?:\?[^)]*)?)\)'
         rf')',
         re.IGNORECASE
     )
 
 
 def _normalize_proxy(proxy):
-    """规范化代理地址：支持 ip:port、http://ip:port、socks5://ip:port 等格式。
-
-    未带协议前缀时返回 None，由调用方按 http 与 socks5 分别尝试（urllib 的
-    ProxyHandler 不支持 socks5，需借助 requests + PySocks）。
-    """
     if not proxy:
         return None
     p = str(proxy).strip()
@@ -84,11 +76,6 @@ def _normalize_proxy(proxy):
 
 
 def _build_proxy_list(proxy):
-    """构造待尝试的代理地址列表。
-
-    - 无前缀（如 127.0.0.1:10808）：依次尝试 http 与 socks5（10808 等常为 socks 端口）
-    - 带协议前缀：原样使用
-    """
     if not proxy:
         return []
     p = str(proxy).strip()
@@ -100,7 +87,6 @@ def _build_proxy_list(proxy):
 
 
 def _request_download(url, proxy_url, timeout, chunk_size, headers, stop_event):
-    """使用 requests 下载，支持 http/https/socks 代理。返回 (text, err)。"""
     import requests
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -130,7 +116,6 @@ def _request_download(url, proxy_url, timeout, chunk_size, headers, stop_event):
 
 
 def _urllib_download(url, proxies, timeout, chunk_size, headers, stop_event):
-    """使用 urllib 下载（http/https 代理）。返回 (text, err)。"""
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -246,14 +231,6 @@ def download_url(url, proxy=None, timeout=None, max_retries=None, headers=None, 
 
 
 def http_probe_channel(url, timeout=5, retries=1, proxy=None):
-    """轻量级连通性探测（用于 repair / 快速在线判定），避免全量下载。
-
-    策略：
-    - HEAD 优先；HTTP 2xx/3xx 视为在线；4xx（含 403/405，直播源常如此）也视为「可连接=在线」；
-      5xx 与连接/超时/DNS 异常视为离线。
-    - HEAD 不被支持（抛异常）时回退 GET(Range: bytes=0-65535)，只读状态码 + 前 64KB 内容以识别分辨率。
-    返回 (online: bool, status_code: int|None, elapsed_ms: int, resolution: str)。
-    """
     import urllib.request
     import urllib.error
     import ssl
@@ -286,7 +263,6 @@ def http_probe_channel(url, timeout=5, retries=1, proxy=None):
     last_elapsed = 0
     last_code = None
     for _ in range(max(1, retries)):
-        # 第一次尝试：HEAD
         start = time.time()
         try:
             with _open("HEAD") as r:
@@ -302,7 +278,6 @@ def http_probe_channel(url, timeout=5, retries=1, proxy=None):
                     return True, code, last_elapsed, res
                 if 400 <= code < 500:
                     return True, code, last_elapsed, "-"
-                # 5xx → 离线，重试
                 continue
         except urllib.error.HTTPError as e:
             last_elapsed = int((time.time() - start) * 1000)
@@ -314,7 +289,6 @@ def http_probe_channel(url, timeout=5, retries=1, proxy=None):
         except Exception:
             pass
 
-        # HEAD 不支持 / 失败 → 回退 GET(Range)
         start = time.time()
         try:
             with _open("GET", {"Range": "bytes=0-65535"}) as r:

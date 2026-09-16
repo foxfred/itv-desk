@@ -1,4 +1,3 @@
-"""播放历史路由 - /api/play-history"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional

@@ -1,6 +1,3 @@
-# ITV Desk — electron-builder 打包配置
-# 先决条件：frontend-new 已 npm run build（dist 就绪）
-# 产物：dist_electron/ 下 NSIS 安装包 + 便携 exe
 appId: com.itvdesk.pro
 productName: ITV Desk
 copyright: Copyright © 2026
@@ -8,12 +5,10 @@ copyright: Copyright © 2026
 directories:
   output: dist_electron
 
-# 进应用包的内容（asar 内）
 files:
   - electron/**/*
   - package.json
 
-# 前端 dist 与后端源码放 extraResources（运行期按相对路径读取，不进 asar）
 extraResources:
   - from: frontend-new/dist
     to: frontend-new/dist
@@ -36,8 +31,6 @@ win:
     - target: portable
       arch:
         - x64
-  # icon: build/icon.ico  # 图标就位后取消注释
-  # 沙箱无管理员权限：跳过 exe 图标/版本信息注入（rcedit），避免 winCodeSign 解压符号链接失败
   signAndEditExecutable: false
 
 nsis:
@@ -45,18 +38,11 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   shortcutName: ITV Desk
-  # 与 README / release/update.json 的下载名保持一致：用短横线，不用空格。
-  # 否则 Release 资产名带空格、而 update.json 里的 URL 是短横线 → 软件内自更新 404。
   artifactName: "ITV-Desk-Setup-${version}.${ext}"
 
 portable:
   artifactName: "ITV-Desk-${version}.${ext}"
 
-# GitHub 自动发布：打 tag 触发时 electron-builder 自动上传 Release 资产
-# ⚠️ releaseType: release 必须显式声明。
-# electron-builder 的默认行为是创建「草稿（draft）」，草稿里的安装包未登录用户下载会
-# 404 —— 表现就是软件内「设置 → 更新」能检测到新版本、一点下载却失败。
-# v3.1.0 踩过这个坑（release 页面上挂着 Draft 徽章），这里显式改成直接发布。
 publish:
   provider: github
   owner: foxfred

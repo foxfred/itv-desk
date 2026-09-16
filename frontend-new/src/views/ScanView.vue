@@ -143,7 +143,6 @@ const scanning = ref(false)
 const results = ref([])
 const selectedResults = ref([])
 
-// 估算待扫描 IP 数量（用于提示，非精确）
 const scanIpCount = ref(0)
 const estimatedSec = computed(() => {
   if (!scanIpCount.value) return 0
@@ -156,8 +155,7 @@ const onlineCount = computed(() => results.value.filter(r => r.online).length)
 
 onMounted(async () => {
   await store.refresh()
-  // 只显示 host 为 IP 的频道
-  ipChannels.value = store.channels.filter(ch => {
+    ipChannels.value = store.channels.filter(ch => {
     try {
       const u = new URL(ch.url)
       return /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)
@@ -214,31 +212,26 @@ async function startScan() {
   scanIpCount.value = 0
 }
 
-// 停止扫描：后端扫描是同步阻塞请求，这里只是结束等待（后端线程池仍会跑完，但不阻塞界面）
 function stopScan() {
   scanning.value = false
   scanIpCount.value = 0
   ElMessage.info('已停止等待（后端扫描可能仍在后台完成）')
 }
 
-// 粗略估算模板展开的 IP 数量
 function estimateIpCount(tpl) {
   const s = (tpl || '').trim()
   if (!s) return 0
-  // 花括号: 192.168.1.{1-254}
-  const brace = s.match(/\{(\d+)-(\d+)\}/)
+    const brace = s.match(/\{(\d+)-(\d+)\}/)
   if (brace) return Math.max(0, parseInt(brace[2]) - parseInt(brace[1]) + 1)
   // CIDR: 192.168.1.0/24
   const cidr = s.match(/\/(\d+)/)
   if (cidr) return Math.max(0, Math.pow(2, 32 - parseInt(cidr[1])) - 2)
-  // 双点范围: a.b.c.d-a.b.c.d
-  const dash = s.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)\.(\d+)\.(\d+)\.(\d+)/)
+    const dash = s.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)\.(\d+)\.(\d+)\.(\d+)/)
   if (dash) {
     const d1 = parseInt(dash[4]), d2 = parseInt(dash[8])
     return Math.max(0, d2 - d1 + 1)
   }
-  // 短范围: 192.168.1.1-254
-  const shortDash = s.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)/)
+    const shortDash = s.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)-(\d+)/)
   if (shortDash) return Math.max(0, parseInt(shortDash[5]) - parseInt(shortDash[4]) + 1)
   return 1
 }

@@ -1,33 +1,3 @@
-"""频道名校正服务（方案书-频道名自动校正 · 阶段 B/C）
-
-要解决的问题：源站自己乱标频道名——写着 CCTV5+ 实际播的是 CCTV1/13 或别的台。
-频道名本身是被告，不能同时当判据，所以必须引入"与名字无关的真值来源"。
-
-四层流水线：
-  ① 抓帧      高分辨率（默认 960）+ 跳过首帧（默认 3 秒）——实测 320px 会把台标认成
-              「民新昆台」「中天新脚」这类乱码，960px 才能读出「中天新闻」「江苏综艺」
-  ② 有效性预筛  垃圾页/推广页（扫码下载 APP）、黑屏纯色帧 → 判「源异常」，不参与改名。
-              实测多路「纬来体育 #3/#5/#6」抓到的是同一张扫码下载页，根本不是频道
-  ③ 文本提取   本地 RapidOCR 离线识别（一次全画面，按文本框坐标分区：
-              左上角台标区(top) / 中部 / 字幕区；右上角(topright) 只记录不判定
-              —— 实测那里放的全是栏目品牌与平台水印，真台标都在左上角）
-  ④ 名称裁决   别名库反查 + 数字对齐否决 + 模糊匹配（正向）
-              字幕条节目名 → EPG 反向索引投票（反向）→ 置信度合成
-              可选：视觉模型兜底（OpenAI 兼容接口，默认智谱 glm-4v-flash）
-
-三种改名策略（设置项 namefix_strategy，用户可自选）：
-  advise    只出建议表，永远人工确认（默认，最稳）
-  auto_high 扫描后自动应用置信度 ≥ namefix_min_confidence 的项（可在建议表撤销）
-  auto_all  扫描后自动应用所有已定名的项（激进，仍可整批撤销）
-
-安全设计：
-- 改名一律走 channel_service.update_channel，应用前自动备份 channels_cache.json；
-- 每批改动写 namefix_undo.json，支持整批撤销；
-- 数字序列不一致（CCTV5 vs CCTV5+）一律拒绝改名——宁可漏改，不可改错；
-- 归一化只剥纯画质词，**不剥 4K/8K**（4K 是频道身份）；
-- 非左上角台标区的命中置信度封顶 0.88，永不被自动应用；
-- 候选不唯一时只标注不建议。
-"""
 import os
 import re
 import io
@@ -46,25 +16,11 @@ _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 GRAB_TIMEOUT = 12
 
-# ==================== 文本归一化 ====================
 _SP = re.compile(r"[\s\-_\.·#、，,。:：;；!！?？\"'“”‘’()（）\[\]【】《》<>/\\|]+")
-# 画质/线路后缀：**只剥纯画质描述，绝不碰频道身份**。
-# ⚠️ 血泪教训（2026-09-14 用户实测报错）：原正则里带 `4k|8k`，于是 `_n("CCTV4K")`
-#    被归一成裸「cctv」——等于把「CCTV4K」注册成了裸「CCTV」的别名。画面里右上角
-#    咪咕转播央视信号压着的平台水印「CCTV.」一读出来就精确命中 CCTV4K，
-#    结果**辽宁卫视、宁夏卫视等一批带咪咕标的卫视频道全被判成 CCTV4K**。
-#    4K/8K 是频道身份（CCTV4K 是独立频道，与 CCTV 不是一回事），不是画质后缀。
-#    另：`超高清` 必须整体成一个备选，否则只剥掉尾巴的「高清」会留下半截「超」，
-#    产生 `cctv4k超` / `央视超` 这种脏键。
 _HD = re.compile(r"(超高清|超清|高清|标清|fhd|uhd|hd|蓝光|原画|流畅|无插件|线路\d*|\d{3,4}p)+$", re.I)
 _NUM = re.compile(r"\d+")
-# 「加号频道」标记：CCTV5+ / CCTV5PLUS / CCTV5加 是同一个台，
-# 但与 CCTV5 是两个不同的台——这是本功能最关键的防误改点（用户报的错就是它）
 _PLUS = re.compile(r"(plus|加|\+)$", re.I)
 
-# 繁体→简体映射（自研整理，只收频道名高频字）
-# 必要性：实测 OCR 对港澳台频道输出繁体（「中天新聞」「江蘇綜藝」「鳳凰衛視」），
-# 而声道名/别名库都写简体，不做转换会整片匹配不上。
 _T2S = {
     "聞": "闻", "視": "视", "電": "电", "頻": "频", "道": "道", "體": "体", "育": "育",
     "財": "财", "經": "经", "綜": "综", "藝": "艺", "劇": "剧", "戲": "戏", "兒": "儿",
@@ -100,7 +56,6 @@ _T2S = {
     "題": "题", "額": "额", "願": "愿", "類": "类", "風": "风", "飛": "飞", "餐": "餐",
     "館": "馆", "駐": "驻", "驗": "验", "驚": "惊", "髮": "发", "鬥": "斗", "魚": "鱼",
     "鳥": "鸟", "鹽": "盐", "麗": "丽", "黃": "黄", "點": "点", "齊": "齐", "龍": "龙",
-    # 省份/地名用字（卫视名高频，漏一个就整台匹配不上）
     "蘇": "苏", "滬": "沪", "寧": "宁", "遼": "辽", "陝": "陕", "瓊": "琼", "粵": "粤",
     "臺": "台", "灣": "湾", "濱": "滨", "揚": "扬", "錦": "锦", "濟": "济", "撫": "抚",
     "廈": "厦", "閩": "闽", "贛": "赣", "晉": "晋", "魯": "鲁", "冀": "冀", "豫": "豫",
@@ -113,7 +68,6 @@ _T2S_TABLE = str.maketrans(_T2S)
 
 
 def _n(s):
-    """匹配用归一化键：繁转简 → 去符号 → 归并加号写法 → 去 HD/4K 后缀 → 小写"""
     if not s:
         return ""
     t = str(s).translate(_T2S_TABLE)
@@ -124,17 +78,10 @@ def _n(s):
 
 
 def _digits(s):
-    """数字序列：CCTV5 与 CCTV5+ 的 5 相同，但与 CCTV13 不同。"""
     return tuple(_NUM.findall(str(s or "")))
 
 
 def _sig(s):
-    """结构签名 = (数字序列, 加号个数)。
-
-    只比数字不够：CCTV5 与 CCTV5+ 数字相同却是两个台。
-    实测自检中 'CCTV5' 曾被模糊匹配到 'CCTV5+'（相似度 0.91）——正是用户报的那类误配，
-    所以模糊匹配必须要求签名完全一致。
-    """
     t = _n(s)
     return tuple(_NUM.findall(t)), t.count("+")
 
@@ -143,16 +90,6 @@ _IDX_TAIL = re.compile(r"[\s_\-]*#\s*\d+\s*$")
 
 
 def _split_idx(name):
-    """拆出「一源一行」展开时自动加的行号后缀（如「内蒙古卫视 #3」）。
-
-    为什么必须拆：
-    - 行号会污染名称索引 —— 池里的名字是「中天新闻 #5」，而画面 OCR 读出的是
-      「cti中天新闻」，不拆就永远匹配不上（实测 7 路中天新闻全部判为未命中）；
-    - 行号会被误当成频道号 —— 「内蒙古卫视 #3」的 3 与「内蒙古卫视」数字不一致，
-      于是被判成"疑似错标"，全是假警报。
-    改名时行号要原样保留，否则多个源会重名。
-    返回 (基名, 后缀)。
-    """
     s = str(name or "")
     m = _IDX_TAIL.search(s)
     if m:
@@ -160,32 +97,24 @@ def _split_idx(name):
     return s.strip(), ""
 
 
-# ==================== 异常/垃圾页特征 ====================
-# 实测样本：盗版 APP 公告页、扫码下载引导页、商品广告
 _JUNK_KW = ("打赏", "二维码", "扫码", "扫描右", "扫描下", "下载", "安装", "关注我们",
             "公众号", "加群", "客服", "订购电话", "抢购热线", "请查看网站", "版权归",
             "感谢您", "点击链接", "浏览器打开", "固件升级", "无法播放", "打不开",
             "扫码下载", "最新版", "app下载", "android", "安卓系统", "机顶盒",
-            # 英文推广页（实测：多路「纬来体育」抓到同一张英文扫码下载页）
             "qr code", "qrcode", "download", "latest app", "scan the", "install our",
             "play.google", "apk", "our app")
 _URL_RE = re.compile(
     r"(https?://|www\.|[a-z0-9][a-z0-9\-]{1,}\.(?:com|cn|net|tv|xyz|top|cc|me|org|io|app|vip|site|online|club|fun)(?:[/\s:]|$))",
     re.I)
-# 商品/广告噪声：顶部条与中部常被这些占据，不参与频道名判定
 _AD_NOISE = ("洗涤", "清潔", "清洁", "濕巾", "湿巾", "益生菌", "胶原", "膠原", "蛋白", "胜肽",
              "買", "买", "优惠", "限时", "搶購", "抢购", "赞助", "贊助", "热线", "專線", "专线",
              "工厂", "工廠", "正品", "新品", "上市", "代言", "折", "券", "订购", "訂購",
              "專輯", "专辑", "推薦", "推荐", "课程", "課程", "报名", "報名", "夏令",
-             # 平台水印/角标（实测：咪咕转播的央视超高清信号会把「CCTV. 超高清 集成播控」
-             # 压在画面右上角，属于播出平台的标识，跟"这一路是哪个频道"无关）。
-             # 注：「米咕／米古」是 OCR 对「咪咕」的常见误读，一并拦掉。
              "咪咕", "米咕", "米古", "央视频", "集成播控", "BesTV", "百视通", "奇异果",
              "银河电视", "云视听")
 
 
 def _looks_junk(text):
-    """单行是否属于垃圾/推广内容"""
     t = str(text or "")
     low = t.lower()
     if any(k in low for k in _JUNK_KW):
@@ -195,7 +124,6 @@ def _looks_junk(text):
     return False
 
 
-# 台标特征字：短文本里带这些字的，宁可留着当"台标线索"，也不当广告丢掉
 _STATION_KW = ("电视", "卫视", "頻道", "频道", "电台", "電視")
 
 
@@ -203,29 +131,12 @@ def _is_ad_noise(text):
     t = str(text or "")
     if not any(k in t for k in _AD_NOISE):
         return False
-    # 带台标特征字的短文本不按广告丢弃：实测「浙江卫视」被 OCR 读成「折电视」，
-    # 因命中广告词「折」被整条丢掉 → 左上角"看起来没台标" → 右上角的栏目水印
-    # （中国蓝新闻）顺势赢下判定。少丢一条噪声，胜过丢一个台标。
     if len(t) <= 8 and any(k in t for k in _STATION_KW):
         return False
     return True
 
 
 def _zone(y, x, w, h):
-    """按文字在画面里的位置给权重。返回 (区域名, 权重)。
-
-    实测结论（2026-09-14，150 路真实帧反查）：
-    - **真台标都在左上角**：CCTV13→CCTV13、CCTV9→CCTV9（#68/#127/#128）、CCTV15 音乐、
-      CCTV3 综艺、CCTV9 纪录……命中位置无一例外是 top（x≈0.12, y≈0.10）。
-    - **右上角出现的全是栏目/平台角标**，不是台标：
-      · 浙江卫视 / 浙江钱江都市 的右上角压着「中国蓝新闻」（浙江广电栏目品牌水印）
-        → 曾把 5 路浙江频道判成"中国蓝新闻"；
-      · CCTV 体育赛事源的右上角压着「CCTV5+」「CCTV16」→ 曾被判成别的 CCTV 频道。
-    - 右上角唯一"命中正确"的情形是台湾频道（台视/中视/民视），但它们的结果全部是
-      "同名或仅加修饰"（民视→民视无线台），没有任何一条是真正需要的修正。
-    → 所以右上角**一律不参与判定**（权重 0，只记录在案、写进说明），台标以左上角为准。
-    宁可漏改，不可改错。
-    """
     ry = y / float(h or 1)
     rx = x / float(w or 1)
     if ry < 0.28:
@@ -235,17 +146,12 @@ def _zone(y, x, w, h):
     return ("mid", 0.9)
 
 
-# ==================== OCR 引擎（模块级单例） ====================
 _engine = None
 _engine_lock = threading.Lock()
 _engine_err = ""
 
 
 def get_engine():
-    """惰性初始化 RapidOCR。首次调用约 1-3 秒，之后复用。
-
-    离线、免费、纯 CPU；模型随包分发（rapidocr-onnxruntime）。
-    """
     global _engine, _engine_err
     if _engine is not None:
         return _engine
@@ -272,7 +178,6 @@ def ocr_available():
 
 
 def _ocr_lines(path):
-    """识别一帧，返回 [{t, s, y, x, W, H}]；失败返回 None"""
     eng = get_engine()
     if not eng:
         return None
@@ -305,14 +210,7 @@ def _ocr_lines(path):
     return lines
 
 
-# ==================== 已知频道名索引 ====================
 class NameIndex:
-    """归一化名 → 规范名；含数字对齐否决。
-
-    数据来源（全部自研/自建，不引用竞品数据文件）：
-    - channel_alias.json 的规范名 + 别名
-    - 当前频道池里出现过的名字（作为补充规范名）
-    """
 
     def __init__(self, pool_names, alias_map):
         self.exact = {}
@@ -321,7 +219,6 @@ class NameIndex:
             self._put(canon, canon)
             for a in al or []:
                 self._put(a, canon)
-        # 池内名字优先作为规范名（它们更贴近用户实际叫法）
         for nm in pool_names or []:
             if nm:
                 self._put(nm, nm)
@@ -334,10 +231,6 @@ class NameIndex:
         self.canon_digits.setdefault(canon, _digits(canon))
 
     def lookup(self, text, fuzzy=0.86):
-        """返回 (规范名, 分值, 类型)；无匹配返回 (None, 0, '')
-
-        kind: exact（完全一致）/ contain（包含）/ fuzzy（模糊）
-        """
         k = _n(text)
         if len(k) < 2:
             return None, 0.0, ""
@@ -345,9 +238,6 @@ class NameIndex:
         if hit:
             return hit, 0.96, "exact"
         sig = _sig(k)
-        # 包含匹配：OCR 常在台标文字前后多带台标缩写/水印，
-        # 实测「cti中天新闻」包含已知名「中天新闻」；「CCTV4中文国际」同理。
-        # 只认「候选名被完整包含」这一个方向（OCR 只读出半个名字时不做判断）。
         best_c, best_cov = None, 0.0
         for cand_key, canon in self.exact.items():
             if len(cand_key) < 4 or cand_key == k:
@@ -359,10 +249,7 @@ class NameIndex:
                 if cov > best_cov:
                     best_cov, best_c = cov, canon
         if best_c and best_cov >= 0.33:
-            # 置信度上限压到 0.88：包含式命中不足以自动改，仍需人工确认。
-            # 覆盖率越低越不可信（整句字幕里夹带台名 → 低分；短台标带缩写前缀 → 高分）
             return best_c, round(min(0.88, 0.55 + 0.33 * best_cov), 3), "contain"
-        # 模糊：先过结构签名闸门（数字序列 + 加号个数都要一致），再算相似度
         best, bestr = None, 0.0
         for cand_key, canon in self.exact.items():
             if abs(len(cand_key) - len(k)) > 2:
@@ -379,17 +266,7 @@ class NameIndex:
         return None, 0.0, ""
 
 
-# ==================== EPG 反向索引 ====================
 class EpgReverse:
-    """节目名 → 频道 的反查（字幕条救星）
-
-    实测背景：138 张"有文字但读不出台标"的样本里，字幕条给出了
-    「正午江苏」「2026湖州电视」「遂昌电视台」这类节目/栏目名——
-    它们能通过 EPG 当前节目反查到频道。
-
-    实现：把每个 EPG 节目的当前标题切成 4~8 字的 shingle 建倒排，
-    查询时对 OCR 文本滑窗取 shingle 投票，越长（越具体）权重越高。
-    """
 
     def __init__(self, epg_service):
         self.index = defaultdict(Counter)
@@ -429,7 +306,6 @@ class EpgReverse:
             self.build_error = f"EPG 索引构建失败：{e}"
 
     def vote(self, text):
-        """对一段文本投票，返回 (规范名, 权重)"""
         if not self.ready:
             return None, 0
         t = _n(text)
@@ -449,11 +325,10 @@ class EpgReverse:
             return None, 0
         top = acc.most_common(2)
         if len(top) > 1 and top[0][1] == top[1][1]:
-            return None, 0          # 票数打平 → 不表态（宁缺勿错）
+            return None, 0
         return top[0][0], top[0][1]
 
 
-# ==================== 主服务 ====================
 class NamefixService:
     def __init__(self, data_dir=None, log_callback=None):
         self.data_dir = data_dir or os.getcwd()
@@ -469,10 +344,9 @@ class NamefixService:
         self._state = {"running": False, "done": 0, "total": 0, "ok": 0,
                        "junk": 0, "resolved": 0, "error": None, "started": 0,
                        "finished": 0, "applied": 0}
-        self.items = {}          # cid(str) -> 建议项
+        self.items = {}
         self._load()
 
-    # ---------------- 配置 / 依赖 ----------------
     def _settings(self):
         try:
             from app.config import Config
@@ -495,7 +369,6 @@ class NamefixService:
         except Exception:
             return None
 
-    # ---------------- 持久化 ----------------
     def _load(self):
         try:
             d = json.load(io.open(self.sug_file, encoding="utf-8"))
@@ -531,18 +404,11 @@ class NamefixService:
         except Exception as e:
             self.log("撤销记录保存失败：%s" % e)
 
-    # ---------------- 抓帧 ----------------
     def _frame_path(self, url):
         return os.path.join(self.shot_dir, "nf_" + hashlib.md5(
             (url or "").encode("utf-8", "ignore")).hexdigest()[:16] + ".jpg")
 
     def _grab(self, url, out, width, offset):
-        """抓一帧。返回 (ok, 说明)。
-
-        组合重试：UA+偏移 → UA+首帧 → 无UA+偏移 → 无UA+首帧。
-        实测部分协议（rtmp）不接受 -user_agent，直接报 "Option not found"；
-        另一些源首帧是公告页，需要 -ss 跳过。两者都要能兜住。
-        """
         url = (url or "").strip()
         if not url:
             return False, "无地址"
@@ -563,7 +429,6 @@ class NamefixService:
                     combos.append(c)
         last = ""
         ua_broken = False
-        # 这些是确定性失败（源已死/地址无效），换组合重试也是白花时间，直接放弃
         FATAL = ("Connection refused", "Could not resolve", "Server returned 4",
                  "Invalid data found", "No route to host", "Protocol not found",
                  "No such file or directory")
@@ -593,12 +458,9 @@ class NamefixService:
         return False, last
 
     def _frame_for(self, url, width, offset, reuse):
-        """取一帧：优先复用已有截图（仅当分辨率够），否则重抓"""
-        # 1) 本服务自己的高清帧
         p = self._frame_path(url)
         if os.path.isfile(p) and os.path.getsize(p) > 1024:
             return p, True, "缓存帧"
-        # 2) 复用截图服务产物（分辨率达标才用）
         if reuse:
             try:
                 from app.main import screenshot_service
@@ -615,9 +477,7 @@ class NamefixService:
         ok, err = self._grab(url, p, width, offset)
         return (p, True, "") if ok else (None, False, err)
 
-    # ---------------- 视觉兜底 ----------------
     def vision_ask(self, frame_path, override=None):
-        """调用 OpenAI 兼容视觉接口认台标。返回 (名称, 说明)"""
         s = dict(override) if override else self._settings()
         if not s.get("namefix_vision_enabled"):
             return None, "视觉兜底未启用"
@@ -654,7 +514,6 @@ class NamefixService:
             return None, "视觉接口调用失败：%s" % str(e)[:120]
 
     def vision_test(self):
-        """连通性自测：找一张已有帧或现抓一张，返回模型回答"""
         s = self._settings()
         if not (s.get("namefix_vision_key") or "").strip():
             return {"ok": False, "error": "未填写视觉接口 Key"}
@@ -669,9 +528,7 @@ class NamefixService:
         return {"ok": bool(name), "answer": name or "", "error": err,
                 "frame": os.path.basename(frame)}
 
-    # ---------------- 单频道裁决 ----------------
     def analyze_one(self, ch, index, epgrev, width, offset, reuse, use_vision):
-        """对单个频道跑完整流水线，返回建议项 dict"""
         cid = ch.get("id")
         url = (ch.get("url") or "").strip()
         cur = (ch.get("name") or "").strip()
@@ -701,7 +558,6 @@ class NamefixService:
         w, h = _img_size(frame)
         rec["size"] = [w, h]
         if not lines:
-            # 纯画面无文字 → 视觉兜底
             rec["state"] = "no_text"
             if use_vision:
                 name, err = self.vision_ask(frame)
@@ -718,7 +574,6 @@ class NamefixService:
                 rec["note"] = "画面无文字（需视觉兜底或人工）"
             return rec
 
-        # 分区（带位置权重：左上角才是台标权威区，右上角多为平台水印）
         regions = {"top": [], "mid": [], "bot": [], "topright": []}
         junk_lines, ad_lines = [], []
         for L in lines:
@@ -735,7 +590,6 @@ class NamefixService:
         rec["texts"] = {k: [t for t, _w in v][:6] for k, v in regions.items()}
         rec["junk_texts"] = junk_lines[:4]
 
-        # 垃圾页判定：够多推广特征，且几乎没有有效频道文字
         useful = sum(len(v) for v in regions.values())
         if len(junk_lines) >= 3 and useful <= 2:
             rec["state"] = "junk"
@@ -746,14 +600,12 @@ class NamefixService:
             rec["note"] = "含下载链接的推广页"
             return rec
 
-        # 右上角角标只记录、不参与判定（实测那里放的全是栏目品牌与平台水印）
         tr_texts = [t for t, _w in regions["topright"]]
         blk_note = ""
         if tr_texts:
             blk_note = "右上角角标「%s」按栏目/平台水印处理，未采纳（台标以左上角为准）" % \
                 "、".join(tr_texts[:2])
 
-        # 名称裁决：只认左上角台标区 / 中部 / 字幕条
         votes = Counter()
         detail = {}
         for zone in ("top", "mid", "bot"):
@@ -780,14 +632,10 @@ class NamefixService:
             base = {"exact": 0.95, "alias": 0.93, "fuzzy": d0["score"]}.get(kind, d0["score"])
             conf = base + (0.02 if len(detail[best]) >= 2 else 0.0)
             if region == "top":
-                conf += 0.01        # 左上角台标区才是权威位置
+                conf += 0.01
             else:
-                # 中部/字幕区/右上角提到某个台名，不等于「本台就是它」（可能是栏目名、
-                # 赞助、串场字幕，或右上角的平台水印），因此封顶到**自动改名门槛之下**
-                # （默认门槛 0.9 → 封顶 0.88），只能作为建议等人工确认，永不被自动应用。
                 conf = min(conf, 0.88)
         else:
-            # 正向读不出频道名 → 字幕条节目名反查 EPG
             if epgrev and epgrev.ready:
                 for zone in ("bot", "mid", "top"):
                     for t, _w in regions[zone]:
@@ -806,7 +654,6 @@ class NamefixService:
                 rec["note"] += "；" + blk_note
             return rec
 
-        # EPG 交叉验证（第二票）
         if best and epgrev and epgrev.ready and kind != "epg":
             for t, _w in (regions["bot"] + regions["mid"])[:6]:
                 cand, weight = epgrev.vote(t)
@@ -820,7 +667,6 @@ class NamefixService:
                     break
 
         conf = round(min(0.99, conf), 3)
-        # 行号后缀原样保留：改名后仍要能区分同一频道的多个源
         rec["new"] = best + (" " + cur_suffix if cur_suffix else "")
         rec["confidence"] = conf
         rec["kind"] = kind
@@ -830,20 +676,17 @@ class NamefixService:
             rec["note"] = (rec["note"] + "；" if rec["note"] else "") + blk_note
         rec["detail"] = detail.get(best, [])[:4]
 
-        # 与现名比对（用基名，行号后缀不参与比较、也不参与数字闸门）
         if _n(cur_base) == _n(best):
             rec["state"] = "consistent"
             rec["note"] = (rec["note"] + "；" if rec["note"] else "") + "与现名一致，无需改名"
             return rec
         if _digits(cur_base) and _sig(cur_base) != _sig(best):
-            # 基名的频道号不同：可能是真错标，也可能是不同频道的源 → 只提示不自动
             rec["note"] = (rec["note"] + "；" if rec["note"] else "") + \
                 "现名与识别名数字不一致（%s→%s），建议人工确认" % (cur_base, best)
             rec["confidence"] = round(min(conf, 0.75), 3)
         rec["state"] = "pending"
         return rec
 
-    # ---------------- 批量扫描 ----------------
     def scan(self, ids=None, limit=None, use_vision=None):
         cs = self._channel_service()
         pool = list(getattr(cs, "pool", []) or [])
@@ -952,7 +795,6 @@ class NamefixService:
             except Exception:
                 return {}
 
-    # ---------------- 查询 / 应用 / 撤销 ----------------
     def get_status(self):
         with self._lock:
             return dict(self._state)
@@ -980,7 +822,6 @@ class NamefixService:
         return {"ok": True, "dismissed": n}
 
     def _backup(self):
-        """改名前的自动备份（沿用项目 _bak_<日期>_<说明>/ 惯例）"""
         d = os.path.join(self.data_dir, "_bak_%s_改名前" % time.strftime("%Y%m%d"))
         try:
             os.makedirs(d, exist_ok=True)
@@ -995,7 +836,6 @@ class NamefixService:
             return ""
 
     def apply(self, ids=None, force=False):
-        """应用建议：把 new 写入频道名。ids 为空时应用所有 pending。"""
         cs = self._channel_service()
         with self._lock:
             targets = []
@@ -1045,7 +885,6 @@ class NamefixService:
         return {"ok": True, "changed": len(changes), "failed": failed}
 
     def undo(self, batch_id=None):
-        """撤销：不传 batch_id 则撤销最近一批"""
         cs = self._channel_service()
         batches = self._load_undo()
         if not batches:
@@ -1093,7 +932,6 @@ class NamefixService:
         return {"ok": True}
 
 
-# ==================== 工具 ====================
 def _img_size(path):
     try:
         from PIL import Image
@@ -1104,7 +942,6 @@ def _img_size(path):
 
 
 def _resolve(text, index):
-    """把任意写法解析为规范名（先用索引，再退别名库）"""
     if not text:
         return None, 0.0
     canon, score, _kind = index.lookup(text)
@@ -1120,14 +957,7 @@ def _resolve(text, index):
     return None, 0.0
 
 
-# ==================== 回归自检（纯文本层，不联网不抓帧） ====================
 def self_check():
-    """关键规则回归自检。返回 {"total", "passed", "failed": [{case, want, got}]}。
-
-    为什么要有它：2026-09-14 用户实测报「辽宁卫视被判成 CCTV4K」，
-    根因是归一化把 `4k` 当画质后缀剥掉，让裸「CCTV」精确命中 CCTV4K。
-    这类回归靠肉眼看不出来，必须有断言守着。
-    """
     cases = []
 
     def add(name, fn, want):
@@ -1137,27 +967,20 @@ def self_check():
             got = "EXC:%s" % str(e)[:60]
         cases.append((name, want, got))
 
-    # —— 归一化：4K/8K 是频道身份，不是画质后缀 ——
     add("_n(CCTV4K)", lambda: _n("CCTV4K"), "cctv4k")
     add("_n(CCTV4K超高清)", lambda: _n("CCTV4K超高清"), "cctv4k")
     add("_n(央视4K)", lambda: _n("央视4K"), "央视4k")
-    # —— 画质后缀仍要剥掉（否则「湖南卫视高清」匹配不上「湖南卫视」）——
     add("_n(湖南卫视高清)", lambda: _n("湖南卫视高清"), "湖南卫视")
     add("_n(浙江卫视1080p)", lambda: _n("浙江卫视1080p"), "浙江卫视")
-    # —— 结构签名闸门：CCTV5 与 CCTV5+ 必须不同 ——
     add("_sig(CCTV5)!=_sig(CCTV5+)", lambda: _sig("CCTV5") != _sig("CCTV5+"), True)
-    # —— 行号后缀剥离 ——
     add("_split_idx(内蒙古卫视 #3)", lambda: _split_idx("内蒙古卫视 #3"),
         ("内蒙古卫视", "#3"))
-    # —— 位置权重：右上角只记录不判定，台标以左上角为准 ——
     add("_zone 左上角", lambda: _zone(30, 100, 960, 540), ("top", 1.0))
     add("_zone 右上角不判定", lambda: _zone(30, 800, 960, 540), ("topright", 0.0))
     add("_zone 底部", lambda: _zone(500, 400, 960, 540), ("bot", 0.85))
-    # —— 平台水印词 ——
     add("_is_ad_noise(咪咕视频)", lambda: _is_ad_noise("咪咕视频"), True)
     add("_is_ad_noise(集成播控)", lambda: _is_ad_noise("集成播控"), True)
     add("_is_ad_noise(辽宁卫视)", lambda: _is_ad_noise("辽宁卫视"), False)
-    # 短中文不要被广告词吞掉（「折电视」曾因含「折」被丢，左上角就"看起来没台标"）
     add("_is_ad_noise(折电视)=短中文豁免", lambda: _is_ad_noise("折电视"), False)
     add("_is_ad_noise(限时抢购)=真广告", lambda: _is_ad_noise("限时抢购"), True)
 
@@ -1167,7 +990,6 @@ def self_check():
 
 
 def resolve_check(alias_map, pool_names=None):
-    """依赖别名库的自检（需传入实际别名表）。同上，供 /self-check 调用。"""
     idx = NameIndex(pool_names or [], alias_map or {})
     cases = [
         ("裸 CCTV. 不表态", idx.lookup("CCTV.")[0], None),
@@ -1184,7 +1006,6 @@ def resolve_check(alias_map, pool_names=None):
             "failed": [{"case": n, "want": w, "got": g} for n, w, g in cases if w != g]}
 
 
-# ==================== 模块级单例 ====================
 _service = None
 _service_lock = threading.Lock()
 

@@ -1,14 +1,13 @@
 <template>
-  <!-- 独立播放窗（?standalone=1）：完全跳过主窗 layout，直接渲染 router-view。
-       否则 el-main 的 16px padding + Element Plus 浅色背景会形成"白框"。 -->
+  
   <router-view v-if="isStandalonePlayer" />
 
-  <!-- 双窗口（Phase 1）：主窗口 = 纯频道库/管理（永远满尺寸）；播放窗为独立 pywebview 窗口 -->
+  
   <div v-else class="app-shell">
-    <!-- 自绘顶栏（frameless 主窗）：图标+ITV Desk+虚线+中文菜单+窗口按钮，背景跟随皮肤 -->
+    
     <TitleBar />
     <el-container class="app-layout">
-    <!-- 侧边栏 -->
+    
     <el-aside :width="sidebarCollapsed ? '64px' : '220px'" class="app-aside">
       <div class="logo">
         <el-icon :size="24" color="var(--el-color-primary)"><VideoCamera /></el-icon>
@@ -52,9 +51,9 @@
       </el-menu>
     </el-aside>
 
-    <!-- 右侧内容 -->
+    
     <el-container class="app-main">
-      <!-- 顶部栏 -->
+      
       <el-header class="app-header" height="48px">
         <div class="header-left">
           <el-button text @click="sidebarCollapsed = !sidebarCollapsed">
@@ -66,7 +65,7 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <!-- 双窗口（Phase 1）：打开/恢复独立播放窗口（列表双击也可打开） -->
+          
           <el-button
             text
             :type="playerStore.currentChannel ? 'primary' : ''"
@@ -76,7 +75,7 @@
             <el-icon :size="16"><VideoPlay /></el-icon>
             <span class="header-label">播放窗口</span>
           </el-button>
-          <!-- 主题色切换 -->
+          
           <el-dropdown trigger="click" @command="setTheme">
             <el-button text>
               <el-icon :size="16"><Brush /></el-icon>
@@ -142,16 +141,12 @@ const route = useRoute()
 const sidebarCollapsed = ref(true)
 const playerStore = usePlayerStore()
 
-// 独立播放窗标志（run.py 播放窗 URL 带 ?standalone=1）——只渲染 PlayerView，隐藏主窗 layout
 const isStandalonePlayer = computed(() => route.query.standalone === '1')
 
-// 双窗口（Phase 1）：打开/恢复独立播放窗口（复用上次频道，run.py Api.open_player 兜底）
 async function reopenPlayer() {
   await callNative('open_player')
 }
 
-// Phase 3：跨窗口状态同步——播放窗经 PlayerApi.notify_main 推来的 引擎/频道/分辨率
-// （Pinia store 不跨窗口共享，主窗状态栏只能靠经纪人转发）
 window.__updatePlaying = (p) => {
   if (!p) return
   const cur = playerStore.currentChannel || {}
@@ -278,7 +273,7 @@ html, body, #app {
   background: var(--el-bg-color-page);
 }
 
-/* 状态栏 */
+
 .app-statusbar {
   display: flex;
   align-items: center;
@@ -296,7 +291,7 @@ html, body, #app {
 .sb-note { color: var(--el-color-info); font-size: 11px; }
 .sb-res { font-family: 'Consolas', monospace; color: var(--el-text-color-secondary); font-size: 11px; }
 
-/* 滚动条 */
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--el-border-color-dark); border-radius: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }

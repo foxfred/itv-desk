@@ -1,4 +1,3 @@
-"""EPG 服务 - 完整复刻现有 EPG 加载逻辑"""
 import os
 import re
 import threading
@@ -10,17 +9,10 @@ from app.utils.m3u_parser import Parser
 
 
 def _natural_key(name):
-    """自然数排序键：CCTV10 排在 CCTV9 之后，而非 CCTV1 之后"""
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', name or '')]
 
 
 def _normalize_name(name):
-    """标准化名称：**先按别名库归一为规范名**，再转小写、压缩空白、去除常见符号
-
-    P1-9：源里叫「央视五套」、节目单里叫「CCTV5」，靠别名库对上。
-    这里只做匹配用的键，不改频道显示名；匹配不上最多是匹配不上，无副作用，
-    所以默认启用（对比之下「去重」用别名是显式开关）。
-    """
     if not name:
         return ''
     try:
@@ -32,34 +24,19 @@ def _normalize_name(name):
 
 
 def _name_tokens(name):
-    """提取名称中的字母数字 token，如 CCTV10 -> ['cctv', '10']"""
     if not name:
         return []
     return [t for t in re.split(r'[^a-z0-9\u4e00-\u9fff]+', name.lower()) if t]
 
 
 def _digits(s):
-    """名称里的数字序列，用于判断两个名字的"频道号"是否一致
-
-    背景：下面的模糊包含匹配会让 'cctv1' 命中 'cctv13'（前缀子串），
-    于是「中央13台」在 EPG 里没有对应频道时会被错误配到 CCTV1。
-    只要两边数字序列不同就判定不是同一频道。
-    """
     return re.findall(r'\d+', s or '')
 
 
-# 去除频道名后缀中的 HD/4K/高清/标清/FHD 等标识，便于做更宽松的频道名匹配
 _clean_hd = re.compile(r'[\s\-_]*[HD4K高清超高清标清FHD]*$', re.I)
 
 
 class EpgService:
-    """EPG 数据管理服务
-
-    新增能力（相较原版）：
-    - 落盘缓存（epg_cache.json）：EPG 加载后自动缓存，重启后自动恢复，无需重复下载；
-    - 按频道名自动匹配（match_channel）：供播放器/节目单按名称联动；
-    - 定时刷新（start_refresh_scheduler）：记录最近一次 EPG 源，按间隔后台重新拉取。
-    """
 
     def __init__(self, log_callback=None, data_dir=None):
         self.log_callback = log_callback or (lambda msg: None)
@@ -73,13 +50,11 @@ class EpgService:
         self.epg_count = 0
         self._stop = threading.Event()
         self._thread = None
-        # 启动时尝试恢复缓存，使 EPG 跨重启可用
         try:
             self.load_cache()
         except Exception:
             pass
 
-    # -------------------- 缓存 / 源持久化 --------------------
     def save_cache(self):
         try:
             tmp = self.cache_path + ".tmp"
@@ -120,7 +95,6 @@ class EpgService:
             return None
 
     def load_epg(self, url, proxy=""):
-        """加载 EPG 数据（后台线程执行，避免阻塞请求）"""
         if self.epg_loading:
             return {"loading": True, "error": "正在加载中"}
         self.epg_loading = True
@@ -130,14 +104,10 @@ class EpgService:
         return {"loading": True}
 
     def load_epg_batch(self, urls_with_proxy):
-        """批量加载多个 EPG 源并合并（追加模式，同名频道节目单合并去重）。
-        urls_with_proxy: [(url, proxy), ...]
-        """
         if self.epg_loading:
             return {"loading": True, "error": "正在加载中"}
         self.epg_loading = True
         self.epg_error = None
-        # 保存第一个源为主源
         if urls_with_proxy:
             self.save_source(urls_with_proxy[0][0], urls_with_proxy[0][1])
         threading.Thread(target=self._load_worker_batch,
@@ -145,7 +115,6 @@ class EpgService:
         return {"loading": True}
 
     def _load_worker_batch(self, urls_with_proxy):
-        """批量加载多个 EPG 源并合并到 epg_data"""
         epg_map = {}
         total_channels = 0
         for i, (url, proxy) in enumerate(urls_with_proxy):
@@ -163,7 +132,6 @@ class EpgService:
                     continue
                 for name, info in parsed.items():
                     if name in epg_map:
-                        # 合并节目单，按 start 去重
                         existing_starts = {p['start'] for p in epg_map[name]['programs']}
                         for p in info.get('programs', []):
                             if p['start'] not in existing_starts:
@@ -183,7 +151,6 @@ class EpgService:
         self.epg_loading = False
 
     def _parse_xml(self, content):
-        """解析 EPG XML 内容，返回 {name: {id, name, programs}}"""
         if isinstance(content, bytes):
             if content[:2] == b'\x1f\x8b':
                 content = gzip.decompress(content).decode('utf-8', errors='ignore')
@@ -215,7 +182,6 @@ class EpgService:
         return epg_map
 
     def get_status(self):
-        """返回 EPG 加载状态（供前端轮询）"""
         return {
             "loading": self.epg_loading,
             "loaded": self.epg_loaded,
@@ -224,7 +190,6 @@ class EpgService:
         }
 
     def _load_worker(self, url, proxy=""):
-        """单源加载（兼容旧调用，现在追加到已有数据而非覆盖）"""
         try:
             self.log_callback(f"开始加载 EPG: {url}")
             content, err = download_url(url, proxy if proxy else None)
@@ -237,7 +202,6 @@ class EpgService:
                 self.epg_error = "未找到有效 EPG 数据"
                 self.log_callback(f"EPG 解析失败: 未找到 <tv 标签")
                 return
-            # 追加模式：同名频道合并节目单
             if not self.epg_data:
                 self.epg_data = parsed
             else:
@@ -260,7 +224,6 @@ class EpgService:
             self.epg_loading = False
 
     def correct_names(self, channel_service):
-        """校正频道名"""
         if not self.epg_loaded or not self.epg_data:
             self.log_callback("  [EPG] 请先加载 EPG 数据")
             return {"error": "请先加载 EPG"}
@@ -285,7 +248,6 @@ class EpgService:
         return {"corrected": corrected}
 
     def update_groups(self, channel_service):
-        """根据 EPG 数据校正频道分组（复用统一分组算法，保证与导入/重新分组一致）。"""
         if not self.epg_loaded or not self.epg_data:
             self.log_callback("  [EPG] 请先加载 EPG 数据")
             return {"error": "请先加载 EPG"}
@@ -322,7 +284,6 @@ class EpgService:
         return {"updated": updated}
 
     def search(self, keyword):
-        """按关键词搜索当前正在播放的节目"""
         if not self.epg_loaded or not self.epg_data:
             return {"error": "请先加载 EPG"}
         kw = keyword.lower()
@@ -348,7 +309,6 @@ class EpgService:
         return {"results": results}
 
     def get_program(self, name):
-        """获取指定频道的当前节目"""
         if not self.epg_loaded or not self.epg_data:
             return {"program": None}
         now = datetime.now()
@@ -369,7 +329,6 @@ class EpgService:
         return {"program": None}
 
     def get_channels(self):
-        """返回 EPG 频道列表及每个频道的当前节目（供前端节目单界面）"""
         if not self.epg_loaded or not self.epg_data:
             return {"error": "请先加载 EPG"}
         now = datetime.now()
@@ -398,11 +357,8 @@ class EpgService:
         return {"channels": channels}
 
     def _find_info(self, name):
-        """按频道名找到最匹配的 EPG 条目（精确 → 归一化 → token/包含受限匹配）"""
         if not self.epg_loaded or not self.epg_data:
             return None
-        # 优先精确匹配，其次忽略大小写/空格后一致，最后才做受限的包含匹配，
-        # 避免 CCTV10 被 "CCTV1" 这类前缀子串抢先匹配到错误频道
         exact = self.epg_data.get(name)
         if exact:
             return exact
@@ -417,15 +373,12 @@ class EpgService:
             if en == norm:
                 continue
             epg_tokens = _name_tokens(epg_name)
-            # 短名称(纯字母数字缩写)要求完全一致；长名称允许包含但不允许单向短子串误配
             if epg_tokens and epg_tokens == name_tokens:
                 return v
-            # 频道号不同就不是同一个台（挡住 CCTV1 ⊂ CCTV13 / CCTV1 ⊂ CCTV10 这类前缀误配）
             if _digits(en) != name_digits:
                 continue
             if len(name) >= 4 and len(epg_name) >= 4 and (en in norm or norm in en):
                 return v
-            # 增强匹配：去掉频道名中的 HD/4K/高清/标清/FHD 等后缀，再试包含匹配
             clean_name = _clean_hd.sub('', norm)
             clean_epg = _clean_hd.sub('', en)
             if clean_name and clean_epg and (clean_epg in clean_name or clean_name in clean_epg):
@@ -433,7 +386,6 @@ class EpgService:
         return None
 
     def match_channel(self, name):
-        """按频道名自动匹配 EPG：返回匹配名 + 当前节目 + 今日节目单（供播放器联动）"""
         if not self.epg_loaded or not self.epg_data:
             return {"matched": None, "channel": name, "current": None, "programs": []}
         info = self._find_info(name)
@@ -482,7 +434,6 @@ class EpgService:
                 "current": current, "programs": programs}
 
     def get_programs(self, name):
-        """获取指定频道今日的完整节目单（含播放状态与进度）"""
         if not self.epg_loaded or not self.epg_data:
             return {"error": "请先加载 EPG"}
         info = self._find_info(name)
@@ -527,9 +478,7 @@ class EpgService:
         programs.sort(key=lambda p: p['start'])
         return {"programs": programs, "channel": info.get('name', name)}
 
-    # -------------------- 定时刷新 --------------------
     def start_refresh_scheduler(self, interval_seconds):
-        """按间隔后台重新拉取最近一次 EPG 源（interval_seconds<=0 关闭）"""
         self.stop_refresh_scheduler()
         if interval_seconds and interval_seconds > 0:
             self._stop.clear()
@@ -553,7 +502,6 @@ class EpgService:
         self._thread = None
 
     def refresh_from_source(self):
-        """立即按已保存的源重新拉取 EPG"""
         src = self.load_source()
         if not src or not src.get("url"):
             return {"error": "没有已保存的 EPG 源，请先加载一次 EPG"}

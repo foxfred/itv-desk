@@ -1,18 +1,7 @@
-"""SQLite 频道存储：为频道池提供持久化与分页/检索能力。
-
-设计原则（向后兼容、零回归）：
-- 内存频道池（ChannelService.pool）仍是实时数据源，所有现有读写逻辑不变。
-- 本存储作为「并行镜像」：在频道增删改/启动时与内存池同步，提供：
-  * 分页读取（get_page）——支撑大数据量下的前端分页；
-  * 全文检索（search）——按名称/分组/标记模糊匹配；
-  * 落盘持久化（channels.db）——作为内存缓存之外的第二份持久数据。
-- 所有对外写操作均被调用方用 try/except 包裹，SQLite 异常绝不会穿透影响主流程。
-"""
 import os
 import sqlite3
 import threading
 
-# channel_store.py 位于 backend/app/services/，向上 4 级即仓库根目录（DATA_DIR）
 DEFAULT_DB = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
     "channels.db",
@@ -51,7 +40,6 @@ class ChannelStore:
                     origin TEXT
                 )"""
             )
-            # 旧库可能没有 origin / is_fake_live 列：安全追加（SQLite 不支持 ADD COLUMN IF NOT EXISTS）
             for col_sql in ("ALTER TABLE channels ADD COLUMN origin TEXT",
                             "ALTER TABLE channels ADD COLUMN is_fake_live INTEGER DEFAULT 0"):
                 try:
@@ -66,7 +54,6 @@ class ChannelStore:
             self._conn.commit()
 
     def shift_orders(self, delta):
-        """将所有行的 order_idx 整体平移 delta（用于头部插入后保持顺序一致）"""
         with self._lock:
             self._conn.execute("UPDATE channels SET order_idx = order_idx + ?", (delta,))
             self._conn.commit()
@@ -94,7 +81,6 @@ class ChannelStore:
         )
 
     def upsert_many(self, rows):
-        """rows: list of tuples，顺序与 _row_from_channel 一致；按 norm_url 去重更新"""
         if not rows:
             return
         with self._lock:
@@ -151,7 +137,6 @@ class ChannelStore:
             return self._conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]
 
     def group_counts(self):
-        """返回各分组频道数，按数量降序（驱动前端分组树）"""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT group_name, COUNT(*) FROM channels GROUP BY group_name ORDER BY COUNT(*) DESC"

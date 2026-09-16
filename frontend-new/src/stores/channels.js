@@ -23,8 +23,7 @@ export const useChannelStore = defineStore('channels', () => {
     loading.value = false
   }
 
-  // 已有数据则跳过全量刷新（切页快速显示）
-  async function fetchIfNeeded() {
+    async function fetchIfNeeded() {
     if (loaded.value) {
       await fetchStats()
       return false

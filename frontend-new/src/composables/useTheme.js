@@ -3,7 +3,6 @@ import { ref, watch } from 'vue'
 const STORAGE_KEY = 'iptv-theme'
 const DARK_KEY = 'iptv-dark-mode'
 
-// 预设主题色
 export const PRESET_THEMES = [
   { name: '默认蓝', color: '#409EFF' },
   { name: '深邃蓝', color: '#1A365D' },
@@ -15,23 +14,19 @@ export const PRESET_THEMES = [
   { name: '暗夜黑', color: '#2C3E50' },
 ]
 
-// 内置皮肤 CSS 文件
 export const BUILTIN_SKINS = [
-  // 暗黑风格
-  { name: '赛博朋克', file: 'dark-cyberpunk.css', type: 'dark' },
+    { name: '赛博朋克', file: 'dark-cyberpunk.css', type: 'dark' },
   { name: '暗夜森林', file: 'dark-forest.css', type: 'dark' },
   { name: '深海暗流', file: 'dark-ocean.css', type: 'dark' },
   { name: '暗烬余晖', file: 'dark-ember.css', type: 'dark' },
   { name: '极致暗黑', file: 'dark-monochrome.css', type: 'dark' },
-  // 亮色风格
-  { name: '磨砂玻璃', file: 'light-frosted-glass.css', type: 'light' },
+    { name: '磨砂玻璃', file: 'light-frosted-glass.css', type: 'light' },
   { name: '樱花物语', file: 'light-sakura.css', type: 'light' },
   { name: '薄荷清风', file: 'light-mint.css', type: 'light' },
   { name: '薰衣草梦', file: 'light-lavender.css', type: 'light' },
   { name: '日落暖橙', file: 'light-sunset.css', type: 'light' },
   { name: '浅色现代极简', file: 'light-modern-minimal.css', type: 'light' },
-  // 原有主题
-  { name: '蓝色背景', file: 'blue-bg-theme.css', type: 'light' },
+    { name: '蓝色背景', file: 'blue-bg-theme.css', type: 'light' },
   { name: 'macOS', file: 'macos-theme.css', type: 'light' },
   { name: 'Windows XP', file: 'winxp-theme.css', type: 'light' },
   { name: 'Windows 7', file: 'win7-theme.css', type: 'light' },
@@ -39,7 +34,6 @@ export const BUILTIN_SKINS = [
   { name: 'Windows 11', file: 'win11-theme.css', type: 'light' },
 ]
 
-// 从 hex 生成 Element Plus 需要的色阶
 function hexToRgb(hex) {
   const r = parseInt(hex.slice(1, 3), 16)
   const g = parseInt(hex.slice(3, 5), 16)
@@ -120,8 +114,7 @@ function applyDarkMode(dark) {
   if (dark) {
     root.classList.add('dark')
     root.style.setProperty('color-scheme', 'dark')
-    // Element Plus 暗色模式 CSS 变量
-    root.style.setProperty('--el-bg-color', '#141414')
+        root.style.setProperty('--el-bg-color', '#141414')
     root.style.setProperty('--el-bg-color-page', '#0a0a0a')
     root.style.setProperty('--el-bg-color-overlay', '#1d1e1f')
     root.style.setProperty('--el-text-color-primary', '#e5eaf3')
@@ -143,8 +136,7 @@ function applyDarkMode(dark) {
   } else {
     root.classList.remove('dark')
     root.style.removeProperty('color-scheme')
-    // 清除暗色变量，恢复默认
-    const darkVars = [
+        const darkVars = [
       '--el-bg-color', '--el-bg-color-page', '--el-bg-color-overlay',
       '--el-text-color-primary', '--el-text-color-regular', '--el-text-color-secondary',
       '--el-text-color-placeholder', '--el-border-color', '--el-border-color-light',
@@ -156,22 +148,18 @@ function applyDarkMode(dark) {
   }
 }
 
-// 外部导入的皮肤（Element Plus theme CSS）
 let _externalStyleEl = null
 
 export function importThemeCss(cssText) {
-  // 移除旧的外部皮肤
-  if (_externalStyleEl) {
+    if (_externalStyleEl) {
     _externalStyleEl.remove()
     _externalStyleEl = null
   }
-  // 注入新的皮肤 CSS
-  _externalStyleEl = document.createElement('style')
+    _externalStyleEl = document.createElement('style')
   _externalStyleEl.id = 'iptv-external-theme'
   _externalStyleEl.textContent = cssText
   document.head.appendChild(_externalStyleEl)
-  // 标记为自定义皮肤
-  localStorage.setItem(STORAGE_KEY, '__custom__')
+    localStorage.setItem(STORAGE_KEY, '__custom__')
   currentTheme.value = '__custom__'
 }
 
@@ -199,7 +187,6 @@ export function clearCustomTheme() {
   applyTheme('#409EFF')
 }
 
-// 加载内置皮肤 CSS 文件
 export async function loadBuiltinSkin(skinFile) {
   try {
     const resp = await fetch(`/themes/${skinFile}`)
@@ -214,7 +201,6 @@ export async function loadBuiltinSkin(skinFile) {
   }
 }
 
-// 获取当前内置皮肤文件名
 export function getBuiltinSkinName() {
   try {
     return localStorage.getItem('iptv-builtin-skin') || ''
@@ -224,8 +210,7 @@ export function getBuiltinSkinName() {
 export function initTheme() {
   const saved = currentTheme.value
   if (saved === '__custom__') {
-    // 尝试恢复内置皮肤
-    const builtinSkin = getBuiltinSkinName()
+        const builtinSkin = getBuiltinSkinName()
     if (builtinSkin) {
       loadBuiltinSkin(builtinSkin).catch(() => {
         currentTheme.value = '#409EFF'

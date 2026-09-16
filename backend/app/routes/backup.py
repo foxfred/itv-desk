@@ -1,8 +1,3 @@
-"""备份与恢复路由 - /api/backup
-
-普通备份（zip，明文） + 加密备份（AES，口令保护，零服务器）。
-加密备份导出为 .enc 文件（salt 16 字节 + Fernet token），导入时凭同一口令解密后还原。
-"""
 import os
 import json
 import base64
@@ -19,7 +14,6 @@ from app.config import Config
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
-# 加密能力探测（cryptography 库）
 try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -36,7 +30,6 @@ def _derive_key(passphrase: str, salt: bytes) -> bytes:
 
 
 def _encrypt_bytes(data: bytes, passphrase: str) -> bytes:
-    """salt(16) + Fernet(token)；Fernet 内部自带随机 nonce。"""
     salt = os.urandom(16)
     key = _derive_key(passphrase, salt)
     token = Fernet(key).encrypt(data)
@@ -49,7 +42,6 @@ def _decrypt_bytes(blob: bytes, passphrase: str) -> bytes:
     key = _derive_key(passphrase, salt)
     return Fernet(key).decrypt(token)
 
-# 仅允许备份/恢复的文件名白名单（防御 zip-slip 路径穿越）
 BACKUP_FILES = [
     "channels_cache.json",
     "channel_tags.json",
@@ -77,7 +69,6 @@ def get_channel_service():
 
 @router.get("/export")
 def export_backup(data_dir: str = Depends(get_data_dir)):
-    """导出当前所有数据为 zip 文件（频道缓存、设置、历史、收藏规则、数据库）"""
     try:
         tmp = _build_zip(data_dir)
         return FileResponse(tmp, filename="iptv_backup.zip", media_type="application/zip")
@@ -87,7 +78,6 @@ def export_backup(data_dir: str = Depends(get_data_dir)):
 
 @router.get("/export-file")
 def export_backup_file(data_dir: str = Depends(get_data_dir)):
-    """导出 zip 到服务器侧临时文件，返回路径供原生对话框保存（用于二进制下载）"""
     try:
         tmp = _build_zip(data_dir)
         return JSONResponse({"ok": True, "path": tmp, "filename": "iptv_backup.zip"})
@@ -136,11 +126,10 @@ def _count_channels(path):
 @router.post("/import")
 def import_backup(
     file: UploadFile = File(...),
-    mode: str = Form("overwrite"),  # "overwrite": 覆盖还原；保留旧文件名白名单
+    mode: str = Form("overwrite"),
     data_dir: str = Depends(get_data_dir),
     channel_service=Depends(get_channel_service),
 ):
-    """导入 zip 备份并恢复到数据目录"""
     try:
         if not file.filename:
             raise HTTPException(400, "请选择备份文件")
@@ -152,14 +141,12 @@ def import_backup(
                 base = os.path.basename(n)
                 if not base:
                     continue
-                # 仅恢复白名单文件（防 zip slip）
                 if base in BACKUP_FILES or n.startswith("theme/"):
                     target = os.path.join(data_dir, base) if base in BACKUP_FILES else os.path.join(data_dir, n)
                     os.makedirs(os.path.dirname(target), exist_ok=True)
                     with zf.open(n) as src, open(target, "wb") as dst:
                         shutil.copyfileobj(src, dst)
                     restored.append(base)
-        # 热重载频道缓存
         _reload_channels(data_dir, channel_service)
         return JSONResponse({"ok": True, "restored": restored, "mode": mode})
     except HTTPException:
@@ -171,7 +158,6 @@ def import_backup(
 
 
 def _reload_channels(data_dir, channel_service):
-    """重新加载频道缓存到内存池"""
     cache_file = os.path.join(data_dir, "channels_cache.json")
     try:
         data = Config.load_json(cache_file, [])
@@ -199,14 +185,12 @@ def _reload_channels(data_dir, channel_service):
         pass
 
 
-# -------------------- 加密备份（AES，口令保护，零服务器） --------------------
 class EncExportReq(BaseModel):
     passphrase: str
 
 
 @router.post("/export-encrypted")
 def export_encrypted_backup(body: EncExportReq, data_dir: str = Depends(get_data_dir)):
-    """把当前数据打包成 zip 后用口令 AES 加密为 .enc 文件（服务器临时目录）。"""
     if not _CRYPTO_OK:
         raise HTTPException(500, "加密模块不可用（cryptography 未安装）")
     if not body.passphrase:
@@ -240,7 +224,6 @@ def import_encrypted_backup(
     data_dir: str = Depends(get_data_dir),
     channel_service=Depends(get_channel_service),
 ):
-    """上传 .enc 加密备份，凭口令解密后还原数据目录。"""
     if not _CRYPTO_OK:
         raise HTTPException(500, "加密模块不可用（cryptography 未安装）")
     if not passphrase:

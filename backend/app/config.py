@@ -2,7 +2,6 @@ import json
 import os
 import sys
 
-# ==================== 文件管理器 ====================
 class FileManager:
     @staticmethod
     def read_text(filepath, encoding="utf-8", fallback_encodings=None):
@@ -39,11 +38,6 @@ class FileManager:
 
     @staticmethod
     def write_json_atomic(filepath, data, indent=2, encoding="utf-8"):
-        """原子写 JSON：先写同目录 .tmp 临时文件，再 os.replace 改名覆盖目标。
-
-        避免并发写入或进程崩溃时把 channels_cache.json 写半截（截断损坏）
-        导致下次启动整池频道丢失。os.replace 在同卷上是原子操作。
-        """
         import tempfile
         try:
             d = os.path.dirname(os.path.abspath(filepath))
@@ -82,7 +76,6 @@ class Config:
     OUTPUT_M3U = "检查整理结果_已去重.m3u"
 
     DEFAULTS = {
-        # 常规
         "auto_load_epg": True,
         "default_epg": "https://epg.163189.xyz/pp.xml",
         "save_window_geometry": True,
@@ -109,13 +102,11 @@ class Config:
         "cache_default_group": "杂项频道",
         "cache_default_geo": "中国",
         "cache_default_stack": "IPv4",
-        # 分组重构（#60）：导入/校正时按统一算法自动分组
-        "auto_group": True,            # 导入时按算法自动重分组（关则保留原 group-title）
-        "foreign_group_name": "外国频道",  # 外国频道统一归入的组名
-        "custom_group_rules": [],      # 自定义分组规则：[{"keyword": "关键词", "group": "目标组"}]，最高优先级
-        "group_override_by_url": [],   # 按 URL 精确覆盖分组：[{"url": "子串或正则", "group": "目标组"}]
-        # 网络
-        "use_proxy": False,  # 是否启用代理
+        "auto_group": True,
+        "foreign_group_name": "外国频道",
+        "custom_group_rules": [],
+        "group_override_by_url": [],
+        "use_proxy": False,
         "default_proxy": "127.0.0.1:10808",
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "download_timeout": 15,
@@ -131,16 +122,13 @@ class Config:
         "mirror_history": ["不使用加速", "ghp.ci", "ghproxy.com", "ghproxy.net", "kkgithub.com", "raw.fastgit.org"],
         "mirror": "不使用加速",
         "proxy": "",
-        # 应用自更新（内置 GitHub raw 更新清单地址，开箱即用，用户可在设置页修改）
-        # v3.0.2 起：指向 GitHub 仓库 release/update.json（每次发版由 release 流水线自动更新）
         "update_url": "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json",
-        # 检查
         "check_timeout": 1.5,
         "check_threads": 40,
         "check_retries": 1,
-        "check_hls": True,            # 是否检查 HLS 流
-        "probe_watchable": True,      # 是否探测真实可看性（拉取和分析媒体片段，更准确但更慢）
-        "check_auto_interval": 0,     # 检查定时任务（秒，0=关闭）
+        "check_hls": True,
+        "probe_watchable": True,
+        "check_auto_interval": 0,
         "reset_filter_after_check": True,
         "auto_delete_invalid_after_check": False,
         "show_quality_column": True,
@@ -149,35 +137,27 @@ class Config:
         "latency_grade_a_threshold": 300,
         "latency_grade_b_threshold": 800,
         "checker_batch_size": 10,
-        # 播放器假直播白名单：URL 命中其中子串或正则时不再提示假直播
         "fake_live_whitelist": [],
-        # URL 黑/白名单（每条为子串或正则）：黑名单永久排除（导入/检测/导出均过滤），白名单豁免检测直接判在线
         "url_blacklist": [],
         "url_whitelist": [],
-        # 局域网订阅网关（P1-6）：开启后 /gw/playlist.m3u 与 /gw/epg.xml 可供盒子/手机订阅
         "gateway_enabled": False,
         "gateway_token": "",
-        # 频道名校正（方案书-频道名自动校正）：抓帧→台标/字幕 OCR→EPG 交叉验证→改名建议表
-        # strategy：advise=只出建议表人工确认｜auto_high=高置信度自动改名｜auto_all=全自动改名
         "namefix_strategy": "advise",
-        "namefix_capture_width": 960,   # 抓帧宽度；实测 320 太小会把台标认成乱码，960 起可读
-        "namefix_capture_offset": 3,    # 抓帧偏移秒数（避开首帧公告页/黑屏）
-        "namefix_reuse_screenshot": True,  # 复用已有截图（省一次抓帧，但分辨率可能偏低）
-        "namefix_min_confidence": 0.9,  # auto_high 策略下的自动改名门槛
-        "namefix_fuzzy_threshold": 0.86,  # 名称模糊匹配阈值，低于此值只作提示
-        "namefix_vision_enabled": False,  # 视觉模型兜底（OCR 读不出台标时启用）
+        "namefix_capture_width": 960,
+        "namefix_capture_offset": 3,
+        "namefix_reuse_screenshot": True,
+        "namefix_min_confidence": 0.9,
+        "namefix_fuzzy_threshold": 0.86,
+        "namefix_vision_enabled": False,
         "namefix_vision_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
         "namefix_vision_model": "glm-4v-flash",
         "namefix_vision_key": "",
         "namefix_vision_timeout": 45,
-        "namefix_workers": 4,           # 并发抓帧+OCR 线程数
-        # 网段扫描（复用 http_probe_channel，设置项可配置）
+        "namefix_workers": 4,
         "scan_timeout": 5,
         "scan_max_workers": 40,
-        # 定时任务（秒，0=关闭）
         "subscription_auto_update_interval": 0,
         "epg_auto_refresh_interval": 0,
-        # 全局设置（主题、窗口、全局配色）
         "theme_mode": "浅色",
         "theme": "浅色",
         "theme_preset": "默认蓝",
@@ -188,7 +168,6 @@ class Config:
         "color_log_bg": "#111111",
         "color_log_fg": "#33FF33",
         "color_video_bg": "#000000",
-        # 左侧面板（抓取配置区布局）
         "left_panel_ratio": 0.28,
         "left_panel_min_width": 380,
         "left_panel_max_width": 620,
@@ -212,7 +191,6 @@ class Config:
         "config_group_border_width": 1,
         "config_group_border_color": "rgba(0,0,0,0.15)",
         "config_group_title_color": "#000000",
-        # 左侧面板 - 抓取配置区颜色与背景
         "config_input_bg_color": "#FFFFFF",
         "config_input_text_color": "#000000",
         "config_input_placeholder_color": "#AAAAAA",
@@ -223,7 +201,6 @@ class Config:
         "config_vertical_layout": False,
         "config_group_spacing": 12,
         "config_label_padding": 4,
-        # 左侧面板 - 抓取配置区扩展布局
         "config_outer_margin_left": 5,
         "config_outer_margin_top": 5,
         "config_outer_margin_right": 5,
@@ -255,7 +232,6 @@ class Config:
         "config_url_pool_button_min_width": 60,
         "config_load_epg_button_width": 60,
         "config_run_button_min_height": 34,
-        # 右侧面板（统计卡片、表格、工具栏、筛选栏）
         "stats_card_height": 72,
         "stats_card_min_height": 40,
         "stats_card_max_height": 200,
@@ -277,7 +253,6 @@ class Config:
         "stats_card_width": 0,
         "stats_row_padding_top": 8,
         "stats_row_padding_bottom": 4,
-        # 右侧面板 - 统计卡片独立样式（三个卡可分别调整）
         "stats_card_total_border_width": 0,
         "stats_card_online_border_width": 0,
         "stats_card_offline_border_width": 0,
@@ -313,7 +288,6 @@ class Config:
         "stats_toolbar_spacing": 6,
         "toolbar_filter_spacing": 4,
         "filter_table_spacing": 6,
-        # 右侧面板 - 统计卡片/工具栏/筛选栏/表格扩展
         "stats_card_spacing": 0,
         "stats_card_value_font_bold": True,
         "stats_card_label_font_bold": False,
@@ -375,7 +349,6 @@ class Config:
         "lock_splitters": True,
         "filter_status": "全部",
         "filter_stack": "全部协议",
-        # 播放器
         "player_update_interval_ms": 500,
         "player_hide_controls_delay_ms": 3000,
         "player_seek_step_ms": 5000,
@@ -383,23 +356,18 @@ class Config:
         "player_keyboard_enabled": True,
         "prefer_external_player": False,
         "external_player": "vlc",
-        "external_player_path": "",  # 手动指定外部播放器可执行文件路径（留空则自动检测）
-        "player_stream_proxy": False,  # 内置 HLS 播放经本地后端中继（绕过 WebView 跨源/MSE 限制）
-        # 双窗口播放器（Phase 5 设置面板）
-        "player_window_topmost": False,  # 播放窗口总在最前（📌置顶默认状态）
-        "double_click_auto_play": True,  # 双击频道自动播放（列表即唯一选源入口）
-        # 以下三项由「系统设置→播放器」面板保存（SettingsView），此前漏列 DEFAULTS，
-        # 导致「恢复默认」会丢失；补齐以保持配置键一致、重置可保留。
-        "default_volume": 75,  # 默认音量(%)
-        "default_playback_speed": 1.0,  # 默认倍速
-        "color_video_bg": "#000000",  # 视频背景色
-        # 日志与调试
+        "external_player_path": "",
+        "player_stream_proxy": False,
+        "player_window_topmost": False,
+        "double_click_auto_play": True,
+        "default_volume": 75,
+        "default_playback_speed": 1.0,
+        "color_video_bg": "#000000",
         "debug_log": False,
         "debug_log_traceback": True,
         "log_timestamp": True,
         "log_max_lines": 5000,
         "log_auto_clear": 10000,
-        # 高级/内部参数（全部可调）
         "scrape_page_timeout_multiplier": 2,
         "scrape_page_timeout_max": 30,
         "epg_timeout_multiplier": 3,
@@ -453,15 +421,11 @@ class Config:
 
     @staticmethod
     def get_setting(key, default=None):
-        """从 settings.json 读取单个配置项，失败返回 default"""
         settings = Config.load_settings()
         return settings.get(key, default)
 
     @staticmethod
     def get_data_dir():
-        """获取运行期数据目录（EXE 所在目录，或开发态仓库根目录）。
-        所有运行时文件（settings.json、channels.db、channels_cache.json 等）
-        都落在此目录下。"""
         try:
             from app.main import DATA_DIR
             return DATA_DIR

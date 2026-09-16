@@ -1,26 +1,9 @@
-"""FastAPI 应用入口 —— IPTV Core PRO MAX Web 版（分层架构重构版）
-
-所有业务逻辑 100% 复刻原版，通过分层架构组织：
-- routes/  → 参数接收和返回结果
-- services/ → 业务逻辑
-- models/   → ORM 模型
-- utils/    → 工具函数
-"""
 import os
 import sys
 import json
 import threading
 
-# ==================== 路径自适应（开发 / PyInstaller 打包 / Electron 壳） ====================
-# 注意：如需将 EXE 搬到其他目录，必须把**整个包（EXE + _internal/ 目录）一起复制**，
-# 不能只复制 EXE。
 #
-# 数据目录优先级（高 → 低）：
-#   1. ITV_DATA_DIR 环境变量 —— Electron 壳注入的程序根目录（打包版=resourcesPath，exe 拷到哪数据就生成在哪）
-#   2. PyInstaller 冻结态     —— sys.frozen=True，取 EXE 同级目录
-#   3. 开发态                 —— 仓库根（仅开发调试用）
-# 关键：**运行时数据（settings.json/channels.db/channels_cache.json 等）必须只落在程序自己的
-# 根目录**，绝不允许读到开发仓库根。用户把 exe 复制到别的目录，数据就应生成/读写在该目录。
 if os.environ.get("ITV_DATA_DIR"):
     DATA_DIR = os.path.abspath(os.environ["ITV_DATA_DIR"])
     RES_DIR = DATA_DIR
@@ -37,8 +20,6 @@ else:
 for p in (RES_DIR, DATA_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
-# 切换工作目录到 DATA_DIR，保证所有相对路径文件读写（settings.json、channels.db 等）
-# 落在 EXE 同级目录下，而非 CWD 所在的任何位置。
 os.chdir(DATA_DIR)
 
 from fastapi import FastAPI, Query
@@ -63,21 +44,18 @@ from app.services.namefix_service import NamefixService
 from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router, screenshots, gateway, aliases, stats as stats_router, namefix
 from app.realtime import publish_event
 
-# ==================== FastAPI 应用 ====================
 from app.version import APP_VERSION as _APP_VERSION
 app = FastAPI(title="IPTV Core API", version=_APP_VERSION)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-# ==================== 全局状态 ====================
 channel_service = ChannelService()
 tag_db = Config.load_json(Config.TAG_DB_FILE, {})
 fake_live_db = Config.load_json(Config.FAKE_LIVE_DB_FILE, {})
 rules = Config.load_json(Config.RULES_FILE, [])
 settings = Config.load_settings()
 
-# 日志系统
 server_logs = []
 _log_lock = threading.Lock()
 _LOG_FILE = os.path.join(DATA_DIR, "app.log")
@@ -85,7 +63,6 @@ _MAX_LOG_FILE_BYTES = 2 * 1024 * 1024
 
 
 def _write_log_to_file(msg):
-    """将单条日志追加写入文件；超过大小上限时轮转（保留 app.log.1）"""
     try:
         import time as _time
         line = f"[{_time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n"
@@ -109,7 +86,6 @@ def log(msg):
         if len(server_logs) > 5000:
             del server_logs[:len(server_logs) - 5000]
     _write_log_to_file(msg)
-    # 实时推送：供 SSE /api/logs/stream 消费（任意线程安全，失败不影响主流程）
     try:
         from app.realtime import publish_log
         publish_log(msg)
@@ -117,7 +93,6 @@ def log(msg):
         pass
 
 
-# 初始化各服务（绑定日志回调）
 def _save_cache():
     from app.config import FileManager
     cache_file = settings.get("cache_file_name", "channels_cache.json")
@@ -143,7 +118,6 @@ screenshot_service = ScreenshotService(log_callback=log, data_dir=DATA_DIR)
 namefix_service = NamefixService(log_callback=log, data_dir=DATA_DIR)
 stats_service = StatsService(log_callback=log, data_dir=DATA_DIR)
 
-# ==================== SQLite 数据库初始化（播放历史等持久化） ====================
 try:
     from app.services.play_history_service import init as init_play_history
     init_play_history()
@@ -151,7 +125,6 @@ try:
 except Exception as e:
     log(f"SQLite 数据库初始化失败: {e}")
 
-# ==================== 启动时恢复频道缓存 ====================
 cache_file = settings.get("cache_file_name", "channels_cache.json")
 
 
@@ -186,12 +159,9 @@ def _load_cached_channels():
 
 
 def _migrate_fake_live_tags():
-    """一次性迁移：把 channel_tags.json 与 channels_cache.json 中的'假直播'字符串
-    迁移到独立的 fake_live_tags.json（is_fake_live 布尔字段），避免与普通 tag 混淆。"""
     global tag_db, fake_live_db
     dirty_tag_db = False
     dirty_fake_db = False
-    # 1) 从 channel_tags.json 迁移
     for url, tag_val in list(tag_db.items()):
         if not isinstance(tag_val, str) or "假直播" not in tag_val:
             continue
@@ -204,7 +174,6 @@ def _migrate_fake_live_tags():
         else:
             tag_db.pop(url, None)
             dirty_tag_db = True
-    # 2) 从频道池迁移（同时补 is_fake_live 字段，并根据 fake_live_db 反写）
     with channel_service.lock:
         for ch in channel_service.pool:
             url = ch.get("url", "")
@@ -231,11 +200,6 @@ def _migrate_fake_live_tags():
 
 
 def _enrich_channel_tags():
-    """启动时把 tag_db / fake_live_db 按 URL 反写到频道行。
-
-    一源一行后标记直接挂在频道行上（ch['tag'] / ch['is_fake_live']），不再有
-    按源分表的 source_tags / source_is_fake_live。顺带清理历史聚合残留字段。
-    """
     global tag_db, fake_live_db
     with channel_service.lock:
         for ch in channel_service.pool:
@@ -248,11 +212,6 @@ def _enrich_channel_tags():
 
 
 def _migrate_multi_sources():
-    """一次性数据迁移：把历史缓存里的聚合多源频道展开为「一源一行」并落盘。
-
-    聚合源功能已彻底移除（聚合后各源无法单独检查/清除）。此处在缓存加载后
-    幂等执行：只对确实携带多源的条目动手，正常数据零改动。
-    """
     try:
         stats = channel_service.ungroup_all()
     except Exception as e:
@@ -277,7 +236,6 @@ _migrate_fake_live_tags()
 _migrate_multi_sources()
 _enrich_channel_tags()
 
-# ==================== 注册路由 ====================
 app.include_router(channels.router)
 app.include_router(scrape.router)
 app.include_router(check.router)
@@ -304,7 +262,6 @@ app.include_router(gateway.public)
 app.include_router(aliases.router)
 app.include_router(stats_router.router)
 
-# ==================== Logo 静态资源（用户放入 logos 目录的图片，供频道 logo 显示） ====================
 logos_dir = os.path.join(DATA_DIR, "logos")
 try:
     os.makedirs(logos_dir, exist_ok=True)
@@ -312,17 +269,14 @@ try:
 except Exception:
     pass
 
-# ==================== 画面截图静态资源（P0-2：ffmpeg 抓帧落盘 screenshots/） ====================
 try:
     app.mount("/screenshots", StaticFiles(directory=screenshot_service.dir), name="screenshots")
 except Exception:
     pass
 
 
-# ==================== 实时事件发布（SSE 心跳） ====================
 @app.on_event("startup")
 async def _start_realtime_publisher():
-    """后台周期发布 stats / check / scrape 快照，驱动 /api/events/stream。"""
     import asyncio as _asyncio
 
     async def _publish_loop():
@@ -334,8 +288,6 @@ async def _start_realtime_publisher():
                 try:
                     st = check_service.get_status()
                     publish_event("check", st)
-                    # P1-10：一轮检测刚结束就记一次当天健康快照（同一天只记第一次，
-                    # 避免一天内反复覆盖把"趋势"变成"最后时刻"）
                     running = bool(st.get("running"))
                     if was_checking and not running:
                         try:
@@ -356,10 +308,8 @@ async def _start_realtime_publisher():
     _asyncio.create_task(_publish_loop())
 
 
-# ==================== 订阅源定时更新（可选，默认关闭） ====================
 @app.on_event("startup")
 async def _start_subscription_scheduler():
-    """若配置了 subscription_auto_update_interval(秒) > 0，则开启定时增量更新。"""
     try:
         interval = int(settings.get("subscription_auto_update_interval", 0) or 0)
         if interval > 0:
@@ -370,7 +320,6 @@ async def _start_subscription_scheduler():
 
 @app.on_event("startup")
 async def _start_epg_refresh_scheduler():
-    """若配置了 epg_auto_refresh_interval(秒) > 0，则开启 EPG 定时刷新。"""
     try:
         interval = int(settings.get("epg_auto_refresh_interval", 0) or 0)
         if interval > 0:
@@ -380,9 +329,7 @@ async def _start_epg_refresh_scheduler():
 
 
 def resync_schedulers():
-    """配置保存后重新同步定时任务（停止旧任务，按最新 settings 重启）。"""
     try:
-        # 订阅源自动更新
         try:
             subscription_service.stop_scheduler()
         except Exception:
@@ -390,7 +337,6 @@ def resync_schedulers():
         sub_interval = int(settings.get("subscription_auto_update_interval", 0) or 0)
         if sub_interval > 0:
             subscription_service.start_scheduler(sub_interval)
-        # EPG 定时刷新
         try:
             epg_service.stop_refresh_scheduler()
         except Exception:
@@ -402,7 +348,6 @@ def resync_schedulers():
         log(f"定时任务重新同步失败: {e}")
 
 
-# ==================== 通用接口（不归属特定子路由） ====================
 @app.get("/api/stats")
 def stats():
     total, online, offline = channel_service.get_stats()
@@ -432,7 +377,6 @@ def clear_logs():
 
 @app.get("/api/logs/file")
 def get_log_file():
-    """读取落盘的完整日志文件内容"""
     try:
         if not os.path.exists(_LOG_FILE):
             return {"path": _LOG_FILE, "content": ""}
@@ -463,9 +407,6 @@ def find_players():
     }
 
 
-# ==================== 前端静态文件服务 ====================
-# 优先级：Electron 注入的前端目录 > Vite 构建产物(frontend-new/dist) > 旧版(frontend) > 打包资源
-# 打包版前端实际位于 resources/frontend-new/dist，需优先用 Electron 注入的 ITV_FRONTEND_DIR。
 _FRONTEND_DIST = None
 _env_frontend = os.environ.get("ITV_FRONTEND_DIR")
 for cand in (
@@ -485,12 +426,6 @@ if _FRONTEND_DIST:
     _index_mtime = os.path.getmtime(os.path.join(_FRONTEND_DIST, "index.html"))
 
     def _serve_index_html():
-        """返回带唯一查询参数的 index.html（供 / 和 /player.html 复用）。
-
-        关键：查询参数用 UUID 而非时间戳，保证每次请求 URL 绝对不同。
-        WebView2 有自己的磁盘缓存层，无视 Cache-Control。只有 URL 变了
-        才会强制重新请求。加 Vary: * 防止任何中间层（代理/CDN）做缓存。
-        """
         import uuid as _uuid
         import re as _re
         _v = _uuid.uuid4().hex[:12]
@@ -532,10 +467,6 @@ if _FRONTEND_DIST:
     def serve_favicon():
         return Response(status_code=204)
 
-    # Vite 构建的 assets 目录
-    # 关键：用 no-store 而非 no-cache——no-cache 允许浏览器把文件存进磁盘缓存再校验，
-    # WebView2 经常不校验直接返回缓存内容（同文件名不同内容的旧版），导致前端永远 404。
-    # no-store 强制每次请求都从服务端重新读取磁盘文件。
     assets_dir = os.path.join(_FRONTEND_DIST, "assets")
     if os.path.isdir(assets_dir):
         class NoStoreStaticFiles(StaticFiles):
@@ -549,12 +480,10 @@ if _FRONTEND_DIST:
                 return resp
         app.mount("/assets", NoStoreStaticFiles(directory=assets_dir), name="assets")
 
-    # 主题 CSS 文件
     themes_dir = os.path.join(_FRONTEND_DIST, "themes")
     if os.path.isdir(themes_dir):
         app.mount("/themes", StaticFiles(directory=themes_dir), name="themes")
 
-    # 旧版 vendor 目录兼容
     vendor_dir = os.path.join(_FRONTEND_DIST, "vendor")
     if os.path.isdir(vendor_dir):
         app.mount("/vendor", StaticFiles(directory=vendor_dir), name="vendor")
@@ -565,9 +494,6 @@ if _FRONTEND_DIST:
 def run_server(host="0.0.0.0", port=8000):
     import uvicorn
     import traceback
-    # PyInstaller --noconsole 双击启动时 sys.stdout/stderr 为 None，
-    # uvicorn 日志初始化会调用 .isatty() 直接崩溃（AttributeError），
-    # 这里先补成空设备，保证双击也能正常启动。
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w")
     if sys.stderr is None:

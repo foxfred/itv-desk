@@ -1,17 +1,16 @@
 <template>
-  <!-- 自绘顶栏：图标 + ITV Desk + 虚竖线 + 中文菜单 + 窗口按钮（最小化/最大化/关闭）
-       背景用 Element CSS 变量，自动跟随当前皮肤。整条可拖拽，交互元素 no-drag。 -->
+  
   <div class="title-bar">
-    <!-- 左：品牌区 -->
+    
     <div class="tb-brand">
       <el-icon :size="16" class="tb-logo"><VideoCamera /></el-icon>
       <span class="tb-title">ITV Desk</span>
     </div>
 
-    <!-- 虚竖线分隔（品牌 与 菜单 之间） -->
+    
     <span class="tb-divider" />
 
-    <!-- 中：汉化菜单 -->
+    
     <div class="tb-menu">
       <el-dropdown
         v-for="m in MENUS"
@@ -147,7 +146,6 @@ async function onMinimize() { await callNative('minimize') }
 async function onMaximize() { await toggleMax() }
 async function onClose() { await callNative('close_window') }
 
-// 窗口尺寸变化时同步最大化图标（frameless 下双击拖拽区也会最大化）
 function onResize() {
   callNative('is_maximized').then((v) => { isMax.value = !!v })
 }
@@ -165,7 +163,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   align-items: stretch;
   background: var(--el-bg-color);
   border-bottom: 1px solid var(--el-border-color-lighter);
-  -webkit-app-region: drag; /* 整条可拖拽窗口 */
+  -webkit-app-region: drag; 
   user-select: none;
   flex-shrink: 0;
 }
@@ -185,7 +183,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   white-space: nowrap;
 }
 
-/* 虚竖线：品牌与菜单之间的分隔 */
+
 .tb-divider {
   width: 0;
   border-left: 1px dashed var(--el-border-color);
@@ -236,7 +234,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 </style>
 
 <style>
-/* 菜单弹层 teleport 到 body，落在 drag 区上方会被 OS 拖拽吞点击 → 强制 no-drag */
+
 .tb-menu-popper { -webkit-app-region: no-drag; }
 .tb-menu-popper .tb-menu-label { min-width: 130px; display: inline-block; }
 .tb-menu-popper .tb-menu-accel { color: var(--el-text-color-secondary); font-size: 12px; margin-left: 24px; }

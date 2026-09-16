@@ -1,4 +1,3 @@
-"""规则管理路由"""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional

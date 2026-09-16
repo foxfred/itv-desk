@@ -1,4 +1,3 @@
-"""SQLAlchemy ORM 模型 PlaybackHistory - 播放历史（SQLite 持久化）"""
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from app.models.channel import Base
 from datetime import datetime

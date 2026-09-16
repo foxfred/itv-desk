@@ -1,4 +1,3 @@
-"""网段扫描路由 - /api/scan"""
 from typing import List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends
@@ -56,14 +55,12 @@ class ImportReq(BaseModel):
 
 @router.post("/scan/derive")
 def derive_from_urls(body: DeriveReq, scan_service=Depends(get_scan_service)):
-    """从频道 URL 列表反推可扫描的 IP 段模板"""
     templates = scan_service.derive_templates(body.urls)
     return {"templates": templates}
 
 
 @router.post("/scan")
 def scan_range(body: ScanReq, scan_service=Depends(get_scan_service)):
-    """按模板扫描 IP 段，返回每个探测点的结果"""
     timeout = body.timeout or int(scan_service._settings.get("scan_timeout", 5))
     max_workers = body.max_workers or int(scan_service._settings.get("scan_max_workers", 40))
     proxy = body.proxy or scan_service._settings.get("proxy", "")
@@ -82,7 +79,6 @@ def scan_range(body: ScanReq, scan_service=Depends(get_scan_service)):
 def import_scan_results(body: ImportReq, channel_service=Depends(get_channel_service),
                         scan_service=Depends(get_scan_service),
                         log=Depends(get_log), settings=Depends(get_settings)):
-    """将扫描结果导入频道池"""
     added, dup = scan_service.import_results(channel_service, body.results)
     if added > 0:
         _save_cache(channel_service, settings)

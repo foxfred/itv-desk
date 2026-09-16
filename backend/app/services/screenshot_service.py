@@ -1,14 +1,3 @@
-"""频道画面截图服务（P0-2）
-
-用途：用 ffmpeg 抓取频道首帧，落盘 DATA_DIR/screenshots/，前端「画面」列可预览，
-一眼识别"CCTV5 怎么是购物台"这类挂羊头卖狗肉的源。
-
-设计要点：
-- 截图文件名 = URL 的 md5 前 16 位；索引 screenshots_index.json 记录 {源URL: 文件名}；
-- 先试「第 1 秒」抓帧（避开黑场首帧），失败再退回「直接抓首帧」；
-- 单 URL 并发去重（同一源同时只抓一次），ffmpeg 找不到时给出可操作的错误提示；
-- ffmpeg 路径沿用项目约定：环境变量 IPTV_FFMPEG > PATH 中的 ffmpeg。
-"""
 import os
 import json
 import time
@@ -41,7 +30,6 @@ class ScreenshotService:
         self._state = {"running": False, "done": 0, "total": 0, "error": None}
         self.index = self._load_index()
 
-    # -------------------- 索引 --------------------
     def _load_index(self):
         try:
             with open(self.index_file, "r", encoding="utf-8") as f:
@@ -62,7 +50,6 @@ class ScreenshotService:
             pass
 
     def list_index(self):
-        """返回 {源URL: 静态访问路径}；文件已丢失的条目自动剔除"""
         with self._lock:
             out = {}
             for url, fname in list(self.index.items()):
@@ -76,12 +63,10 @@ class ScreenshotService:
         with self._lock:
             return dict(self._state)
 
-    # -------------------- 抓帧 --------------------
     def path_for(self, url):
         return os.path.join(self.dir, _key(url) + ".jpg")
 
     def capture(self, url, timeout=None, width=320):
-        """抓取单帧。返回 {"ok": bool, "path": 静态地址} 或 {"ok": False, "error": 说明}"""
         url = (url or "").strip()
         if not url:
             return {"ok": False, "error": "无地址"}
@@ -97,7 +82,6 @@ class ScreenshotService:
             tmp = os.path.join(self.dir, key + ".tmp.jpg")
             timeout = timeout or DEFAULT_TIMEOUT
             last_err = ""
-            # 先试第 1 秒（避开黑场），失败退回首帧
             for prefix in (["-ss", "1"], []):
                 for f in (tmp,):
                     try:
@@ -136,7 +120,6 @@ class ScreenshotService:
                 self._running.discard(key)
 
     def capture_batch(self, urls, timeout=None):
-        """后台批量抓帧（顺序执行，避免并发打爆 ffmpeg/网络）"""
         urls = [u for u in (urls or []) if u]
         with self._lock:
             if self._state.get("running"):

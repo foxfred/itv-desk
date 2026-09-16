@@ -1,4 +1,3 @@
-"""画面截图路由（P0-2）"""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -27,7 +26,6 @@ def get_channel_service():
 
 
 def _urls_of(channel_service, ids):
-    """按频道 id 收集地址（一源一行：每个频道只有一条 url）"""
     urls = []
     pool = {ch.get("id"): ch for ch in getattr(channel_service, "pool", [])}
     for cid in ids or []:
@@ -42,7 +40,6 @@ def _urls_of(channel_service, ids):
 
 @router.get("")
 def shot_list(shot=Depends(get_shot_service)):
-    """截图索引（{源URL: 静态路径}）+ 批量任务状态"""
     return {"index": shot.list_index(), "status": shot.get_status()}
 
 
@@ -54,7 +51,6 @@ def shot_status(shot=Depends(get_shot_service)):
 @router.post("/capture")
 def shot_capture(body: CaptureReq, shot=Depends(get_shot_service),
                  channel_service=Depends(get_channel_service)):
-    """单个抓帧（同步返回结果，一般 2-8 秒）"""
     url = (body.url or "").strip()
     if not url and body.channel_id is not None:
         urls = _urls_of(channel_service, [body.channel_id])
@@ -67,7 +63,6 @@ def shot_capture(body: CaptureReq, shot=Depends(get_shot_service),
 @router.post("/batch")
 def shot_batch(body: BatchReq, shot=Depends(get_shot_service),
                channel_service=Depends(get_channel_service)):
-    """批量抓帧（后台执行，前端轮询 /status）"""
     urls = list(body.urls or [])
     for u in _urls_of(channel_service, body.ids):
         if u not in urls:

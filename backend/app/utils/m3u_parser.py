@@ -1,4 +1,3 @@
-"""M3U 解析器 - 从现有 models.py 和 utils.py 迁移"""
 import io
 import re
 from urllib.parse import urlparse
@@ -18,7 +17,6 @@ class Parser:
             n = f"{m.group(1)}-{m.group(2)}"
         return n if n else ns.strip().upper()
 
-    # 外国国家/地区关键词（含中文与外文写法），命中即判为外国频道
     FOREIGN_KEYWORDS = [
         "日本", "韩国", "朝鲜", "美国", "英国", "法国", "德国", "意大利", "西班牙",
         "俄罗斯", "印度", "泰国", "越南", "新加坡", "马来西亚", "印尼", "土耳其",
@@ -33,25 +31,12 @@ class Parser:
 
     @staticmethod
     def _has_cjk(s):
-        """是否包含中日韩统一表意文字（粗略判定「中文频道」）"""
         return bool(re.search(r'[\u3400-\u9fff]', s))
 
     @staticmethod
     def get_channel_group(n, custom_rules=None, foreign_name="外国频道"):
-        """统一频道分组算法（命中即止，自上而下）：
-
-        ① 自定义分组规则（最高优先级）
-        ② 港澳台
-        ③ 央视频道（CCTV）
-        ④ 外国频道统一（无中文 或 命中外国国名关键词）
-        ⑤ 地方卫视（卫视 + 省市地方，省市地方归入地方卫视）
-        ⑥ 电影剧场 ⑦ 体育竞技 ⑧ 少儿动漫 ⑨ 新闻资讯
-        ⑩ 财经商业 ⑪ 音乐戏曲 ⑫ 纪录片 ⑬ 购物 ⑭ 轮播专区
-        ⑮ 其他（兜底）
-        """
         name = str(n)
         nu = name.upper()
-        # ① 自定义分组规则（关键词命中即归入指定组）
         if custom_rules:
             for rule in custom_rules:
                 if not rule:
@@ -65,7 +50,6 @@ class Parser:
                     continue
                 if str(kw).upper() in nu:
                     return grp
-        # ② 港澳台（HK/TW/MO 用边界匹配，避免误伤 NHK / BTW 等）
         if any(k in nu for k in ["香港", "台湾", "澳门", "翡翠", "明珠", "凤凰",
                                   "TVB", "中天", "纬来", "东森", "年代", "三立", "华视", "民视",
                                   "台视", "公视", "中视", "无线", "美亚", "莲花", "澳视", "PHOENIX"]):
@@ -73,13 +57,10 @@ class Parser:
         import re as _re
         if _re.search(r'(^|[^A-Z])(HK|TW|MO)($|[^A-Z])', nu):
             return "港澳台"
-        # ③ 央视频道
         if "CCTV" in nu:
             return "央视频道"
-        # ④ 外国频道统一（纯外文 或 命中外国国名关键词）
         if (not Parser._has_cjk(name)) or any(k.upper() in nu for k in Parser.FOREIGN_KEYWORDS):
             return foreign_name
-        # ⑤ 地方卫视（卫视 + 省市地方）
         if "卫视" in name:
             return "地方卫视"
         if any(k in name for k in ["北京", "上海", "广东", "江苏", "浙江", "湖南", "四川", "深圳",
@@ -88,34 +69,24 @@ class Parser:
                                     "贵州", "海南", "甘肃", "青海", "宁夏", "新疆", "内蒙古", "西藏",
                                     "新闻综合", "都市", "生活", "公共", "经济生活"]):
             return "地方卫视"
-        # ⑥ 电影剧场
         if any(k in nu for k in ["电影", "影院", "剧场", "HBO", "影视", "经典影院", "CH", "电影台", "动作", "影迷", "STAR"]):
             return "电影剧场"
-        # ⑦ 体育竞技
         if any(k in nu for k in ["体育", "足球", "五星", "NBA", "赛事", "劲爆", "高尔夫", "CCTV5", "羽毛球", "台球", "五星体育"]):
             return "体育竞技"
-        # ⑧ 少儿动漫
         if any(k in nu for k in ["少儿", "卡通", "动漫", "儿童", "娃娃", "金鹰卡通", "哈哈炫动", "卡酷"]):
             return "少儿动漫"
-        # ⑨ 新闻资讯
         if any(k in nu for k in ["新闻", "资讯", "环球"]):
             return "新闻资讯"
-        # ⑩ 财经商业
         if any(k in nu for k in ["财经", "经济", "商业", "证券", "理财", "交易"]):
             return "财经商业"
-        # ⑪ 音乐戏曲
         if any(k in nu for k in ["音乐", "戏曲", "戏剧", "歌曲", "MTV", "音乐台"]):
             return "音乐戏曲"
-        # ⑫ 纪录片
         if any(k in nu for k in ["纪录", "探索", "DISCOVERY", "纪实"]):
             return "纪录片"
-        # ⑬ 购物
         if any(k in nu for k in ["购物", "导购", "电视购物", "SHOP"]):
             return "购物"
-        # ⑭ 轮播专区
         if any(k in nu for k in ["NEWTV", "IHOT", "SITV", "轮播", "百视通", "咪咕", "欢腾", "求索"]):
             return "轮播专区"
-        # ⑮ 兜底
         return "其他"
 
     @staticmethod
@@ -190,7 +161,6 @@ class Parser:
 
 
 def extract_channels(raw_text):
-    """从文本中提取所有频道（M3U / TXT / 混合格式）"""
     lines = raw_text.splitlines()
     channels = []
     i = 0
@@ -306,18 +276,15 @@ def _write_m3u_channel(f, ch, with_tvg_name=False):
     grp = ch.get("group", Config.get_setting("unknown_group_name", "未分组"))
     logo = ch.get("logo")
     tag = ch.get("tag") or ""
-    # is_fake_live 是独立字段，导出时合并到 tvg-tag 以兼容外部播放器，但内部已与普通 tag 分离
     if ch.get("is_fake_live") and "假直播" not in tag:
         tag = (tag + ",假直播").strip(",")
     note = ch.get("url_note")
-    # 一源一行：每条频道只导出自身的 url（聚合源已移除，不再有「源2/源3」展开）
     u = (ch.get("url") or "").strip()
     if not u:
         return
     name = ch.get("name", "")
     parts = [f'#EXTINF:-1 group-title="{grp}"']
     if with_tvg_name and name:
-        # 局域网网关用：TiviMate 等按 tvg-name 匹配 EPG
         parts.append(f'tvg-name="{name}"')
     if logo:
         parts.append(f'tvg-logo="{logo}"')
@@ -358,7 +325,6 @@ def _write_xml_channel(f, ch):
 
 
 def _write_playlist(f, channels, format="m3u", url_tvg="", with_tvg_name=False):
-    """把频道列表写入任意文本流（文件 / StringIO 共用，保证导出与网关输出一致）"""
     if format in ["m3u", "m3u8"]:
         header = "#EXTM3U"
         if url_tvg:
@@ -384,18 +350,12 @@ def _write_playlist(f, channels, format="m3u", url_tvg="", with_tvg_name=False):
 
 
 def render_playlist(channels, format="m3u", url_tvg="", with_tvg_name=False):
-    """渲染播放列表为字符串（供局域网订阅网关在线输出，不落盘）
-
-    url_tvg: 非空时写入 #EXTM3U 头部的 url-tvg，外部播放器据此自动拉取 EPG
-    with_tvg_name: 写入 tvg-name，TiviMate 等按名称匹配节目单时需要
-    """
     buf = io.StringIO()
     _write_playlist(buf, channels, format, url_tvg=url_tvg, with_tvg_name=with_tvg_name)
     return buf.getvalue()
 
 
 def export_playlist(channels, filepath, format="m3u"):
-    """导出频道列表为文件"""
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             _write_playlist(f, channels, format)

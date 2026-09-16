@@ -28,7 +28,6 @@ export const importBackup = (file, mode = 'overwrite') => {
   return request.post('/api/backup/import', form)
 }
 
-// #59 本地加密备份 / 恢复（AES 口令保护，零服务器）
 export const exportEncryptedBackup = (passphrase) =>
   request.post('/api/backup/export-encrypted', { passphrase })
 export const importEncryptedBackup = (file, passphrase) => {

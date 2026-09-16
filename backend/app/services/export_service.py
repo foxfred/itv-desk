@@ -1,18 +1,15 @@
-"""导出服务"""
 import os
 from app.utils.m3u_parser import export_playlist
 from app.config import Config
 
 
 class ExportService:
-    """频道导出服务"""
 
     def __init__(self, settings=None, data_dir=None):
         self._settings = settings or {}
         self._data_dir = data_dir or os.getcwd()
 
     def export_channels(self, channels, fmt="m3u", ids=None):
-        """导出频道列表到文件"""
         if ids:
             idset = set(ids)
             channels = [ch for ch in channels if ch["id"] in idset]

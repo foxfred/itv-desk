@@ -1,13 +1,9 @@
-"""辅助工具函数 - find_logo + LOGO_DB（外置为 data/logos.json）+ FileManager"""
 import re
 import os
 import json
 from app.config import Config, FileManager
 
 
-# ==================== Logo 数据库 ====================
-# 硬编码维护成本高且易失效，已外置为 backend/app/data/logos.json；
-# 文件优先，缺失/损坏时回退到下方内嵌副本，保证向后兼容与可用性。
 _LOGO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "logos.json")
 
 _EMBEDDED_LOGO_DB = {
@@ -71,7 +67,6 @@ def _load_logo_db():
 
 
 def get_logo_db():
-    """返回当前生效的 Logo 数据库（文件优先，回退内嵌）。带缓存，可调用 reload_logo_db 刷新。"""
     global _LOGO_DB_CACHE
     if _LOGO_DB_CACHE is None:
         _LOGO_DB_CACHE = _load_logo_db()
@@ -79,13 +74,11 @@ def get_logo_db():
 
 
 def reload_logo_db():
-    """重新从文件加载 Logo 数据库（例如用户修改 logos.json 后调用）。"""
     global _LOGO_DB_CACHE
     _LOGO_DB_CACHE = _load_logo_db()
     return _LOGO_DB_CACHE
 
 
-# 兼容旧引用：直接访问 LOGO_DB 拿到当前生效的数据库
 LOGO_DB = get_logo_db()
 
 
@@ -105,15 +98,10 @@ def find_logo(channel_name):
     return None
 
 
-# FileManager 已统一收敛至 app.config.FileManager，本文件不再重复定义。
 
 
-# ==================== URL 黑/白名单（P0-5） ====================
-# 名单条目支持两种写法：纯子串（不区分大小写的包含匹配）或 /正则/ 形式（斜杠包裹）。
-# 命中规则：黑白名单均按「子串或正则」逐条测试。
 
 def url_rule_match(url, patterns):
-    """判断 URL 是否命中名单条目列表（子串或 /正则/）"""
     if not url or not patterns:
         return False
     for p in patterns:
@@ -134,7 +122,6 @@ def url_rule_match(url, patterns):
 
 
 def is_url_blacklisted(url, settings=None):
-    """URL 是否进黑名单（永久排除：导入/检测/导出均过滤）"""
     try:
         if settings is None:
             from app.main import settings as _s
@@ -145,7 +132,6 @@ def is_url_blacklisted(url, settings=None):
 
 
 def is_url_whitelisted(url, settings=None):
-    """URL 是否进白名单（豁免检测，直接判在线保留）"""
     try:
         if settings is None:
             from app.main import settings as _s

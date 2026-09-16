@@ -57,15 +57,10 @@ const router = createRouter({
   routes,
 })
 
-// Electron 主窗路由守卫：/player 只在独立播放窗（?standalone=1）中访问；
-// 主窗若误跳到 /player（drawer 浮层/手动导航），自动跳回 / 并尝试打开独立播放窗。
-// 原因：主窗系统标题栏会与 PlayerView 浮层叠加（出现"白边框"错觉），
-// 且独立播放窗才是 PotPlayer 极简无边框的正确载体。
 router.beforeEach((to, from, next) => {
   const isStandalone = to.query.standalone === '1'
   if (to.meta?.standaloneOnly && !isStandalone) {
-    // 主窗误入 /player：跳回首页，并唤起独立播放窗
-    next({ path: '/', replace: true })
+        next({ path: '/', replace: true })
     try { callNative('open_player') } catch { /* ignore */ }
     return
   }

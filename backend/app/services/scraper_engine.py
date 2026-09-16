@@ -1,14 +1,3 @@
-"""抓取引擎 - 爬取网页并提取流媒体链接
-
-增强（对应评估报告 §4.2）：
-- 链接下载/解析改为线程池并发（并发数取设置 scraper_threads，默认 8）+ 全局限速；
-- 内容嗅探：依据内容特征区分 M3U 播放列表 / HTML 页面 / 其它，M3U 解析内嵌变体（不同清晰度），
-  HTML 二次提取链接；
-- 目标类型自动识别：单页直链（url 不含 {page} 且 start==end==1）直接当播放列表解析，
-  避免把 M3U 当列表页漏抓；
-- 失败策略：指数退避 + 全局重试预算；
-- 结果统计：实时上报 已处理/总数、成功/失败/直链 计数。
-"""
 import re
 import time
 import threading
@@ -20,7 +9,6 @@ from app.config import Config
 
 
 class ScraperEngine:
-    """网页抓取引擎：爬取页面，提取 m3u/ts 等流媒体链接，下载并解析频道内容"""
 
     def __init__(self, log_cb, inject_cb, stop_event, status_cb):
         self.log = log_cb
@@ -31,9 +19,7 @@ class ScraperEngine:
         self._last_request_ts = 0.0
         self._min_interval = 0.0
 
-    # -------------------- 工具方法（保持原行为） --------------------
     def _resolve_url(self, link, base_url):
-        """将相对路径转为绝对URL"""
         if link.startswith("http://") or link.startswith("https://"):
             return link
         if link.startswith("/"):
@@ -48,13 +34,11 @@ class ScraperEngine:
         return f"{base_url}/{link}"
 
     def _apply_mirror(self, url, mirror):
-        """对GitHub链接应用加速源"""
         if not mirror or mirror == "不使用加速":
             return format_github_raw_url(url, "")
         return format_github_raw_url(url, mirror)
 
     def _throttle(self, min_interval):
-        """全局限速：保证两次请求入口至少间隔 min_interval 秒（0 表示不限速）"""
         if min_interval <= 0:
             return
         with self._rate_lock:
@@ -66,17 +50,15 @@ class ScraperEngine:
 
     @staticmethod
     def _link_channel(url):
-        """失败/非 M3U 链接兜底：构造一个最小频道记录（名称取域名，后续可被清洗）"""
         netloc = urlparse(url).netloc or "频道"
         return {"name": netloc, "url": url, "group": "", "tag": "", "logo": ""}
 
     def _fetch(self, url, proxy, mirror, timeout, retries, budget):
-        """带 mirror 回退 + 指数退避 + 全局重试预算的下载。返回 (content, err)。"""
         sources = []
         dl = self._apply_mirror(url, mirror)
         if dl != url:
             sources.append(dl)
-        sources.append(url)  # 直连回退
+        sources.append(url)
         last_err = "下载失败"
         max_attempts = 1 + max(0, retries)
         for attempt in range(max_attempts):
@@ -90,7 +72,6 @@ class ScraperEngine:
             if not err and content:
                 return content, None
             last_err = err or "下载失败"
-            # 是否还有重试额度（全局预算 + 链接级重试）
             if attempt < max_attempts - 1:
                 if budget["left"] > 0:
                     budget["left"] -= 1
@@ -101,11 +82,6 @@ class ScraperEngine:
         return "", last_err
 
     def _extract_variants(self, m3u_content, base_url):
-        """从主 m3u8 提取 #EXT-X-STREAM-INF 嵌套变体链接（不同清晰度）。返回 [(url, resolution)]。
-
-        采用逐行解析（而非单一跨行正则），稳定捕获 RESOLUTION 与变体 URI，避免
-        `#EXT-X-STREAM-INF` 行被贪婪/懒惰量词吞掉导致分辨率丢失。
-        """
         variants = []
         lines = m3u_content.splitlines()
         for i, line in enumerate(lines):
@@ -120,11 +96,6 @@ class ScraperEngine:
         return variants
 
     def _resolve_variants(self, content, base_url, proxy, mirror, timeout, budget):
-        """解析主索引 m3u8 的变体（不同清晰度），返回真实频道列表（带分辨率标签）。
-
-        主索引 m3u8（含 #EXT-X-STREAM-INF）本身不直接包含频道，必须下载其变体再解析，
-        否则 extract_channels 会把 STREAM-INF 行误当成频道名、变体 URI 当成 URL。
-        """
         channels = []
         for vurl, res in self._extract_variants(content, base_url)[:10]:
             if self.stop and self.stop.is_set():
@@ -140,7 +111,6 @@ class ScraperEngine:
 
     @staticmethod
     def _sniff(content):
-        """内容嗅探：依据特征判断类型。返回 'm3u' / 'html' / 'other'。"""
         if not content:
             return "other"
         head = content[:4000]
@@ -151,7 +121,6 @@ class ScraperEngine:
         return "other"
 
     def _process_link(self, link, proxy, mirror, timeout, retries, budget, pattern, stats):
-        """处理单个链接：下载 → 嗅探 → 解析。返回 (channels, kind)。"""
         if self.stop and self.stop.is_set():
             return [], "stopped"
         content, err = self._fetch(link, proxy, mirror, timeout, retries, budget)
@@ -159,8 +128,6 @@ class ScraperEngine:
             stats["failed"] += 1
             return [self._link_channel(link)], "failed"
         kind = self._sniff(content)
-        # GitHub blob 链接：必须强制转 raw 抓取，绝不能让 blob 预览页 HTML 被当作频道源
-        # （否则 extract_channels 会把 GitHub 页面链接当频道 → 全乱码）。
         is_github_blob = "github.com" in link and "/blob/" in link.lower()
         if (kind == "html" or kind == "other") and is_github_blob:
             raw_url = format_github_raw_url(link, mirror or "")
@@ -171,7 +138,6 @@ class ScraperEngine:
                     content = content2
                     kind = "m3u"
                 else:
-                    # raw 也失败/非 m3u：不生成占位频道，直接跳过
                     stats["failed"] += 1
                     return [], "failed"
         if kind == "m3u":
@@ -202,30 +168,26 @@ class ScraperEngine:
                 sub.extend(extract_channels(c2) or [])
             stats["success"] += 1
             return sub, "html"
-        # other：作为直链保留
         stats["as_link"] += 1
         return [self._link_channel(link)], "other"
 
     def run(self, url, start, end, suffix_list, proxy, mirror):
-        """执行抓取任务"""
         suffixes = [s.strip() for s in suffix_list.split(",") if s.strip()]
         if not suffixes:
             self.log("后缀列表为空")
             return
 
-        # 读取抓取设置
         workers = max(1, int(Config.get_setting("scraper_threads", 8)))
         timeout = max(1, int(Config.get_setting("scraper_timeout", 15)))
         retries = max(0, int(Config.get_setting("scraper_retries", 2)))
         self._min_interval = float(Config.get_setting("scraper_min_interval", 0.0))
-        budget = {"left": max(10, workers * 3)}  # 全局额外重试预算
+        budget = {"left": max(10, workers * 3)}
 
         pattern = build_link_pattern(suffixes)
         is_single = ("{page}" not in url) and start == 1 and end == 1
 
         self.log(f"抓取引擎：并发数={workers}，超时={timeout}s，每链接重试={retries}，限速={self._min_interval}s")
 
-        # -------------------- 类型识别：单页直链（直接播放列表） --------------------
         if is_single:
             self.log(f"检测到单页直链模式，直接解析目标: {url}")
             self.status("正在解析直链目标", 5)
@@ -265,7 +227,6 @@ class ScraperEngine:
             self._finish([self._link_channel(url)])
             return
 
-        # -------------------- 多页列表页：逐页下载并收集链接（页面数通常较少，顺序即可） --------------------
         all_links = []
         total_pages = end - start + 1
         for page in range(start, end + 1):
@@ -300,7 +261,6 @@ class ScraperEngine:
             if not content:
                 self.log(f"第 {page} 页内容为空")
                 continue
-            # 单页内容若是 M3U（罕见但仍可能），直接解析避免漏抓
             if self._sniff(content) == "m3u":
                 if "#EXT-X-STREAM-INF" in content:
                     chs = self._resolve_variants(content, raw_page_url, proxy, mirror, timeout, budget)
@@ -328,7 +288,6 @@ class ScraperEngine:
         self._concurrent_resolve(all_links, proxy, mirror, timeout, retries, budget, pattern)
 
     def _concurrent_resolve(self, all_links, proxy, mirror, timeout, retries, budget, pattern):
-        """第二阶段：线程池并发下载并解析每个链接。"""
         all_channels = []
         stats = {"processed": 0, "total": len(all_links), "success": 0, "failed": 0, "as_link": 0}
         lock = threading.Lock()

@@ -1,7 +1,3 @@
-// IPTV Core PRO MAX — IPC 处理器
-// 单通道 'native-call'：(method, args[]) → 对应窗口/系统操作。
-// 窗口类操作（移动/缩放/置顶/全屏…）作用于「发起调用的窗口」（event.sender），
-// 与原 pywebview 双窗口 js_api 语义一致。
 
 const { ipcMain, dialog, BrowserWindow, app } = require('electron');
 const { spawn } = require('child_process');
@@ -11,19 +7,6 @@ const os = require('os');
 const crypto = require('crypto');
 
 // ---------------------------------------------------------------------------
-// 文件夹版自更新脚本模板（纯 ASCII 内容，路径走 base64 传参 → 彻底避开中文/空格
-// 路径的编码坑；脚本本体不含任何中文，符合 Windows 脚本编码约束）。
-//
-// 职责：先写 ready 握手标记（让主程序确认"脚本真的起来了"）→ 等旧进程全部退出 →
-// 解压新包覆盖程序目录 → 删安装包 → 重新打开新版本 → 把日志留一份到程序目录。
-//
-// ⚠️ v3.1.4 血泪教训（v3.1.2/3.1.3 更新"静默失败"的真因）：
-// **光有正确的脚本不够，还得能把脚本启动起来。** Node/Electron 里 spawn 时若直接
-// detached 启动 powershell.exe，会**静默失败** —— child.pid 有值、不触发 'error'
-// 事件、但目标脚本从未被执行（实测三组对比，只有经 `cmd.exe /c start` 二次启动才成功）。
-// 因此：① 统一用 launch.cmd 作为启动器；② 脚本第一件事写 ready 文件，主程序**等到
-// 握手成功才退出**，否则报错并留在原地（绝不再出现"退了但什么都没发生"）；
-// ③ 准备 Python 兜底实现（标准库 zipfile，不受脚本执行策略限制）。
 // ---------------------------------------------------------------------------
 const APPLY_PS1 = [
   "$ErrorActionPreference = 'Continue'",
@@ -86,8 +69,6 @@ const APPLY_PS1 = [
   "",
 ].join("\r\n");
 
-// Python 兜底实现：PowerShell 被安全软件/执行策略拦住时的备选路径。
-// 用标准库 zipfile 解压，没有任何脚本执行策略限制；python 由后端同款解释器提供。
 const APPLY_PY = [
   "import base64, ctypes, json, os, shutil, subprocess, sys, time, zipfile",
   "base = os.path.dirname(os.path.abspath(__file__))",
@@ -188,8 +169,6 @@ const APPLY_PY = [
   "",
 ].join("\n");
 
-// 启动器：不带任何路径（路径由命令行参数传入），纯 ASCII，因此编码无关。
-// `start` 让目标进程脱离 cmd 独立运行，cmd 立即退出。
 const LAUNCH_CMD = [
   "@echo off",
   "start \"\" /min %*",
@@ -204,8 +183,7 @@ function powershellExe() {
 }
 
 function pythonExe() {
-  // 后端就是用这个解释器起来的，必然可用；没设变量则退回 PATH 里的 python
-  return process.env.IPTVCORE_PYTHON || 'python';
+    return process.env.IPTVCORE_PYTHON || 'python';
 }
 
 function sha256File(p) {
@@ -222,8 +200,7 @@ function registerIpcHandlers(ctx) {
 
   const senderWindow = (event) => BrowserWindow.fromWebContents(event.sender);
 
-  // pywebview 风格过滤器 'Executable Files (*.exe)|All Files (*.*)' → electron filters
-  function parseFilters(filter) {
+    function parseFilters(filter) {
     if (!filter || typeof filter !== 'string') return undefined;
     return filter.split('|').map((seg) => {
       const m = seg.match(/^(.*?)\s*\((.*)\)$/);
@@ -234,19 +211,16 @@ function registerIpcHandlers(ctx) {
   }
 
   const handlers = {
-    // ---------- 频道播放（主窗/任意视图发起） ----------
-    play_channel(args) {
+        play_channel(args) {
       const payload = args[0] || {};
       setLastChannel(payload);
       const pw = getPlayerWindow();
       if (pw && !pw.isDestroyed()) {
-        // 播放窗已就绪：直接推送换台（与旧 run.py evaluate_js 行为一致，即时生效）
-        pw.focus();
+                pw.focus();
         pw.webContents.executeJavaScript(
           `window.__iptvPlay && window.__iptvPlay(${JSON.stringify(payload)})`
         ).catch(() => {
-          // 页面尚未挂载完成 → 排队，播放窗轮询 pop_pending 兜底
-          setPending(payload);
+                    setPending(payload);
         });
       } else {
         setPending(payload);
@@ -262,8 +236,7 @@ function registerIpcHandlers(ctx) {
         pw.show();
         pw.focus();
       } else {
-        // 恢复上次频道（若有）
-        const last = getLastChannel();
+                const last = getLastChannel();
         if (last && last.url) setPending(last);
         createPlayerWindow();
       }
@@ -276,15 +249,13 @@ function registerIpcHandlers(ctx) {
       return 'OK';
     },
 
-    // ---------- 播放窗轮询 ----------
-    pop_pending() {
+        pop_pending() {
       const p = getPending();
       setPending(null);
-      return p; // null 或 {url, name, group, id, ...}
+      return p; 
     },
 
-    // ---------- 播放窗状态上报主窗 ----------
-    notify_main(args) {
+        notify_main(args) {
       const mw = getMainWindow();
       const payloadJson = String(args[0] || '{}');
       if (mw && !mw.isDestroyed()) {
@@ -295,8 +266,7 @@ function registerIpcHandlers(ctx) {
       return 'OK';
     },
 
-    // ---------- 文件对话框 ----------
-    async save_text(args, event) {
+        async save_text(args, event) {
       const [name, content] = args;
       const win = senderWindow(event);
       const opts = { defaultPath: name || 'export.txt' };
@@ -335,8 +305,7 @@ function registerIpcHandlers(ctx) {
       return r.filePaths[0];
     },
 
-    // ---------- 外部播放器 ----------
-    play_external(args) {
+        play_external(args) {
       const [url, playerPath] = args;
       if (!playerPath) return false;
       try {
@@ -348,8 +317,7 @@ function registerIpcHandlers(ctx) {
       }
     },
 
-    // ---------- 窗口操作（作用于发起调用的窗口 = 播放窗） ----------
-    set_topmost(args, event) {
+        set_topmost(args, event) {
       const win = senderWindow(event);
       if (win) win.setAlwaysOnTop(!!args[0]);
       return 'OK';
@@ -363,7 +331,7 @@ function registerIpcHandlers(ctx) {
     toggle_fullscreen(_args, event) {
       const win = senderWindow(event);
       if (win) win.setFullScreen(!win.isFullScreen());
-      return true; // 前端据返回值判断已用原生全屏
+      return true; 
     },
 
     minimize(_args, event) {
@@ -372,9 +340,7 @@ function registerIpcHandlers(ctx) {
       return 'OK';
     },
 
-    // ---------- 自绘顶栏窗口控制（主窗 TitleBar.vue 调用） ----------
-    // 最大化/还原切换：返回切换后是否处于最大化，供前端更新图标
-    maximize_window(_args, event) {
+            maximize_window(_args, event) {
       const win = senderWindow(event);
       if (!win) return false;
       if (win.isMaximized()) { win.unmaximize(); return false; }
@@ -386,8 +352,7 @@ function registerIpcHandlers(ctx) {
       return !!(win && win.isMaximized());
     },
 
-    // 关闭窗口（主窗关闭 → window-all-closed → app.quit，杀后端）
-    close_window(_args, event) {
+        close_window(_args, event) {
       const win = senderWindow(event);
       if (win) win.close();
       return 'OK';
@@ -408,8 +373,7 @@ function registerIpcHandlers(ctx) {
       const [w, h, corner] = args;
       const b = win.getBounds();
       const nb = { x: b.x, y: b.y, width: Math.max(320, w | 0), height: Math.max(200, h | 0) };
-      // corner: 0=tl 1=tr 2=br 3=bl（前端约定）——左角拖拽需反向补偿窗口原点
-      if (corner === 0 || corner === 3) nb.x = b.x + (b.width - nb.width);
+            if (corner === 0 || corner === 3) nb.x = b.x + (b.width - nb.width);
       if (corner === 0 || corner === 1) nb.y = b.y + (b.height - nb.height);
       win.setBounds(nb);
       return 'OK';
@@ -433,24 +397,18 @@ function registerIpcHandlers(ctx) {
       return 'OK';
     },
 
-    // ---------- 应用自更新：启动下载好的安装包并退出应用 ----------
-    // args: [exePath] —— update_staging 里下载好的 NSIS Setup / 便携 exe。
-    // 流程：detached 启动安装器（可见向导）→ 500ms 后 app.quit()
-    //（window-all-closed → will-quit → 杀后端子进程，整个应用干净退出）。
-    install_update(args) {
+                    install_update(args) {
       const [exePath] = args;
       if (!exePath || !fs.existsSync(exePath)) return 'ERROR: 更新包不存在: ' + exePath;
       try {
-        // ⚠️ 同样必须经 cmd.exe 的 start 启动：直接 detached spawn 会静默失败
-        //（详见文件顶部 apply_folder_update 的说明）。首个引号参数是窗口标题，不能为空。
-        const cmdExe = process.env.ComSpec || 'cmd.exe';
+                const cmdExe = process.env.ComSpec || 'cmd.exe';
         const child = spawn(cmdExe, ['/d', '/c', 'start', 'ITV Desk Update', exePath], {
           detached: true,
           stdio: 'ignore',
           cwd: path.dirname(exePath),
           windowsHide: true,
         });
-        child.on('error', () => { /* 静默：下面有超时兜底与用户可见结果 */ });
+        child.on('error', () => {  });
         child.unref();
       } catch (e) {
         return 'ERROR: ' + e.message;
@@ -461,26 +419,15 @@ function registerIpcHandlers(ctx) {
       return 'OK';
     },
 
-    // ---------- 应用自更新（文件夹版）：直接覆盖当前运行目录 ----------
-    // args: [zipPath, expectedSha256, expectedSize, version]
-    // 为什么这样做：正在运行的 exe / dll / resources 被系统锁定，进程内无法覆盖自己；
-    // 而 NSIS 安装向导默认装到 %LOCALAPPDATA%\Programs\ITV Desk，和"当前打开的程序目录"
-    // 根本不是一处 —— 这正是「能检测到更新、更新后版本号却没变」的根因。
-    //
-    // 链路：校验完整性 → 写脚本与计划文件 → 经 launch.cmd（cmd.exe start）启动脚本
-    //      → **等脚本写回 ready 握手**（确认它真跑起来了）→ 才 app.quit() 干净退出
-    //      → 脚本等旧进程退出 → 解压覆盖程序目录 → 自动重开新版本。
-    // 握手这一步是 v3.1.4 加的：v3.1.2/3.1.3 因为"脚本静默没启动"导致软件退出后
-    // 什么都不发生，用户完全看不到原因。现在拿不到握手就**不退出**并明确报错。
-    // 程序目录 = 正在运行的 exe 所在目录；频道/设置/台标等数据文件不在更新包内，不受影响。
-    async apply_folder_update(args) {
+        // args: [zipPath, expectedSha256, expectedSize, version]
+                //
+                            async apply_folder_update(args) {
       const [zipPath, expectedSha256, expectedSize, version] = args || [];
       if (!zipPath || !fs.existsSync(zipPath)) return 'ERROR: 更新包不存在: ' + zipPath;
       if (!/\.zip$/i.test(String(zipPath))) return 'ERROR: 不是文件夹版更新包: ' + zipPath;
       if (!app.isPackaged) return 'ERROR: 开发模式下不执行覆盖更新（请用 npm start 运行，或手动更新）';
 
-      // 1) 完整性校验：尺寸 + sha256，任一项不符立即中止，绝不拿半截包去覆盖程序
-      try {
+            try {
         const st = fs.statSync(zipPath);
         if (expectedSize && Number(expectedSize) > 0 && st.size !== Number(expectedSize)) {
           return `ERROR: 更新包不完整（${st.size} / ${expectedSize} 字节），已中止更新，请重新下载`;
@@ -493,7 +440,7 @@ function registerIpcHandlers(ctx) {
       }
 
       const exePath = process.execPath;              // H:\...\ITV Desk.exe
-      const targetDir = path.dirname(exePath);       // 程序目录（运行目录）
+      const targetDir = path.dirname(exePath);       
       const workDir = path.join(os.tmpdir(), `itvdesk_update_${process.pid}_${Date.now()}`);
       const b64 = (p) => Buffer.from(String(p), 'utf8').toString('base64');
       const ps1Path = path.join(workDir, 'apply.ps1');
@@ -517,8 +464,7 @@ function registerIpcHandlers(ctx) {
         return 'ERROR: 写入更新脚本失败: ' + e.message;
       }
 
-      // 2) 经 cmd.exe 启动脚本，并等它写回握手标记（脚本第一件事就是写这个文件）
-      const cmdExe = process.env.ComSpec || 'cmd.exe';
+            const cmdExe = process.env.ComSpec || 'cmd.exe';
       const launchAndWait = (label, readyName, program, programArgs) => new Promise((resolve) => {
         let spawnErr = null;
         try {
@@ -552,8 +498,7 @@ function registerIpcHandlers(ctx) {
       let started = await launchAndWait('powershell', READY_PS, powershellExe(),
         ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1Path, READY_PS]);
       if (!started) {
-        // 兜底：用后端同款 python 跑等价脚本（标准库 zipfile，不受脚本执行策略限制）
-        started = await launchAndWait('python', READY_PY, pythonExe(), ['-u', pyPath, READY_PY]);
+                started = await launchAndWait('python', READY_PY, pythonExe(), ['-u', pyPath, READY_PY]);
       }
       if (!started) {
         return 'ERROR: 更新脚本未能启动（可能是安全软件拦截了脚本执行），程序已保持运行、未做任何改动。\n'

@@ -1,25 +1,8 @@
-"""频道别名库（P1-9）
-
-解决的问题：同一个频道在中文源里有无数种写法，导致节目单匹配不上
-（源里叫「央视五套」，EPG 里叫「CCTV5」）。
-
-别名库把各种写法归一到「规范名」，格式 {规范名: [别名, ...]}，
-落盘 DATA_DIR/channel_alias.json。
-
-使用范围：**仅用于 EPG 匹配**（只读匹配，匹配不上最多就是匹配不上，零副作用）。
-频道去重路径刻意不带别名——别名一旦判错，去重会真的删掉频道，属不可逆操作，
-不值得冒这个险。
-
-种子数据为自研整理（央视全部频道 + 省级卫视 + 省级地面/少儿/教育 + 中国港澳台主要频道），
-未引用任何竞品的数据文件——license 红线见 方案书-功能加强规划.md 第三节。
-"""
 import os
 import re
 import json
 import threading
 
-# 规范名 → 别名列表。规范名本身用官方叫法（CCTV1 而不是"央视一套"）。
-# 只收无歧义的：像"广东电视台"这种一个台有好几个频道的写法一律不收，避免误合并。
 SEED = {
     "CCTV1": ["央视一套", "央视综合", "中央一台", "中央1台", "央视1套", "CCTV1综合"],
     "CCTV2": ["央视二套", "央视财经", "中央二台", "中央2台", "央视2套"],
@@ -40,9 +23,6 @@ SEED = {
     "CCTV16": ["央视十六套", "央视奥林匹克", "中央十六台", "中央16台", "CCTV16奥林匹克"],
     "CCTV17": ["央视十七套", "央视农业农村", "中央十七台", "中央17台", "央视17套"],
     "CGTN": ["中国国际电视台", "央视英语频道", "CCTV英语新闻"],
-    # ⚠️ 「央视超高清」这个别名已删除（2026-09-14）：归一化会把画质词「超高清」剥掉，
-    #    它退化成裸「央视」——而「央视」是央视所有频道的通称，会让任何画面里的
-    #    「央视」水印精确命中 CCTV4K。改用不会退化的「央视4K超高清」。
     "CCTV4K": ["央视4K", "CCTV4K超高清", "央视4K超高清"],
     "北京卫视": ["BTV北京", "北京电视台", "北京卫视高清"],
     "天津卫视": ["天津电视台"],
@@ -140,26 +120,23 @@ _STRIP = re.compile(r"[\s\-_\.·]+")
 
 
 def _key(name):
-    """归一化键：去符号 + 转小写（与 epg_service._normalize_name 保持一致）"""
     if not name:
         return ""
     return _STRIP.sub("", str(name).lower())
 
 
 class AliasService:
-    """别名库读写 + 规范化查询"""
 
     def __init__(self, data_dir=None, log_callback=None):
         self.data_dir = data_dir or os.getcwd()
         self.path = os.path.join(self.data_dir, "channel_alias.json")
         self.log = log_callback or (lambda m: None)
         self._lock = threading.RLock()
-        self.map = {}          # {规范名: [别名...]}
-        self._index = {}       # {归一化别名/规范名: 规范名}
+        self.map = {}
+        self._index = {}
         self._load()
         self._rebuild()
 
-    # -------------------- 持久化 --------------------
     def _load(self):
         if not os.path.exists(self.path):
             self.map = {k: list(v) for k, v in SEED.items()}
@@ -194,9 +171,7 @@ class AliasService:
                     idx[k] = canon
         self._index = idx
 
-    # -------------------- 查询 --------------------
     def canonical(self, name):
-        """把任意写法归一为规范名；不在库里则原样返回"""
         if not name:
             return name
         return self._index.get(_key(name), name)
@@ -208,9 +183,7 @@ class AliasService:
     def all(self):
         return {k: list(v) for k, v in sorted(self.map.items())}
 
-    # -------------------- 维护 --------------------
     def set_group(self, canon, aliases):
-        """新增/覆盖一个规范名及其别名"""
         canon = (canon or "").strip()
         if not canon:
             return {"ok": False, "error": "规范名不能为空"}
@@ -230,10 +203,6 @@ class AliasService:
         return {"ok": False, "error": "没有这个规范名"}
 
     def import_text(self, text, replace=False):
-        """导入文本格式，每行一条：`规范名=别名1,别名2`（也支持 `=` 写成 `:`）。
-
-        只做增量合并（replace=True 才整体替换），导入后立刻持久化。
-        """
         parsed, errors = {}, []
         for i, raw in enumerate(str(text or "").splitlines(), 1):
             line = raw.strip()
@@ -276,7 +245,6 @@ class AliasService:
         return {"ok": True, **self.count()}
 
 
-# ==================== 模块级单例（供 epg_service / channel_service 直接调用） ====================
 _service = None
 _service_lock = threading.Lock()
 
@@ -301,7 +269,6 @@ def get_service():
 
 
 def canonical(name):
-    """便捷入口：把频道名归一成规范名（未收录则原样返回）"""
     try:
         return get_service().canonical(name)
     except Exception:

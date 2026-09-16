@@ -1,18 +1,3 @@
-"""局域网订阅网关（P1-6）
-
-把本机频道库变成一个「家庭 IPTV 服务器」：盒子/手机/电视上的播放器直接订阅本机地址即可，
-不用再手动导出 m3u 拷来拷去。
-
-公开端点（给播放器用，需带 token）：
-  GET /gw/playlist.m3u?token=xxx   当前频道库 M3U（#EXTM3U 头带 url-tvg，播放器自动拉节目单）
-  GET /gw/epg.xml?token=xxx        合并后的 XMLTV 节目单
-
-本机端点（给设置页用，仅本机 UI 调用，无 token 要求）：
-  GET  /api/gateway                开关状态 / 令牌 / 局域网可访问地址
-  POST /api/gateway/token          重新生成令牌（旧的立即失效）
-
-安全约定：默认关闭；开启后必须带 token；token 为空一律拒绝（不裸奔）。
-"""
 import os
 import re
 import html
@@ -31,7 +16,6 @@ public = APIRouter(tags=["gateway-public"])
 DEFAULT_PORT = int(os.environ.get("IPTVCORE_PORT", "8000"))
 
 
-# ==================== 依赖 ====================
 def get_settings():
     from app.main import settings
     return settings
@@ -47,9 +31,7 @@ def get_epg_service():
     return epg_service
 
 
-# ==================== 工具 ====================
 def _lan_ip():
-    """取本机在局域网中的地址（用于拼给用户看的订阅链接）"""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("8.8.8.8", 80))
@@ -71,7 +53,6 @@ def _port():
 
 
 def _public_channels(channel_service, settings):
-    """网关输出的频道集合：排除死源与黑名单源，避免把没用的东西推给盒子"""
     from app.utils.helpers import is_url_blacklisted
 
     with getattr(channel_service, "lock", None) or _null_lock():
@@ -82,7 +63,6 @@ def _public_channels(channel_service, settings):
         url = ch.get("url") or ""
         if not url or is_url_blacklisted(url, settings):
             continue
-        # 死源不推送（没检查过的照推，避免新导入的频道被全部滤掉）
         if str(ch.get("status")) == "离线" or ch.get("health", {}).get("dead"):
             continue
         out.append(ch)
@@ -98,7 +78,6 @@ class _null_lock:
 
 
 def _check_token(settings, token):
-    """校验订阅令牌，返回 None 表示通过，否则返回错误响应"""
     if not settings.get("gateway_enabled"):
         return PlainTextResponse("局域网订阅网关未开启（请在 ITV Desk 设置页打开）", status_code=403)
     real = str(settings.get("gateway_token") or "")
@@ -110,11 +89,9 @@ def _check_token(settings, token):
 
 
 def _base_url(settings):
-    """对外可用的服务地址前缀（本机局域网 IP + 端口）"""
     return "http://%s:%d" % (_lan_ip(), _port())
 
 
-# ==================== 公开端点（播放器订阅用） ====================
 @public.get("/gw/playlist.m3u", response_class=PlainTextResponse)
 def gateway_playlist(token: str = Query("", description="订阅令牌"),
                      settings=Depends(get_settings),
@@ -143,7 +120,6 @@ def gateway_epg(token: str = Query("", description="订阅令牌"),
 
 
 def _build_xmltv(epg_service):
-    """把已加载的 EPG 数据重新渲染成 XMLTV（播放器只认标准 XMLTV）"""
     data = getattr(epg_service, "epg_data", {}) or {}
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<tv generator-info-name="ITV Desk">']
@@ -171,7 +147,6 @@ def _build_xmltv(epg_service):
 
 
 def _xmltv_time(v):
-    """"20260913210000" → "20260913210000 +0800"（XMLTV 要求带时区）"""
     if not v:
         return ""
     s = re.sub(r"[^0-9]", "", str(v))
@@ -180,7 +155,6 @@ def _xmltv_time(v):
     return s[:14] + " +0800"
 
 
-# ==================== 本机端点（设置页用） ====================
 @router.get("")
 def gateway_info(settings=Depends(get_settings),
                  channel_service=Depends(get_channel_service),
@@ -205,11 +179,6 @@ def gateway_info(settings=Depends(get_settings),
 
 @router.post("/token")
 def gateway_rotate_token(settings=Depends(get_settings)):
-    """重新生成订阅令牌并开启网关（旧链接立即失效）
-
-    注意：gateway_enabled 必须显式置 True —— 该键在 DEFAULTS 里已存在（默认 False），
-    用 setdefault 是改不动的。
-    """
     from app import main
     token = secrets.token_urlsafe(18)
     merged = dict(getattr(main, "settings", {}) or {})

@@ -1,11 +1,9 @@
-"""规则服务 - 管理频道名替换规则"""
 import re
 import threading
 from app.config import Config
 
 
 class RuleService:
-    """管理 channel_rules.json 的规则"""
 
     def __init__(self, log_callback=None):
         self.log_callback = log_callback or (lambda msg: None)
@@ -47,7 +45,6 @@ class RuleService:
         return result
 
     def apply_rules(self, channel_service):
-        """应用规则到频道名"""
         if not self._rules:
             return {"error": "没有规则可应用"}
         count = 0
@@ -62,7 +59,6 @@ class RuleService:
         return {"count": count}
 
     def preview_rules(self, channel_service):
-        """预览规则效果"""
         results = []
         with channel_service.lock:
             names = [ch.get("name", "") for ch in channel_service.pool]

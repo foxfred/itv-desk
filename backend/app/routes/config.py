@@ -1,4 +1,3 @@
-"""配置路由"""
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from app.config import Config
@@ -13,7 +12,6 @@ def get_settings():
 
 @router.get("/build-info")
 def build_info():
-    """返回前端构建信息（版本号 + 构建时间戳），用于前端比对是否过期。"""
     from app.main import _FRONTEND_DIST
     import os
     info_path = os.path.join(_FRONTEND_DIST, "build-info.json") if _FRONTEND_DIST else None
@@ -38,14 +36,12 @@ def get_config(settings=Depends(get_settings)):
 @router.post("/config/save")
 def save_config(data: dict, settings=Depends(get_settings)):
     from app import main
-    # 以「当前设置」为底再补默认值，最后套用本次提交：避免前端未提交的键（如 URL 黑白名单）被重置为默认值
     merged = dict(getattr(main, "settings", {}) or {})
     for k, v in Config.DEFAULTS.items():
         merged.setdefault(k, v)
     merged.update(data)
     main.settings = merged
     Config.save_settings(merged)
-    # 配置变更后重新同步定时任务（订阅自动更新 / EPG 定时刷新）
     try:
         main.resync_schedulers()
     except Exception:

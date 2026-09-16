@@ -1,6 +1,6 @@
 <template>
   <div class="history-view">
-    <!-- 频道健康报告（P1-10）：按天快照形成的趋势 + 失效 Top -->
+    
     <el-card shadow="never" class="report-card">
       <template #header>
         <div class="card-header">
@@ -150,7 +150,6 @@ import * as statsApi from '@/api/stats'
 import { callNative } from '@/composables/useNative'
 import { usePlayerStore } from '@/stores/player'
 
-// ==================== 频道健康报告（P1-10） ====================
 const report = ref({ trend: [], current: null, top_failing: [], latency_buckets: [] })
 const reportDays = ref(7)
 const reportLoading = ref(false)
@@ -235,8 +234,7 @@ async function load() {
 }
 
 async function play(row) {
-  // 双窗口（Phase 1）：历史记录播放走经纪人，打开独立播放窗（列表即选源入口）
-  if (!row || !row.url) return
+    if (!row || !row.url) return
   const api = window.pywebview?.api
   if (api && typeof api.play_channel === 'function') {
     await callNative('play_channel', {
@@ -246,8 +244,7 @@ async function play(row) {
     if (playerStore.state === 'hidden') playerStore.state = 'drawer'
     return
   }
-  // 退化：浏览器环境
-  playerStore.open({ id: row.id, url: row.url, name: row.name, group: row.group || '' }, null, -1)
+    playerStore.open({ id: row.id, url: row.url, name: row.name, group: row.group || '' }, null, -1)
   if (playerStore.state === 'hidden') playerStore.setState('drawer')
   else playerStore.exitPip()
 }
@@ -273,8 +270,7 @@ async function onClear() {
     await ElMessageBox.confirm(`确定清空${label}吗？此操作不可恢复`, '确认', { type: 'warning' })
   } catch { return }
   if (tab.value === 'fav') {
-    // 收藏页：逐个取消收藏标记
-    for (const row of items.value.filter(i => i.is_favorite)) {
+        for (const row of items.value.filter(i => i.is_favorite)) {
       try { await playHistoryApi.favorite(row.id) } catch { /* continue */ }
     }
     load()
@@ -296,7 +292,7 @@ onMounted(() => {
 .history-view {
   max-width: 1100px;
 }
-/* 健康报告（P1-10） */
+
 .report-card { margin-bottom: 12px; }
 .report-title { font-weight: 600; font-size: 14px; }
 .metric-row {

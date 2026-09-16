@@ -1,6 +1,6 @@
 <template>
   <div class="sub-page">
-    <!-- 工具栏 -->
+    
     <div class="toolbar">
       <div class="toolbar-left">
         <el-button size="small" type="primary" @click="showAdd = true">
@@ -124,7 +124,6 @@ const showAdd = ref(false)
 const editingSub = ref(null)
 const formRef = ref()
 const subs = ref([])
-// 复用扫描网址保存的 URL 历史（与「频道管理 → 扫描网址」共享同一份 url_history.json）
 const urlHistory = ref([])
 
 const form = reactive({
@@ -173,14 +172,12 @@ async function doAdd() {
   submitting.value = true
   try {
     if (editingSub.value) {
-      // 编辑：先删后加（后端无 put 接口）
-      await subApi.removeSub(editingSub.value.url)
+            await subApi.removeSub(editingSub.value.url)
     }
     const { data } = await subApi.addSub({ ...form })
     if (data.error) { ElMessage.error(data.error); return }
     ElMessage.success(editingSub ? '已更新' : '添加成功')
-    // 添加/编辑成功后，把地址存入扫描网址历史（双向共享），下次可直接下拉复用
-    if (form.url && (editingSub ? form.url !== editingSub.url : true)) {
+        if (form.url && (editingSub ? form.url !== editingSub.url : true)) {
       pushUrlHistory(form.url)
     }
     showAdd.value = false
@@ -217,8 +214,7 @@ async function doUpdateOne(row) {
     if (data.error) { ElMessage.error(data.error) }
     else {
       ElMessage.success(`「${row.name || row.url}」更新完成`)
-      // 更新成功后强制刷新频道列表（订阅源新增的频道立即可见）
-      await useChannelStore().fetchChannels()
+            await useChannelStore().fetchChannels()
     }
   } catch { ElMessage.error('更新失败') }
   row._updating = false
@@ -231,8 +227,7 @@ async function doUpdateAll() {
     if (data.error) { ElMessage.error(data.error) }
     else {
       ElMessage.success(`全部更新完成${data.added ? `，新增 ${data.added} 个频道` : ''}`)
-      // 更新成功后强制刷新频道列表
-      await useChannelStore().fetchChannels()
+            await useChannelStore().fetchChannels()
     }
   } catch { ElMessage.error('全部更新失败') }
   updatingAll.value = false
@@ -240,7 +235,6 @@ async function doUpdateAll() {
 
 onMounted(() => { loadList(); loadUrlHistory() })
 
-// 加载扫描网址历史（与「频道管理 → 扫描网址」共享 url_history.json）
 async function loadUrlHistory() {
   try {
     const { data } = await getHistory()
@@ -248,7 +242,6 @@ async function loadUrlHistory() {
   } catch { urlHistory.value = [] }
 }
 
-// 把地址存入扫描网址历史（去重置顶 + 即时刷新 + 持久化）
 function pushUrlHistory(u) {
   const url = (u || '').trim()
   if (!url) return

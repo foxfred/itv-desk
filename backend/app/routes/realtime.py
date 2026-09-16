@@ -1,11 +1,3 @@
-"""实时推送路由 —— 以 SSE（Server-Sent Events）替代高频轮询。
-
-- GET /api/logs/stream   ：实时推送服务端日志（新行即推，连接即回放缓冲）。
-- GET /api/events/stream  ：实时推送运行快照（stats / check / scrape），由后台任务周期发布。
-
-保留原有 /api/logs、/api/stats、/check/status、/scrape/status 轮询接口不变，
-两者可并存；前端可在支持 EventSource 时优先使用 SSE，否则回退轮询。
-"""
 import asyncio
 import json
 

@@ -1,4 +1,3 @@
-"""导出路由"""
 import os
 import shutil
 import subprocess
@@ -66,7 +65,6 @@ def export_direct(body: ExportDirectReq,
                   channel_service=Depends(get_channel_service),
                   data_dir: str = Depends(get_data_dir),
                   log=Depends(get_log)):
-    """导出到服务器根目录，不弹下载对话框"""
     try:
         channels = channel_service.get_all()
         fname = body.filename or "检查整理结果_已去重.m3u"
@@ -89,8 +87,6 @@ def export_direct(body: ExportDirectReq,
 
 @router.get("/players")
 def find_players():
-    """查找 VLC / PotPlayer / mpv 可执行文件路径"""
-    # 硬编码回退路径（仅当 shutil.which 和环境变量都找不到时使用）
     _VLC_PATHS = [
         r"C:\Program Files\VideoLAN\VLC\vlc.exe",
         r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
@@ -125,7 +121,6 @@ class PlayExternalReq(BaseModel):
 
 @router.post("/play-external")
 def play_external(body: PlayExternalReq):
-    """调用外部播放器打开指定 URL"""
     players = find_players()
     exe = players.get(body.player)
     if not exe:

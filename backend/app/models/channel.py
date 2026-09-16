@@ -1,4 +1,3 @@
-"""SQLAlchemy ORM 模型 Channel"""
 from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.orm import DeclarativeBase
 

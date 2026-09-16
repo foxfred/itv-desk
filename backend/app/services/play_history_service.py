@@ -1,4 +1,3 @@
-"""播放历史服务 - 基于 SQLite(SQLAlchemy) 的播放记录持久化"""
 import asyncio
 from datetime import datetime
 from sqlalchemy import select, desc
@@ -10,7 +9,6 @@ MAX_FAVORITES = 500
 
 
 def _ensure_sync(coro):
-    """在 FastAPI 同步路由/后台线程中运行异步协程"""
     try:
         return asyncio.run(coro)
     except RuntimeError:
@@ -37,7 +35,6 @@ async def _upsert_async(name, url, group="", favorite=False):
         record = PlaybackHistory(name=name, url=url, group=group, is_favorite=favorite)
         session.add(record)
         await session.commit()
-        # 容量控制：超出后删除最旧的
         count = await session.scalar(
             select(PlaybackHistory.id).order_by(desc(PlaybackHistory.played_at))
         )
@@ -99,7 +96,6 @@ async def _clear_async():
 
 
 def record_play(name, url, group="", favorite=False):
-    """记录一次播放（供同步调用）"""
     return _ensure_sync(_upsert_async(name, url, group, favorite))
 
 
@@ -120,5 +116,4 @@ def clear():
 
 
 def init():
-    """初始化数据库表"""
     return _ensure_sync(init_db())

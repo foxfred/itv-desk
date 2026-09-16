@@ -1,4 +1,3 @@
-"""检查服务 - 包装 CheckerEngine 的调用"""
 import sys
 import os
 import threading
@@ -10,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class CheckService:
-    """管理检查状态和后台检查任务"""
 
     def __init__(self, channel_service, log_callback=None, save_cache_callback=None):
         self.channel_service = channel_service
@@ -26,12 +24,6 @@ class CheckService:
             return dict(self._state)
 
     def start_check(self, items, threads, timeout, retries, resume=False):
-        """启动后台检查任务。
-
-        resume=True 时使用「断点续检」模式：仅对仍处于「未检查」状态的频道
-        发起检测，已检测（在线/离线/未知）的频道会被跳过，避免崩溃/中断后
-        重跑全部。配合每 50 个频道与结束时的缓存落盘，可实现安全续检。
-        """
         if resume:
             items = [ch for ch in items if ch.get("status", "未检查") == "未检查"]
         with self._lock:
@@ -45,7 +37,6 @@ class CheckService:
             try:
                 def progress_cb(p, t):
                     self._state.update(processed=p, total=t)
-                    # 周期性自动保存（每 50 个频道保存一次），防止中途崩溃丢失检查结果
                     if self.save_cache_callback and p - last_save["n"] >= 50:
                         last_save["n"] = p
                         try:

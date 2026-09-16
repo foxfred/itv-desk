@@ -1,4 +1,3 @@
-"""频道路由 - /api/channels"""
 import json
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
@@ -53,7 +52,6 @@ class BatchGroupReq(BaseModel):
 
 
 class HealthReportReq(BaseModel):
-    """播放器上报某次播放/检测结果，回写健康度。"""
     url: str
     success: bool = True
     error: Optional[str] = None
@@ -86,7 +84,6 @@ def get_settings():
 
 
 def _save_cache(channel_service, settings=None):
-    """保存频道缓存到磁盘（原子写，避免并发/崩溃截断损坏）"""
     from app.config import FileManager, Config
     try:
         cache_file = (settings or {}).get("cache_file_name", "channels_cache.json")
@@ -106,19 +103,16 @@ def get_channels(channel_service=Depends(get_channel_service)):
 def search_channels(q: str = Query("", description="名称/分组/标记模糊匹配"),
                    offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=2000),
                    channel_service=Depends(get_channel_service)):
-    """全文检索：按名称/分组/标记模糊匹配（SQLite 优先，回退内存）"""
     return channel_service.search(q, offset, limit)
 
 
 @router.get("/groups")
 def groups(channel_service=Depends(get_channel_service)):
-    """分组树数据：各分组频道数（按数量降序）"""
     return channel_service.get_groups()
 
 
 @router.get("/stats")
 def stats(channel_service=Depends(get_channel_service)):
-    """汇总统计：总数/在线/离线/未检查"""
     total, online, offline = channel_service.get_stats()
     unchecked = channel_service.count_unchecked()
     return {"total": total, "online": online, "offline": offline, "unchecked": unchecked}
@@ -126,18 +120,12 @@ def stats(channel_service=Depends(get_channel_service)):
 
 @router.post("/health")
 def report_health(body: HealthReportReq, channel_service=Depends(get_channel_service)):
-    """播放器/检测上报一次播放结果，回写频道健康度评分。
-
-    成功则 success=True；致命失败则 success=False 并附带 error 细节。
-    返回更新后的 health 字典；未命中频道返回 {"ok": False}。
-    """
     health = channel_service.update_health(
         url=body.url, success=body.success,
         error=body.error, first_frame_ms=body.first_frame_ms,
     )
     if health is None:
         return {"ok": False, "reason": "channel_not_found"}
-    # 播放上报较稀疏，立即落盘缓存以持久化健康度
     try:
         _save_cache(channel_service)
     except Exception:
@@ -238,11 +226,6 @@ def delete_by_group(body: DeleteByGroupReq, channel_service=Depends(get_channel_
 
 
 def _set_tag_channel(ch, new_tag, url, tag_db):
-    """设置频道标记（一源一行后标记直接挂在频道行上）。
-
-    "假直播"不再混进 tag，调用方应走 _set_fake_live_channel。
-    同时按 URL 记入 tag_db，供后续重新导入该源时还原标记。
-    """
     if isinstance(new_tag, str) and "假直播" in new_tag:
         parts = [p.strip() for p in new_tag.split(",") if p.strip() and p.strip() != "假直播"]
         new_tag = ",".join(parts) if parts else ""
@@ -255,7 +238,6 @@ def _set_tag_channel(ch, new_tag, url, tag_db):
 
 
 def _set_fake_live_channel(ch, is_fake_live, url, fake_live_db):
-    """设置假直播标记（一源一行后直接挂在频道行上），并按 URL 记入 fake_live_db。"""
     flag = bool(is_fake_live)
     if url:
         if flag:
@@ -273,7 +255,6 @@ def set_tag(channel_id: int, body: TagReq, channel_service=Depends(get_channel_s
         for ch in channel_service.pool:
             if ch["id"] == channel_id:
                 url = ch.get("url", "")
-                # 若用户仍通过 tag 传入"假直播"，自动迁移到独立字段
                 raw = (body.tag or "").strip()
                 if "假直播" in raw:
                     parts = [p.strip() for p in raw.split(",") if p.strip() and p.strip() != "假直播"]
@@ -295,7 +276,6 @@ def tag_toggle(channel_id: int, body: TagToggleReq, channel_service=Depends(get_
         for ch in channel_service.pool:
             if ch["id"] == channel_id:
                 url = ch.get("url", "")
-                # 对"假直播"的 toggle 实际切换独立字段，不再污染 tag
                 if body.tag == "假直播":
                     _set_fake_live_channel(ch, not ch.get("is_fake_live", False), url, fake_live_db)
                     Config.save_json(Config.FAKE_LIVE_DB_FILE, fake_live_db)
@@ -318,7 +298,6 @@ def batch_tag_add(body: BatchTagAddReq, channel_service=Depends(get_channel_serv
                   log=Depends(get_log), settings=Depends(get_settings)):
     from app.config import Config
     raw_tags = [t.strip() for t in body.tags.split(",") if t.strip()]
-    # "假直播"不再通过 tag 接口写入，自动迁移到独立字段
     set_fake_live = "假直播" in raw_tags
     normal_tags = [t for t in raw_tags if t != "假直播"]
     idset = set(body.ids)
@@ -422,7 +401,6 @@ class MatchLogosReq(BaseModel):
 @router.post("/merge-duplicates")
 def merge_duplicates(channel_service=Depends(get_channel_service),
                      log=Depends(get_log), settings=Depends(get_settings)):
-    """去重：按 URL 归一移除重复源（一源一行，不再按频道名合并成多源）。"""
     stats = channel_service.merge_duplicates(settings)
     if stats["removed"] > 0:
         _save_cache(channel_service, settings)
@@ -435,7 +413,6 @@ def merge_duplicates(channel_service=Depends(get_channel_service),
 @router.post("/match-logos")
 def match_logos(body: MatchLogosReq, channel_service=Depends(get_channel_service),
                 log=Depends(get_log), settings=Depends(get_settings)):
-    """Logo 自动匹配：扫描 logos 目录，按频道名写入 logo 字段。"""
     result = channel_service.match_logos(body.logos_dir)
     if result["matched"] > 0:
         _save_cache(channel_service, settings)
@@ -451,8 +428,6 @@ class OnlineLogosReq(BaseModel):
 @router.post("/match-logos-online")
 def match_logos_online(body: OnlineLogosReq, channel_service=Depends(get_channel_service),
                         log=Depends(get_log), settings=Depends(get_settings)):
-    """在线台标补全：从多个在线源（中文台标站 / GitHub 共享台标库 / 频道自带 tvg-logo）并发下载台标，
-    落地到程序目录 logos/_online/ 并写入频道 logo 字段。后台执行，返回 task_id 供轮询进度。"""
     task_id = channel_service.start_online_logos(
         settings, sources=body.sources, only_missing=body.only_missing,
         log=log, save_cache=_save_cache,
@@ -463,7 +438,6 @@ def match_logos_online(body: OnlineLogosReq, channel_service=Depends(get_channel
 
 @router.get("/match-logos-online/{task_id}")
 def match_logos_online_status(task_id: str, channel_service=Depends(get_channel_service)):
-    """轮询在线台标补全进度。"""
     st = channel_service.get_online_logos_status(task_id)
     if not st:
         raise HTTPException(status_code=404, detail="任务不存在或已过期")
@@ -473,7 +447,6 @@ def match_logos_online_status(task_id: str, channel_service=Depends(get_channel_
 @router.post("/reclassify")
 def reclassify(channel_service=Depends(get_channel_service),
                log=Depends(get_log), settings=Depends(get_settings)):
-    """重新自动分组：对整个频道池按统一算法重跑分组（解决历史混乱 / 外国频道统一）。"""
     changed, total = channel_service.reclassify_all()
     if changed > 0:
         _save_cache(channel_service, settings)
