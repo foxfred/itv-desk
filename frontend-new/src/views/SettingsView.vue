@@ -676,6 +676,169 @@
              </el-form-item>
            </el-form>
         </el-tab-pane>
+        <el-tab-pane label="录制" name="record">
+          <el-form label-width="150px" size="small" class="settings-form">
+            <el-form-item label="录像容器格式">
+              <el-select v-model="form.record_container" style="width:200px">
+                <el-option label="MP4（通用，推荐）" value="mp4" />
+                <el-option label="TS（原始流）" value="ts" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="单次录像时长上限">
+              <el-input-number v-model="form.record_max_minutes" :min="0" :max="1440" :step="10" />
+              <span style="margin-left:8px;color:var(--el-text-color-secondary);font-size:12px">分钟（0 = 不限）</span>
+            </el-form-item>
+            <el-form-item label="时移缓冲上限">
+              <el-input-number v-model="form.timeshift_minutes" :min="0" :max="720" :step="10" />
+              <span style="margin-left:8px;color:var(--el-text-color-secondary);font-size:12px">分钟（0 = 不限）</span>
+            </el-form-item>
+            <el-form-item label="时移切片长度">
+              <el-input-number v-model="form.timeshift_segment_seconds" :min="2" :max="20" />
+              <span style="margin-left:8px;color:var(--el-text-color-secondary);font-size:12px">秒</span>
+            </el-form-item>
+            <el-form-item label="回看（Catch-up）">
+              <el-switch v-model="form.catchup_enabled" />
+              <span style="margin-left:8px;color:var(--el-text-color-secondary);font-size:12px">关闭后节目单不再提供回看入口</span>
+            </el-form-item>
+            <el-form-item label=" ">
+              <span style="color:var(--el-text-color-secondary);font-size:12px">录像文件保存在数据目录的 recordings 子目录，可在「录像管理」页回放与删除。</span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <el-tab-pane label="家长控制" name="parental">
+          <el-form label-width="150px" size="small" class="settings-form">
+            <el-form-item label="启用家长控制">
+              <el-switch v-model="form.parental_enabled" />
+            </el-form-item>
+            <el-form-item label="PIN 码">
+              <el-input v-model="form.parental_pin" maxlength="8" show-password
+                        placeholder="4-8 位密码" style="width:200px" />
+            </el-form-item>
+            <el-form-item label="锁定的分组">
+              <el-select v-model="form.parental_locked_groups" multiple filterable allow-create
+                         default-first-option placeholder="选择要锁定的分组"
+                         style="width:100%;max-width:560px">
+                <el-option v-for="g in groupNames" :key="g" :label="g" :value="g" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label=" ">
+              <span style="color:var(--el-text-color-secondary);font-size:12px">频道墙中锁定分组的画面会隐藏；点击播放时需输入 PIN 解锁。</span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <el-tab-pane label="AI 智能" name="ai">
+          <el-form label-width="150px" size="small" class="settings-form">
+            <el-form-item label="启用 AI 功能">
+              <el-switch v-model="form.ai_enabled" />
+              <span class="tip">关闭后「AI 智能分组」等入口不可用</span>
+            </el-form-item>
+            <el-divider>模型接口（OpenAI 兼容）</el-divider>
+            <el-form-item label="API 地址">
+              <el-input v-model="form.ai_base_url" placeholder="https://api.deepseek.com/v1"
+                        style="max-width:460px" />
+            </el-form-item>
+            <el-form-item label="API Key">
+              <el-input v-model="form.ai_api_key" show-password placeholder="sk-..."
+                        style="max-width:460px" />
+            </el-form-item>
+            <el-form-item label="模型">
+              <el-select v-model="form.ai_model" filterable allow-create default-first-option
+                         placeholder="点「获取模型列表」，或直接输入模型名" style="width:280px">
+                <el-option v-for="m in aiModels" :key="m" :label="m" :value="m" />
+              </el-select>
+              <el-button style="margin-left:8px" :loading="aiFetching" @click="fetchAiModels">获取模型列表</el-button>
+              <el-button :loading="aiTesting" @click="testAiConn">测试连接</el-button>
+            </el-form-item>
+            <div v-if="aiStat" class="tip" style="margin-left:150px;margin-bottom:8px">{{ aiStat }}</div>
+            <el-divider>参数</el-divider>
+            <el-form-item label="请求超时">
+              <el-input-number v-model="form.ai_timeout" :min="10" :max="300" :step="10" />
+              <span class="unit">秒</span>
+            </el-form-item>
+            <el-form-item label="温度">
+              <el-input-number v-model="form.ai_temperature" :min="0" :max="2" :step="0.1" :precision="1" />
+              <span class="tip">越低越稳定，分类任务建议 0.1 ~ 0.3</span>
+            </el-form-item>
+            <el-form-item label="最大输出 token">
+              <el-input-number v-model="form.ai_max_tokens" :min="256" :max="32768" :step="256" />
+            </el-form-item>
+            <el-form-item label="走系统代理">
+              <el-switch v-model="form.ai_use_proxy" />
+              <el-input v-model="form.proxy" placeholder="http://127.0.0.1:7890"
+                        style="width:240px;margin-left:10px" />
+              <span class="tip">默认直连，不走系统代理环境变量</span>
+            </el-form-item>
+            <el-form-item label="附加提示词">
+              <el-input v-model="form.ai_prompt_extra" type="textarea" :rows="3" style="max-width:460px"
+                        placeholder="例如：体育类频道统一归到「体育」，港澳台频道归到「港澳台」" />
+            </el-form-item>
+            <el-form-item label=" ">
+              <span class="tip">保存后即时生效。换 Key 后建议先点「测试连接」确认可用，再到频道列表用「AI 智能分组」。</span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <el-tab-pane label="HDHomeRun" name="hdhr">
+          <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
+                    title="开启后本机就是一个 HDHomeRun 调谐器，Plex / Emby / Kodi 可直接添加该地址看直播" />
+          <el-form label-width="150px" size="small" class="settings-form">
+            <el-form-item label="启用 HDHomeRun">
+              <el-switch v-model="form.hdhr_enabled" />
+            </el-form-item>
+            <el-divider>对外地址</el-divider>
+            <el-form-item label="设备地址">
+              <el-tag type="success" style="margin-right:8px">{{ hdhrStatus.base_url || '获取中…' }}</el-tag>
+              <el-button size="small" @click="refreshHdhrStatus">刷新</el-button>
+              <el-button size="small" @click="copyHdhrUrl">复制 lineup 地址</el-button>
+            </el-form-item>
+            <el-form-item label="手动指定地址">
+              <el-input v-model="form.hdhr_base_url" placeholder="留空=自动探测局域网 IP" style="max-width:420px" />
+              <div class="tip">多网卡/端口映射场景下，自动探测可能不准，可在此固定（如 http://192.168.1.10:8000）</div>
+            </el-form-item>
+            <el-form-item label="DeviceID">
+              <el-input v-model="form.hdhr_device_id" maxlength="8" placeholder="留空=自动生成"
+                        style="width:180px" />
+              <span class="tip">8 位十六进制；当前生效：{{ hdhrStatus.device_id }}</span>
+            </el-form-item>
+            <el-divider>暴露范围</el-divider>
+            <el-form-item label="调谐器数量">
+              <el-input-number v-model="form.hdhr_tuner_count" :min="1" :max="16" />
+              <span class="tip">同时最多几路播放，超出返回 503</span>
+            </el-form-item>
+            <el-form-item label="最大频道数">
+              <el-input-number v-model="form.hdhr_limit" :min="1" :max="2000" :step="50" />
+            </el-form-item>
+            <el-form-item label="只暴露在线频道">
+              <el-switch v-model="form.hdhr_only_online" />
+            </el-form-item>
+            <el-form-item label="排除成人频道">
+              <el-switch v-model="form.hdhr_exclude_adult" />
+            </el-form-item>
+            <el-form-item label="限定分组">
+              <el-select v-model="form.hdhr_groups" multiple filterable allow-create default-first-option
+                         placeholder="留空=全部分组" style="width:100%;max-width:560px">
+                <el-option v-for="g in groupNames" :key="g" :label="g" :value="g" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="强制转码 H.264">
+              <el-switch v-model="form.hdhr_transcode" />
+              <span class="tip">关闭=直接转封装（省 CPU）；H.265 源播不出画面时再打开</span>
+            </el-form-item>
+            <el-form-item label="SSDP 自动发现">
+              <el-switch v-model="form.hdhr_ssdp" />
+              <span class="tip">开启后局域网客户端可自动搜到；占用 UDP 1900，被别家占用会失败（可手动填地址）</span>
+            </el-form-item>
+            <el-form-item label=" ">
+              <span class="tip">
+                当前暴露 {{ hdhrStatus.channels }} 个频道，占用 {{ (hdhrStatus.active || []).length }}/{{ hdhrStatus.tuner_count }} 路。
+                lineup：{{ hdhrStatus.lineup_url }}
+              </span>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
        </el-tabs>
 
 
@@ -694,10 +857,12 @@ import { useSettingsStore } from '@/stores/settings'
 import * as configApi from '@/api/config'
 import { exportApi } from '@/api/export'
 import * as appApi from '@/api/app'
-import { reclassifyChannels } from '@/api/channels'
+import { reclassifyChannels, getChannels } from '@/api/channels'
 import * as gwApi from '@/api/gateway'
 import * as aliasApi from '@/api/aliases'
 import * as nfApi from '@/api/namefix'
+import * as aiApi from '@/api/ai'
+import * as hdhrApi from '@/api/hdhomerun'
 import { callNative } from '@/composables/useNative'
 import {
   currentTheme, isDark, PRESET_THEMES, BUILTIN_SKINS,
@@ -706,6 +871,7 @@ import {
 
 const settingsStore = useSettingsStore()
 const activeTab = ref('general')
+const groupNames = ref([])
 const saving = ref(false)
 const exporting = ref(false)
 const importing = ref(false)
@@ -722,6 +888,74 @@ const encFileInput = ref(null)
 const importingEnc = ref(false)
 const exportingEnc = ref(false)
 const darkMode = ref(isDark.value)
+const aiModels = ref([])
+const aiFetching = ref(false)
+const aiTesting = ref(false)
+const aiStat = ref('')
+
+async function fetchAiModels() {
+  aiFetching.value = true
+  aiStat.value = ''
+  try {
+    const { data } = await aiApi.listModels(form.ai_base_url, form.ai_api_key)
+    if (!data.ok) {
+      aiStat.value = '获取失败：' + (data.error || '未知错误')
+      ElMessage.error('获取模型列表失败')
+      return
+    }
+    aiModels.value = data.models || []
+    if (!form.ai_model && aiModels.value.length) form.ai_model = aiModels.value[0]
+    aiStat.value = `已获取 ${data.count || aiModels.value.length} 个模型：${aiModels.value.slice(0, 8).join('、')}${aiModels.value.length > 8 ? ' …' : ''}`
+    ElMessage.success(`获取到 ${data.count || aiModels.value.length} 个模型`)
+  } catch (e) {
+    aiStat.value = '获取失败：无法连接后端服务'
+    ElMessage.error('获取模型列表失败')
+  }
+  aiFetching.value = false
+}
+
+async function testAiConn() {
+  aiTesting.value = true
+  aiStat.value = ''
+  try {
+    const { data } = await aiApi.testAi(form.ai_base_url, form.ai_api_key, form.ai_model)
+    if (!data.ok) {
+      aiStat.value = '连接失败：' + (data.error || '未知错误')
+      ElMessage.error('连接失败')
+    } else {
+      const u = data.usage || {}
+      aiStat.value = `连接成功（模型 ${data.model || form.ai_model}，返回「${data.reply || ''}」${u.total_tokens ? '，消耗 ' + u.total_tokens + ' tokens' : ''}）`
+      ElMessage.success('连接成功')
+    }
+  } catch (e) {
+    aiStat.value = '连接失败：无法连接后端服务'
+    ElMessage.error('连接失败')
+  }
+  aiTesting.value = false
+}
+
+// ---- HDHomeRun 仿真 ----
+const hdhrStatus = reactive({ base_url: '', device_id: '', tuner_count: 0, channels: 0, active: [], lineup_url: '' })
+
+async function refreshHdhrStatus() {
+  try {
+    const { data } = await hdhrApi.getHdhrStatus()
+    Object.assign(hdhrStatus, data || {})
+  } catch (e) {
+    hdhrStatus.base_url = '读取失败'
+  }
+}
+
+async function copyHdhrUrl() {
+  const url = hdhrStatus.lineup_url || (hdhrStatus.base_url ? hdhrStatus.base_url + '/lineup.json' : '')
+  if (!url) return ElMessage.warning('地址尚未就绪')
+  try {
+    await navigator.clipboard.writeText(url)
+    ElMessage.success('已复制：' + url)
+  } catch (e) {
+    ElMessage.info('请手动复制：' + url)
+  }
+}
 
 const urlBlacklistText = computed({
   get: () => (Array.isArray(form.url_blacklist) ? form.url_blacklist : []).join('\n'),
@@ -824,6 +1058,34 @@ const form = reactive({
   namefix_vision_base: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
   namefix_vision_model: 'glm-4v-flash',
   namefix_vision_key: '',
+  record_container: 'mp4',
+  record_max_minutes: 0,
+  timeshift_minutes: 0,
+  timeshift_segment_seconds: 4,
+  catchup_enabled: true,
+  parental_enabled: false,
+  parental_pin: '',
+  parental_locked_groups: [],
+  ai_enabled: false,
+  ai_base_url: 'https://api.deepseek.com/v1',
+  ai_api_key: '',
+  ai_model: 'deepseek-chat',
+  ai_timeout: 60,
+  ai_temperature: 0.2,
+  ai_max_tokens: 2048,
+  ai_use_proxy: false,
+  ai_prompt_extra: '',
+  hdhr_enabled: false,
+  hdhr_device_id: '',
+  hdhr_tuner_count: 3,
+  hdhr_only_online: true,
+  hdhr_groups: [],
+  hdhr_limit: 300,
+  hdhr_transcode: false,
+  hdhr_ssdp: false,
+  hdhr_exclude_adult: true,
+  hdhr_base_url: '',
+  hdhr_port: 0,
 })
 
 const aliasText = ref('')
@@ -935,6 +1197,11 @@ const columnVisibility = ref(allCols.map(c => c.key))
 
 onMounted(async () => {
   await settingsStore.fetchSettings()
+  refreshHdhrStatus()
+  try {
+    const { data } = await getChannels()
+    groupNames.value = [...new Set((data || []).map(c => c.group || '未分组'))].sort()
+  } catch { /* ignore */ }
   const s = settingsStore.settings
   for (const key of Object.keys(form)) {
     if (s[key] !== undefined) form[key] = s[key]

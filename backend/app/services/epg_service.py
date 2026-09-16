@@ -474,6 +474,8 @@ class EpgService:
                 'title': prog.get('title', ''),
                 'state': state,
                 'progress': progress,
+                'start_ts': int(start.timestamp()),
+                'stop_ts': int(stop.timestamp()) if stop else 0,
             })
         programs.sort(key=lambda p: p['start'])
         return {"programs": programs, "channel": info.get('name', name)}

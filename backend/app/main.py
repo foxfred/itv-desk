@@ -41,7 +41,10 @@ from app.services.scan_service import ScanService
 from app.services.screenshot_service import ScreenshotService
 from app.services.stats_service import StatsService
 from app.services.namefix_service import NamefixService
-from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router, screenshots, gateway, aliases, stats as stats_router, namefix
+from app.services.record_service import RecordService
+from app.services.ai_service import AIService
+from app.services.hdhomerun_service import HdHomeRunService
+from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router, screenshots, gateway, aliases, stats as stats_router, namefix, record, ai, hdhomerun
 from app.realtime import publish_event
 
 from app.version import APP_VERSION as _APP_VERSION
@@ -117,6 +120,10 @@ scan_service = ScanService(log_callback=log, settings=settings)
 screenshot_service = ScreenshotService(log_callback=log, data_dir=DATA_DIR)
 namefix_service = NamefixService(log_callback=log, data_dir=DATA_DIR)
 stats_service = StatsService(log_callback=log, data_dir=DATA_DIR)
+record_service = RecordService(log_callback=log, data_dir=DATA_DIR)
+ai_service = AIService(log_callback=log, settings_provider=lambda: settings)
+hdhr_service = HdHomeRunService(channel_service, log_callback=log,
+                                settings_provider=lambda: settings, data_dir=DATA_DIR)
 
 try:
     from app.services.play_history_service import init as init_play_history
@@ -261,6 +268,9 @@ app.include_router(gateway.router)
 app.include_router(gateway.public)
 app.include_router(aliases.router)
 app.include_router(stats_router.router)
+app.include_router(record.router)
+app.include_router(ai.router)
+app.include_router(hdhomerun.router)
 
 logos_dir = os.path.join(DATA_DIR, "logos")
 try:
@@ -271,6 +281,16 @@ except Exception:
 
 try:
     app.mount("/screenshots", StaticFiles(directory=screenshot_service.dir), name="screenshots")
+except Exception:
+    pass
+
+try:
+    app.mount("/recordings", StaticFiles(directory=record_service.dir), name="recordings")
+except Exception:
+    pass
+
+try:
+    app.mount("/timeshift", StaticFiles(directory=record_service.ts_root), name="timeshift")
 except Exception:
     pass
 
@@ -324,6 +344,15 @@ async def _start_epg_refresh_scheduler():
         interval = int(settings.get("epg_auto_refresh_interval", 0) or 0)
         if interval > 0:
             epg_service.start_refresh_scheduler(interval)
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+async def _start_hdhr_ssdp():
+    try:
+        from app.routes.hdhomerun import sync_ssdp
+        sync_ssdp()
     except Exception:
         pass
 

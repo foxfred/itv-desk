@@ -46,6 +46,11 @@ def save_config(data: dict, settings=Depends(get_settings)):
         main.resync_schedulers()
     except Exception:
         pass
+    try:
+        from app.routes.hdhomerun import sync_ssdp
+        sync_ssdp()
+    except Exception:
+        pass
     return {"ok": True}
 
 

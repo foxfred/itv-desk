@@ -36,8 +36,12 @@ health_history.json
 screenshots/
 screenshots_index.json
 subscriptions.json
+# 录制 / 时移输出目录（运行期产物，落仓库根）
+recordings/
+timeshift/
 
 # 临时/归档
+_tmp/
 _bak_*/
 _trash_*/
 *.bak

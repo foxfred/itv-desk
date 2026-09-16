@@ -183,6 +183,10 @@ class ChannelService:
                     "logo": ch.get("logo", ""),
                     "origin": ch.get("origin") or origin or "manual",
                     "url_note": ch.get("url_note", ""),
+                    "catchup": ch.get("catchup", ""),
+                    "catchup_source": ch.get("catchup_source", ""),
+                    "catchup_days": ch.get("catchup_days", ""),
+                    "catchup_correction": ch.get("catchup_correction", ""),
                     "health": _new_health()
                 })
                 added += 1

@@ -15,6 +15,12 @@ const routes = [
     meta: { title: '播放器', icon: 'VideoPlay', fullscreen: true, standaloneOnly: true }
   },
   {
+    path: '/wall',
+    name: 'wall',
+    component: () => import('@/views/WallView.vue'),
+    meta: { title: '频道墙', icon: 'Grid' }
+  },
+  {
     path: '/epg',
     name: 'epg',
     component: () => import('@/views/EpgView.vue'),
@@ -43,6 +49,12 @@ const routes = [
     name: 'subscriptions',
     component: () => import('@/views/SubscriptionView.vue'),
     meta: { title: '订阅源', icon: 'Link' }
+  },
+  {
+    path: '/record',
+    name: 'record',
+    component: () => import('@/views/RecordView.vue'),
+    meta: { title: '录像管理', icon: 'VideoCamera' }
   },
   {
     path: '/scan',

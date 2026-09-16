@@ -177,6 +177,14 @@ def extract_channels(raw_text):
             tag_match = re.search(r'tvg-tag="([^"]+)"', line)
             tag_val = tag_match.group(1) if tag_match else ""
             tag_parts = [p.strip() for p in tag_val.split(",") if p.strip()]
+            cu = re.search(r'catchup="([^"]*)"', line)
+            cus = re.search(r'catchup-source="([^"]*)"', line)
+            cud = re.search(r'catchup-days="([^"]*)"', line)
+            cuc = re.search(r'catchup-correction="([^"]*)"', line)
+            catchup_mode = cu.group(1).strip() if cu else ""
+            catchup_source = cus.group(1).strip().replace("&amp;", "&") if cus else ""
+            catchup_days = cud.group(1).strip() if cud else ""
+            catchup_correction = cuc.group(1).strip() if cuc else ""
             is_fake_live = "假直播" in tag_parts
             normal_tags = [p for p in tag_parts if p != "假直播"]
             tag = ",".join(normal_tags)
@@ -194,6 +202,10 @@ def extract_channels(raw_text):
                         "logo": logo,
                         "tag": tag,
                         "is_fake_live": is_fake_live,
+                        "catchup": catchup_mode,
+                        "catchup_source": catchup_source,
+                        "catchup_days": catchup_days,
+                        "catchup_correction": catchup_correction,
                         "raw_extinf": line,
                         "raw_url": url
                     })

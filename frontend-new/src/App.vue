@@ -24,6 +24,10 @@
           <el-icon><Monitor /></el-icon>
           <span>频道管理</span>
         </el-menu-item>
+        <el-menu-item index="/wall" title="频道墙：图标式预览全部频道，一眼看完画面与延迟，点击直接播放">
+          <el-icon><Grid /></el-icon>
+          <span>频道墙</span>
+        </el-menu-item>
         <el-menu-item index="/epg" title="电视节目单">
           <el-icon><Calendar /></el-icon>
           <span>节目单</span>
@@ -43,6 +47,10 @@
         <el-menu-item index="/scan" title="从频道链接反推 IP 段，扫描相邻网段发现新源">
           <el-icon><Connection /></el-icon>
           <span>扫描网段</span>
+        </el-menu-item>
+        <el-menu-item index="/record" title="录制与回放：把正在看的频道录下来，随时回看">
+          <el-icon><VideoCamera /></el-icon>
+          <span>录像管理</span>
         </el-menu-item>
         <el-menu-item index="/settings" title="全局设置">
           <el-icon><Setting /></el-icon>

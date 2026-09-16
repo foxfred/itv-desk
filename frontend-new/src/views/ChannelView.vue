@@ -205,13 +205,43 @@
             <el-option label="IPv6" value="IPv6" />
           </el-select>
           <el-checkbox v-model="hideDead" size="small" border>隐藏死源</el-checkbox>
+          <el-checkbox v-model="favoriteOnly" size="small" border>只看收藏</el-checkbox>
           <span class="filter-info">共 {{ filtered.length }} 条</span>
           <el-button size="small" :loading="shotRunning" @click="captureShotsBatch">批量抓帧</el-button>
           <span v-if="shotRunning" class="filter-info">画面 {{ shotDone }}/{{ shotTotal }}</span>
           <el-button size="small" type="primary" plain :loading="nfRunning" @click="openNamefix">名称校正</el-button>
           <span v-if="nfRunning" class="filter-info">校正 {{ nfDone }}/{{ nfTotal }}</span>
+          <el-button size="small" type="primary" plain :loading="aiRunning" @click="openAiGroup">AI 智能分组</el-button>
           <el-button size="small" text style="margin-left:auto" @click="showColumnSettings = true">列设置</el-button>
         </div>
+
+        <!-- AI 智能分组 -->
+        <el-dialog v-model="showAiGroup" title="AI 智能分组" width="720px" append-to-body>
+          <el-alert v-if="!aiReady" type="warning" :closable="false" show-icon style="margin-bottom:10px"
+                    title="尚未启用或未填写 AI 模型，请先到「设置 → AI 智能」配置 API 地址与 Key" />
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <span class="filter-info">分析条数</span>
+            <el-input-number v-model="aiLimit" :min="10" :max="400" :step="50" size="small" />
+            <el-input v-model="aiExtra" size="small" style="flex:1"
+                      placeholder="附加要求（可选），例如：体育频道统一归到「体育」" />
+            <el-button size="small" type="primary" :loading="aiRunning" @click="runAiGroup">开始分析</el-button>
+          </div>
+          <div v-if="aiSummary" class="filter-info" style="margin-bottom:8px">{{ aiSummary }}</div>
+          <el-table :data="aiRows" height="340" size="small" v-loading="aiRunning">
+            <el-table-column prop="name" label="频道" min-width="240" show-overflow-tooltip />
+            <el-table-column label="分组（可改）" width="240">
+              <template #default="{ row }">
+                <el-input v-model="row.group" size="small" />
+              </template>
+            </el-table-column>
+          </el-table>
+          <template #footer>
+            <el-button @click="showAiGroup = false">取消</el-button>
+            <el-button type="primary" :disabled="!aiRows.length" :loading="aiApplying" @click="applyAiGroup">
+              应用到 {{ aiRows.length }} 个频道
+            </el-button>
+          </template>
+        </el-dialog>
 
         <!-- 频道表格 -->
         <el-table
@@ -235,6 +265,15 @@
           class="channel-table"
         >
           <el-table-column prop="id" label="#" width="50" sortable="custom" align="center" />
+          <el-table-column label="收藏" width="56" align="center">
+            <template #default="{ row }">
+              <el-button link size="small" class="fav-btn" :class="{ on: isFavRow(row) }"
+                         :title="isFavRow(row) ? '取消收藏' : '收藏该频道'"
+                         @click.stop="toggleFavRow(row)">
+                <el-icon :size="14"><StarFilled v-if="isFavRow(row)" /><Star v-else /></el-icon>
+              </el-button>
+            </template>
+          </el-table-column>
           <el-table-column
             v-for="col in visibleCols"
             :key="col.key"
@@ -705,6 +744,7 @@ import { saveTextFile, callNative } from '@/composables/useNative'
 import * as channelApi from '@/api/channels'
 import * as scrapeApi from '@/api/scrape'
 import * as checkApi from '@/api/check'
+import * as aiApi from '@/api/ai'
 import * as exportApi from '@/api/export'
 import * as configApi from '@/api/config'
 import * as epgApi from '@/api/epg'
@@ -780,14 +820,43 @@ function saveHiddenCols() {
   } catch { /* ignore */ }
 }
 
+
+const favoriteOnly = ref(false)
+
+function isFavRow(row) {
+  const tags = String((row && row.tag) || '').split(',').map(s => s.trim()).filter(Boolean)
+  return tags.includes('fav')
+}
+
+async function toggleFavRow(row) {
+  if (!row) return
+  const tags = String(row.tag || '').split(',').map(s => s.trim()).filter(Boolean)
+  const on = tags.includes('fav')
+  if (on) {
+    const i = tags.indexOf('fav')
+    if (i >= 0) tags.splice(i, 1)
+  } else {
+    tags.push('fav')
+  }
+  const next = tags.join(',')
+  try {
+    const { data } = await channelApi.setTag(row.id, next)
+    row.tag = (data && data.tag !== undefined) ? data.tag : next
+    ElMessage.success(on ? '已取消收藏' : '已收藏')
+  } catch {
+    ElMessage.error('收藏操作失败')
+  }
+}
+
 const filtered = computed(() => {
   let list = store.channels
     if (activeGroup.value) list = list.filter(c => (c.group || '未分组') === activeGroup.value)
   if (filterStatus.value) list = list.filter(c => c.status === filterStatus.value)
   if (filterStack.value) list = list.filter(c => c.stack === filterStack.value)
   if (hideDead.value) list = list.filter(c => !(c.health && c.health.dead))
+  if (favoriteOnly.value) list = list.filter(c => isFavRow(c))
   const kw = searchKw.value.trim().toLowerCase()
-  if (kw) list = list.filter(c => [c.name, c.group, c.url].some(v => String(v || '').toLowerCase().includes(kw)))
+  if (kw) list = list.filter(c => [c.name, c.group, c.url, c.tag].some(v => String(v || '').toLowerCase().includes(kw)))
   const sp = sortState.prop, so = sortState.order
   if (sp && so) {
     const dir = so === 'ascending' ? 1 : -1
@@ -1153,6 +1222,64 @@ async function startNamefix() {
 }
 
 function onNfSelect(rows) { nfSelected.value = rows }
+
+// ---- AI 智能分组 ----
+const showAiGroup = ref(false)
+const aiRunning = ref(false)
+const aiApplying = ref(false)
+const aiLimit = ref(200)
+const aiExtra = ref('')
+const aiRows = ref([])
+const aiSummary = ref('')
+const aiReady = ref(false)
+
+function openAiGroup() {
+  showAiGroup.value = true
+  aiApi.getAiConfig().then(({ data }) => {
+    aiReady.value = !!(data && data.ai_enabled && data.ai_api_key)
+  }).catch(() => { aiReady.value = false })
+}
+
+async function runAiGroup() {
+  aiRunning.value = true
+  aiSummary.value = ''
+  try {
+    const { data } = await aiApi.groupChannels({ apply: false, limit: aiLimit.value, extra: aiExtra.value })
+    if (!data.ok) {
+      aiRows.value = []
+      ElMessage.error(data.error || '分析失败')
+    } else {
+      aiRows.value = Object.entries(data.mapping || {}).map(([name, group]) => ({ name, group }))
+      aiSummary.value = `模型建议 ${data.count} 个频道归入 ${Object.keys(data.groups || {}).length} 个分组`
+    }
+  } catch (e) {
+    aiRows.value = []
+    ElMessage.error('分析失败，请检查后端服务与 AI 配置')
+  }
+  aiRunning.value = false
+}
+
+async function applyAiGroup() {
+  const mapping = {}
+  for (const r of aiRows.value) {
+    if (r.name && r.group) mapping[r.name] = String(r.group).trim()
+  }
+  if (!Object.keys(mapping).length) return ElMessage.warning('没有可应用的分组')
+  aiApplying.value = true
+  try {
+    const { data } = await aiApi.groupChannels({ apply: true, mapping })
+    if (!data.ok) {
+      ElMessage.error(data.error || '应用失败')
+    } else {
+      ElMessage.success(`已应用 ${data.applied} 个频道的分组`)
+      showAiGroup.value = false
+      await store.refresh()
+    }
+  } catch (e) {
+    ElMessage.error('应用失败')
+  }
+  aiApplying.value = false
+}
 
 async function applySelected() {
   const ids = nfSelected.value.map(r => r.cid)
@@ -2366,4 +2493,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 .dlna-dev-info { min-width: 0; }
 .dlna-dev-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dlna-dev-loc { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.fav-btn { color: var(--el-text-color-placeholder); padding: 0; }
+.fav-btn.on { color: var(--el-color-warning); }
+.fav-btn:hover { color: var(--el-color-warning); }
+
 </style>

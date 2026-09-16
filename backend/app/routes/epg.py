@@ -112,3 +112,36 @@ def epg_set_source(body: EpgSourceReq, epg_service=Depends(get_epg_service)):
 @router.post("/refresh")
 def epg_refresh(epg_service=Depends(get_epg_service)):
     return epg_service.refresh_from_source()
+
+@router.get("/catchup")
+def epg_catchup(name: str = Query(...), start: int = Query(...), stop: int = Query(0),
+                channel_service=Depends(get_channel_service),
+                settings=Depends(get_settings)):
+    import datetime as _dt
+    from app.utils.catchup import build_catchup_url, has_catchup
+
+    if not settings.get("catchup_enabled", True):
+        return {"ok": False, "error": "回看功能已在设置中关闭"}
+    fallback = None
+    found = None
+    for ch in getattr(channel_service, "pool", []) or []:
+        n = ch.get("name") or ""
+        if not n or not (n == name or n in name or name in n):
+            continue
+        if has_catchup(ch):
+            found = ch
+            break
+        if fallback is None:
+            fallback = ch
+    target = found or fallback
+    if target is None:
+        return {"ok": False, "error": "未在频道列表中找到「%s」" % name}
+    if not has_catchup(target):
+        return {"ok": False, "error": "该频道源未提供回看（catchup）信息"}
+    s = _dt.datetime.fromtimestamp(int(start))
+    e = _dt.datetime.fromtimestamp(int(stop)) if stop else s + _dt.timedelta(hours=1)
+    url = build_catchup_url(target, s, e)
+    if not url:
+        return {"ok": False, "error": "该频道的回看格式暂不支持"}
+    return {"ok": True, "url": url, "channel": target.get("name"),
+            "start": s.strftime("%Y-%m-%d %H:%M"), "stop": e.strftime("%H:%M")}

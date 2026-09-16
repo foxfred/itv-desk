@@ -10,3 +10,4 @@ export const searchProgram = (keyword) => request.post('/api/epg/search', { keyw
 export const getProgram = (params) => request.get('/api/epg/program', { params })
 export const getPrograms = (params) => request.get('/api/epg/programs', { params })
 export const getEpgMatch = (name) => request.get('/api/epg/match', { params: { name } })
+export const getCatchup = (params) => request.get('/api/epg/catchup', { params })

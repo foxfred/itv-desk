@@ -129,7 +129,9 @@
                   <span class="program-title">{{ p.title }}</span>
                   <el-tag v-if="p.state === 'current'" size="small" type="danger" effect="dark">正在播放</el-tag>
                   <el-tag v-else-if="p.state === 'ended'" size="small" type="info" effect="plain">已结束</el-tag>
-                  <span class="dblclick-hint">双击播放</span>
+                  <el-button v-if="p.state === 'ended'" size="small" text type="primary"
+                             class="catchup-btn" @click.stop="playCatchup(p)">回看</el-button>
+                  <span class="dblclick-hint">{{ p.state === 'ended' ? '双击回看' : '双击播放' }}</span>
                 </div>
                 <el-progress
                   v-if="p.state === 'current'"
@@ -386,12 +388,45 @@ async function doSearchProg() {
 }
 
 function onProgramDblClick(p) {
-  playChannel(selectedChannel.value)
   if (p.state === 'ended') {
-    ElMessage.info('该节目已结束，正在播放频道直播（回放需源支持时移）')
-  } else {
-    ElMessage.success(`正在播放 ${selectedChannel.value}`)
+    playCatchup(p)
+    return
   }
+  playChannel(selectedChannel.value)
+  ElMessage.success(`正在播放 ${selectedChannel.value}`)
+}
+
+async function openUrlViaPlayer(url, name) {
+  const api = window.pywebview?.api
+  if (api && typeof api.play_channel === 'function') {
+    await callNative('play_channel', { url, name })
+    playerStore.currentChannel = { url, name }
+    if (playerStore.state === 'hidden') playerStore.state = 'drawer'
+    return
+  }
+  playerStore.open({ url, name }, null, -1)
+  if (playerStore.state === 'hidden') playerStore.setState('drawer')
+  else playerStore.exitPip()
+}
+
+async function playCatchup(p) {
+  if (!p.start_ts) {
+    ElMessage.warning('该节目缺少时间信息，无法回看')
+    return
+  }
+  try {
+    const { data } = await epgApi.getCatchup({
+      name: selectedChannel.value,
+      start: p.start_ts,
+      stop: p.stop_ts || 0,
+    })
+    if (!data || !data.ok) {
+      ElMessage.warning((data && data.error) || '该频道不支持回看')
+      return
+    }
+    await openUrlViaPlayer(data.url, `${selectedChannel.value} · ${p.title}（回看）`)
+    ElMessage.success('正在回看：' + p.title)
+  } catch { /* ignore */ }
 }
 
 async function playChannel(channelName) {

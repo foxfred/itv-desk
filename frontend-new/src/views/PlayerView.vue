@@ -155,6 +155,12 @@
           <el-icon :size="14"><StarFilled v-if="isFav" /><Star v-else /></el-icon>
         </button>
         <el-tag v-if="currentTag" size="small" type="warning" effect="dark" class="player-tag" :title="`标记：${currentTag}`">{{ currentTag }}</el-tag>
+        <button class="ico-btn" :class="{ on: recording }" @click="toggleRecord" :title="recording ? '停止录制' : '录制当前频道'">
+          <el-icon :size="14"><VideoCamera v-if="!recording" /><CircleClose v-else /></el-icon>
+        </button>
+        <button class="ico-btn" :class="{ on: timeshiftActive }" @click="toggleTimeshift" :title="timeshiftActive ? '关闭时移（回到直播）' : '开启时移缓冲（可暂停/回看）'">
+          <el-icon :size="14"><RefreshLeft /></el-icon>
+        </button>
         <span class="spacer"></span>
         <!-- 媒体信息 -->
         <button class="ico-btn" @click="toggleVideoInfo" title="媒体信息（分辨率/帧率/音频）">
@@ -224,6 +230,21 @@
     </transition>
 
     <!-- 四角缩放手柄（无外框模式） -->
+    <div v-if="pinVisible" class="pin-mask">
+      <div class="pin-box">
+        <el-icon :size="30"><Lock /></el-icon>
+        <div class="pin-title">家长锁</div>
+        <div class="pin-sub">该频道所属分组已锁定，请输入 PIN 码解锁播放</div>
+        <el-input v-model="pinInput" type="password" show-password maxlength="8"
+                  placeholder="请输入 PIN 码" class="pin-input" @keyup.enter="submitPin" />
+        <div v-if="pinError" class="pin-err">{{ pinError }}</div>
+        <div class="pin-actions">
+          <el-button size="small" @click="cancelPin">取消</el-button>
+          <el-button size="small" type="primary" @click="submitPin">解锁播放</el-button>
+        </div>
+      </div>
+    </div>
+
     <div class="resize resize-tl" @mousedown.prevent="(e) => onResizeStart(e, 0, 'tl')"></div>
     <div class="resize resize-tr" @mousedown.prevent="(e) => onResizeStart(e, 1, 'tr')"></div>
     <div class="resize resize-br" @mousedown.prevent="(e) => onResizeStart(e, 2, 'br')"></div>
@@ -248,6 +269,7 @@ import { playHistoryApi } from '@/api/play_history'
 import { reportHealth, setFakeLive as channelApiSetFakeLive, setTag as setChannelTag } from '@/api/channels'
 import { getEpgMatch } from '@/api/epg'
 import * as configApi from '@/api/config'
+import * as recordApi from '@/api/record'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayerStore } from '@/stores/player'
 
@@ -789,6 +811,135 @@ function buildProxyUrl(target) {
 
 function buildRtmpProxyUrl(target) {
     return `/api/rtmp-proxy?url=${encodeURIComponent(target)}`
+}
+
+const recording = ref(false)
+const recordJobId = ref('')
+const timeshiftActive = ref(false)
+const timeshiftId = ref('')
+const timeshiftPlaylist = ref('')
+const timeshiftBackupUrl = ref('')
+let recordTimer = null
+
+function stopRecordPoll() {
+  if (recordTimer) { clearInterval(recordTimer); recordTimer = null }
+}
+
+function startRecordPoll() {
+  stopRecordPoll()
+  recordTimer = setInterval(async () => {
+    try {
+      const { data } = await recordApi.listRecords()
+      const active = (data && data.active) || []
+      if (!active.some(j => j.id === recordJobId.value)) {
+        recording.value = false
+        recordJobId.value = ''
+        stopRecordPoll()
+        ElMessage.info('录制已结束')
+      }
+    } catch { /* ignore */ }
+  }, 5000)
+}
+
+async function toggleRecord() {
+  if (recording.value) {
+    const { data } = await recordApi.stopRecord(recordJobId.value)
+    if (data && data.ok) ElMessage.success('已停止录制')
+    else ElMessage.warning((data && data.error) || '停止录制失败')
+    stopRecordPoll()
+    recording.value = false
+    recordJobId.value = ''
+    return
+  }
+  if (!currentUrl.value) { ElMessage.warning('当前没有正在播放的频道'); return }
+  const { data } = await recordApi.startRecord({ name: currentName.value, url: currentUrl.value })
+  if (data && data.ok) {
+    recording.value = true
+    recordJobId.value = data.id || ''
+    ElMessage.success('开始录制：' + (data.file || ''))
+    startRecordPoll()
+  } else {
+    ElMessage.error((data && data.error) || '录制启动失败')
+  }
+}
+
+async function toggleTimeshift() {
+  if (timeshiftActive.value) {
+    timeshiftActive.value = false
+    const sid = timeshiftId.value
+    const back = timeshiftBackupUrl.value
+    timeshiftId.value = ''
+    timeshiftPlaylist.value = ''
+    timeshiftBackupUrl.value = ''
+    if (sid) recordApi.stopTimeshift(sid).catch(() => {})
+    if (back) {
+      currentUrl.value = back
+      await setupHls()
+    }
+    ElMessage.info('已关闭时移缓冲，回到直播')
+    return
+  }
+  if (!currentUrl.value) { ElMessage.warning('当前没有正在播放的频道'); return }
+  const { data } = await recordApi.startTimeshift({ url: currentUrl.value })
+  if (data && data.ok && data.url_path) {
+    timeshiftBackupUrl.value = currentUrl.value
+    timeshiftId.value = data.id || ''
+    timeshiftPlaylist.value = data.url_path
+    timeshiftActive.value = true
+    currentUrl.value = data.url_path
+    await setupHls()
+    ElMessage.success('时移已开启：可暂停、可拖动进度条回看')
+  } else {
+    ElMessage.error((data && data.error) || '时移启动失败')
+  }
+}
+
+watch(currentUrl, (val) => {
+  if (timeshiftActive.value && val !== timeshiftPlaylist.value) {
+    const sid = timeshiftId.value
+    timeshiftActive.value = false
+    timeshiftId.value = ''
+    timeshiftPlaylist.value = ''
+    timeshiftBackupUrl.value = ''
+    if (sid) recordApi.stopTimeshift(sid).catch(() => {})
+  }
+})
+
+const pinVisible = ref(false)
+const pinInput = ref('')
+const pinError = ref('')
+let pendingPlay = null
+
+function parentalCfg() {
+  const s = (settingsStore && settingsStore.settings) || {}
+  const groups = Array.isArray(s.parental_locked_groups) ? s.parental_locked_groups : []
+  return { on: !!s.parental_enabled, pin: String(s.parental_pin || '').trim(), groups }
+}
+
+function needsPin(group) {
+  const c = parentalCfg()
+  if (!c.on || !c.pin || !c.groups.length) return false
+  return c.groups.includes(group || '')
+}
+
+function submitPin() {
+  const c = parentalCfg()
+  if (String(pinInput.value || '').trim() === c.pin) {
+    pinVisible.value = false
+    pinError.value = ''
+    const p = pendingPlay
+    pendingPlay = null
+    if (p) playRow(p.row, p.list, p.idx)
+  } else {
+    pinError.value = 'PIN 码错误，请重试'
+  }
+}
+
+function cancelPin() {
+  pinVisible.value = false
+  pinInput.value = ''
+  pinError.value = ''
+  pendingPlay = null
 }
 
 function reportPlayHealth(success, error = null, firstFrameMs = null) {
@@ -1565,6 +1716,13 @@ function startPendingPolling() {
 
 async function playRow(row, list = null, idx = -1) {
   if (!row || !row.url) return
+  if (needsPin(row.group)) {
+    pendingPlay = { row, list, idx }
+    pinInput.value = ''
+    pinError.value = ''
+    pinVisible.value = true
+    return
+  }
     if (hls || flvPlayer || dashPlayer) {
     await forceStopAll()
   }
@@ -1636,6 +1794,8 @@ async function forceStopAll() {
 }
 
 onUnmounted(() => {
+  stopRecordPoll()
+  if (timeshiftActive.value && timeshiftId.value) recordApi.stopTimeshift(timeshiftId.value).catch(() => {})
     if (window.__iptvPlay === playRow) delete window.__iptvPlay
   if (window.__iptvCleanup) delete window.__iptvCleanup
   window.removeEventListener('keydown', onKeyDown)
@@ -1888,4 +2048,29 @@ html, body, #app { background: #000 !important; margin: 0 !important; padding: 0
 
 
 .video-mini {  }
+.pin-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.86);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pin-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  padding: 24px 28px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.pin-title { font-size: 16px; font-weight: 600; }
+.pin-sub { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+.pin-input { width: 200px; }
+.pin-err { font-size: 12px; color: #ff7875; }
+.pin-actions { display: flex; gap: 8px; margin-top: 4px; }
+
 </style>

@@ -47,6 +47,10 @@ class ChannelItem(BaseModel):
     status: str = "未检查"
     ms: str = "-"
     res: str = "-"
+    catchup: str = ""
+    catchup_source: str = ""
+    catchup_days: str = ""
+    catchup_correction: str = ""
 
 
 class ImportChannelsReq(BaseModel):
