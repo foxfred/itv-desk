@@ -3,10 +3,10 @@
   "notes": "ITV Desk v3.2.4：修复「下载更新包」超时失败 + 新增下载进度显示。① 修复更新包下载 30 秒超时：此前「下载更新包」沿用全局 30 秒超时，而更新包有 110 MB，走代理下载需要 47 秒以上，导致进度还没走完就报 timeout of 30000ms exceeded（表现为「开了代理也更新不了」）；现在这一项单独放宽到 15 分钟，与导出（2 分钟）、扫描（10 分钟）等长任务一致，下载不会再被中途掐断。② 新增下载进度显示：下载按钮现在会实时显示百分比（如「下载中 47%」），后端边下边回报进度，不再是一个转圈干等。③ 本次只改更新下载链路，其它功能与 v3.2.3 一致。更新方式：点「检查更新」→「下载更新包」→「立即更新并重启」，程序会自动关闭、覆盖当前程序目录并重新打开，不需要选安装路径、也不需要手动解压。频道、设置、台标、截图、缓存等数据不在更新包内，不会被覆盖。",
   "packages": [
     {
-      "name": "ITV-Desk-3.2.3-folder.zip",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.3/ITV-Desk-3.2.3-folder.zip",
-      "sha256": "7be7ad6d09f4fc128f4aeb3ad757c9b8e09e583284a58cb51bd8244b1fabc85b",
-      "size": 115443672,
+      "name": "ITV-Desk-3.2.4-folder.zip",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.4/ITV-Desk-3.2.4-folder.zip",
+      "sha256": "6aecae3e89cb72f48a1341d317edd579f2314a042e0751af7023974bc535360d",
+      "size": 115444501,
       "role": "folder"
     }
   ]
