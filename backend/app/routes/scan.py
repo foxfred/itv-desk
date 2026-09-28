@@ -63,7 +63,9 @@ def derive_from_urls(body: DeriveReq, scan_service=Depends(get_scan_service)):
 def scan_range(body: ScanReq, scan_service=Depends(get_scan_service)):
     timeout = body.timeout or int(scan_service._settings.get("scan_timeout", 5))
     max_workers = body.max_workers or int(scan_service._settings.get("scan_max_workers", 40))
-    proxy = body.proxy or scan_service._settings.get("proxy", "")
+    # 代理统一由「抓取面板」的 use_proxy 开关门控（2026-09-28 统一入口）
+    from app.utils.network import resolve_proxy
+    proxy = body.proxy or resolve_proxy(scan_service._settings)
     results = scan_service.scan(
         template=body.template,
         path=body.path,

@@ -5,7 +5,7 @@ import time
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 KEY_FIELDS = ("ai_enabled", "ai_base_url", "ai_api_key", "ai_model", "ai_timeout",
-              "ai_temperature", "ai_max_tokens", "ai_use_proxy", "ai_prompt_extra",
+              "ai_temperature", "ai_max_tokens", "ai_prompt_extra",
               "ai_vision_enabled", "ai_vision_base_url", "ai_vision_api_key",
               "ai_vision_model", "ai_vision_timeout", "ai_daily_token_limit", "ai_cache_enabled")
 

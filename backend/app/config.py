@@ -398,7 +398,6 @@ class Config:
         "ai_timeout": 60,
         "ai_temperature": 0.2,
         "ai_max_tokens": 2048,
-        "ai_use_proxy": False,
         "ai_prompt_extra": "",
         "ai_vision_enabled": False,
         "ai_vision_base_url": "",

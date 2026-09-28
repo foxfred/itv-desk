@@ -41,6 +41,16 @@ class SubscriptionService:
         self._stop = threading.Event()
         self._thread = None
 
+    def _global_proxy(self):
+        """代理统一由「抓取面板」的 use_proxy 开关决定（2026-09-28 统一入口）。
+        订阅级的 proxy 字段是旧版遗留（前端已无入口），不再使用。"""
+        from app.utils.network import resolve_proxy
+        from app.config import Config
+        try:
+            return resolve_proxy(Config.load_settings())
+        except Exception:
+            return ""
+
     def _load(self):
         try:
             with open(self.file, "r", encoding="utf-8") as f:
@@ -170,7 +180,7 @@ class SubscriptionService:
 
             engine = ScraperEngine(log_cb, inject_cb, stop_evt, status_cb)
             engine.run(url, 1, 1, sub.get("suffix_list") or "m3u,m3u8,txt",
-                       sub.get("proxy") or None, sub.get("mirror") or None)
+                       self._global_proxy() or None, sub.get("mirror") or None)
 
             added, dup = self.channel_service.add_channels(collected, origin="subscription")
             sub["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -201,7 +211,7 @@ class SubscriptionService:
             return
         try:
             from app.utils.network import download_url
-            text = download_url(url, proxy=sub.get("proxy") or None, timeout=12, max_retries=1)
+            text = download_url(url, proxy=self._global_proxy() or None, timeout=12, max_retries=1)
             if isinstance(text, bytes):
                 text = text.decode("utf-8", errors="ignore")
             found = _extract_tvg_urls(text or "")

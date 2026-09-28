@@ -132,7 +132,8 @@ class AIService:
             "timeout": int(_pick(s, "ai_timeout", 60)),
             "temperature": float(_pick(s, "ai_temperature", 0.2)),
             "max_tokens": int(_pick(s, "ai_max_tokens", 2048)),
-            "use_proxy": bool(s.get("ai_use_proxy")),
+            # 代理统一跟随「抓取面板」的 use_proxy 开关（2026-09-28 统一入口，原 ai_use_proxy 已废弃）
+            "use_proxy": bool(s.get("use_proxy")),
             "proxy": str(s.get("proxy") or "").strip(),
             "extra": str(s.get("ai_prompt_extra") or "").strip(),
             "daily_limit": int(_pick(s, "ai_daily_token_limit", 0) or 0),
@@ -270,17 +271,23 @@ class AIService:
 
     @staticmethod
     def _proxies(c):
-        if c.get("use_proxy") and c.get("proxy"):
-            p = c["proxy"]
+        # 统一走 network.resolve_proxy（2026-09-28 统一入口）：开关打开用填的地址，关闭返回 {} 走系统代理
+        from app.utils.network import resolve_proxy
+        p = resolve_proxy(c)
+        if p:
             url = p if "://" in p else "http://" + p
             return {"http": url, "https": url}
         return {}
 
     def _session(self, c):
-        """trust_env=False unless the user explicitly opted into a proxy."""
+        """代理规则（2026-09-28 统一）：
+        开关打开 → 走「抓取面板」里填的代理地址；
+        开关关闭 → 走系统代理（HTTP_PROXY / HTTPS_PROXY 环境变量）。
+        """
         s = requests.Session()
-        s.trust_env = False
-        s.proxies = self._proxies(c)
+        proxies = self._proxies(c)
+        s.proxies = proxies
+        s.trust_env = not proxies  # 未指定代理时跟随系统环境变量
         s.headers.update(self._headers(c.get("key")))
         return s
 

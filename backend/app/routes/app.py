@@ -47,18 +47,16 @@ class CheckUpdateReq(BaseModel):
 
 
 def _build_opener(settings=None):
-    """构造 urllib opener。代理逻辑（2026-09-28 修）：
-    - 必须 use_proxy=True 才读 settings.proxy，避免「开了代理但填错」导致下载失败
-    - proxy 字段保留 http:// 与 socks5:// 前缀；无前缀按 http:// 拼（兼容旧配置）
+    """构造 urllib opener。代理统一走 network.resolve_proxy（2026-09-28 统一入口）：
+    - 开关打开 → 用抓取面板填的代理地址（保留 http:// / socks5:// 前缀）
+    - 开关关闭 → 走系统代理环境变量
     """
     proxies = {}
-    if settings and settings.get("use_proxy", False):
-        p = settings.get("proxy", "")
-        if p and p != "不使用加速":
-            p = str(p).strip()
-            if "://" not in p:
-                p = "http://" + p
-            proxies = {"http": p, "https": p}
+    p = network.resolve_proxy(settings)
+    if p:
+        if "://" not in p:
+            p = "http://" + p
+        proxies = {"http": p, "https": p}
     if not proxies:
         for k in ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"):
             v = os.environ.get(k)
@@ -137,12 +135,8 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
         fn = os.path.basename(fn)
         dest = os.path.join(data_dir, "update_staging", fn)
         # 2026-09-28：改走网络层下载（支持 socks5 + 重试 + 流式写文件 + verify=False），
-        # 并严格受 use_proxy 开关门控 —— 避免「开了代理但填错」反而连不上。
-        proxy = None
-        if settings.get("use_proxy", False):
-            p = str(settings.get("proxy", "")).strip()
-            if p and p != "不使用加速":
-                proxy = p  # _build_proxy_list 会自动 http:// + socks5:// 都试
+        # 代理统一由 network.resolve_proxy 解析：开关打开用填的地址，关闭走系统代理。
+        proxy = network.resolve_proxy(settings) or None
         min_size = int(body.size) if body.size and int(body.size) > 0 else None
         ok, size, err = network.download_binary(
             body.url, proxy=proxy, dest_path=dest,

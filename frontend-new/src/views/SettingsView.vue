@@ -21,14 +21,7 @@
               <div class="tip">每行一个扫描网址，保存后自动同步到抓取区列表</div>
             </el-form-item>
             <el-form-item label="加速源">
-              <el-input
-                v-model="mirrorText"
-                type="textarea"
-                :rows="4"
-                placeholder="每行一个地址，例如：&#10;ghp.ci&#10;ghproxy.com&#10;kkgithub.com"
-                style="width:300px"
-              />
-              <div class="tip">每行一个镜像地址，保存后自动同步到抓取区列表</div>
+              <div class="tip">已移到「抓取面板」顶部的下拉框（{{ form.mirror || '不使用加速' }}）</div>
             </el-form-item>
             <el-form-item label="默认分组">
               <el-input v-model="form.default_group_name" placeholder="自动分组" style="width:200px" />
@@ -105,15 +98,11 @@
 
         <!-- 网络 -->
         <el-tab-pane label="网络" name="network">
-          <el-form label-width="100px" size="small">
-            <el-form-item label="网络代理">
-              <div style="display:flex;align-items:center;gap:8px">
-                <el-switch v-model="form.use_proxy" size="small" />
-                <span style="font-size:12px;color:var(--el-text-color-secondary)">启用代理</span>
-                <el-input v-if="form.use_proxy" v-model="form.proxy" placeholder="127.0.0.1:10808" style="width:200px;margin-left:8px" />
-              </div>
-            </el-form-item>
-          </el-form>
+          <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
+            <template #title>
+              代理开关已统一到「抓取面板」顶部（{{ form.use_proxy ? ('开启 · ' + (form.proxy || '未填地址')) : '关闭 · 走系统代理' }}）
+            </template>
+          </el-alert>
           <el-divider>抓取</el-divider>
           <el-form label-width="100px" size="small">
             <el-form-item label="抓取超时">
@@ -764,11 +753,8 @@
             <el-form-item label="最大输出 token">
               <el-input-number v-model="form.ai_max_tokens" :min="256" :max="32768" :step="256" />
             </el-form-item>
-            <el-form-item label="走系统代理">
-              <el-switch v-model="form.ai_use_proxy" />
-              <el-input v-model="form.proxy" placeholder="http://127.0.0.1:7890"
-                        style="width:240px;margin-left:10px" />
-              <span class="tip">默认直连，不走系统代理环境变量</span>
+            <el-form-item label="网络代理">
+              <div class="tip">跟随「抓取面板」的代理开关（{{ form.use_proxy ? '开启' : '关闭 · 走系统代理' }}）</div>
             </el-form-item>
             <el-form-item label="附加提示词">
               <el-input v-model="form.ai_prompt_extra" type="textarea" :rows="3" style="max-width:460px"
@@ -1041,7 +1027,6 @@ const urlWhitelistText = computed({
 const customColor = ref(currentTheme.value.startsWith('#') ? currentTheme.value : '#409EFF')
 const builtinSkin = ref(getBuiltinSkinName())
 const urlText = ref('')
-const mirrorText = ref('不使用加速')
 const epgText = ref('')
 
 const form = reactive({
@@ -1146,7 +1131,6 @@ const form = reactive({
   ai_timeout: 60,
   ai_temperature: 0.2,
   ai_max_tokens: 2048,
-  ai_use_proxy: false,
   ai_prompt_extra: '',
   ai_vision_enabled: false,
   ai_vision_base_url: '',
@@ -1304,9 +1288,6 @@ onMounted(async () => {
     if (data.url && data.url.length) {
       urlText.value = data.url.join('\n')
     }
-    if (data.mirror && data.mirror.length) {
-      mirrorText.value = data.mirror.join('\n')
-    }
     if (data.epg && data.epg.length) {
       epgText.value = data.epg.join('\n')
     }
@@ -1316,15 +1297,8 @@ onMounted(async () => {
 async function saveAll() {
   saving.value = true
   try {
-        const mirrors = mirrorText.value.split('\n').map(s => s.trim()).filter(Boolean)
-    if (mirrors.length > 0) {
-      try {
-        const { saveMirrorHistoryBatch } = await import('@/api/export')
-        await saveMirrorHistoryBatch(mirrors)
-      } catch (e) {
-        console.warn('同步镜像历史失败:', e)
-      }
-    }
+    // 镜像历史（mirror_history）改由「抓取面板」的加速源下拉框维护（allow-create 直接输入即入历史），
+    // 此处不再同步，避免用空值覆盖用户在抓取面板设置的镜像清单。
     const urls = urlText.value.split('\n').map(s => s.trim()).filter(Boolean)
     if (urls.length > 0) {
       try {
@@ -1343,12 +1317,16 @@ async function saveAll() {
         console.warn('同步EPG历史失败:', e)
       }
     }
-        if (mirrors.length > 0) form.mirror = mirrors[0]
     if (epgs.length > 0) form.default_epg = epgs[0]
-        const data = {
+    const data = {
       ...form,
       column_visibility: allCols.map(c => columnVisibility.value.includes(c.key)),
     }
+    // 代理 / 加速源由「抓取面板」独占管理，从 payload 剔除，
+    // 避免用设置页加载时的旧值覆盖用户在抓取面板刚做的改动。
+    delete data.use_proxy
+    delete data.proxy
+    delete data.mirror
     await settingsStore.saveSettings(data)
     ElMessage.success('设置已保存')
   } catch (e) {

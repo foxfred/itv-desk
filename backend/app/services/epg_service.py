@@ -495,9 +495,17 @@ class EpgService:
             src = self.load_source()
             if src and src.get("url"):
                 try:
-                    self.load_epg(src["url"], src.get("proxy", ""))
+                    self.load_epg(src["url"], self._global_proxy())
                 except Exception as e:
                     self.log_callback(f"EPG 定时刷新失败: {e}")
+
+    def _global_proxy(self):
+        """代理统一由「抓取面板」的 use_proxy 开关决定（2026-09-28 统一入口）。"""
+        from app.utils.network import resolve_proxy
+        try:
+            return resolve_proxy(Config.load_settings())
+        except Exception:
+            return ""
 
     def stop_refresh_scheduler(self):
         self._stop.set()
@@ -507,5 +515,5 @@ class EpgService:
         src = self.load_source()
         if not src or not src.get("url"):
             return {"error": "没有已保存的 EPG 源，请先加载一次 EPG"}
-        self.load_epg(src["url"], src.get("proxy", ""))
+        self.load_epg(src["url"], self._global_proxy())
         return {"loading": True}

@@ -314,6 +314,26 @@ def http_probe_channel(url, timeout=5, retries=1, proxy=None):
     return False, last_code, last_elapsed, "-"
 
 
+def resolve_proxy(settings, key="proxy"):
+    """统一代理解析（2026-09-28 统一入口）。
+
+    语义：开关 `use_proxy` 打开 → 返回 `settings[key]` 里的代理地址；
+          开关关闭 → 返回 ""（空串 = 交给 requests/urllib 走系统代理环境变量）。
+
+    **所有网络消费点都必须调本函数**，不要各自 `settings.get("proxy")` ——
+    此前 scan / repair / channel 三处只看地址非空、不看开关，
+    导致「设置里填了地址但开关关着」时行为不一致。
+    """
+    if not settings:
+        return ""
+    if not settings.get("use_proxy", False):
+        return ""
+    p = str(settings.get(key) or "").strip()
+    if not p or p == "不使用加速":
+        return ""
+    return p
+
+
 def _rm_quiet(path):
     try:
         import os

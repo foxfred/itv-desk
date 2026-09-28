@@ -709,7 +709,9 @@ class ChannelService:
         try:
             from app.main import DATA_DIR
             mirror = (settings or {}).get("mirror", "不使用加速")
-            proxy = (settings or {}).get("proxy", "")
+            # 代理统一由「抓取面板」的 use_proxy 开关门控（2026-09-28 统一入口）
+            from app.utils.network import resolve_proxy
+            proxy = resolve_proxy(settings or {})
             logos_dir = os.path.join(DATA_DIR, "logos")
             os.makedirs(logos_dir, exist_ok=True)
 

@@ -106,16 +106,21 @@
               <el-input v-model="cfgSuffix" placeholder="m3u,m3u8,txt" />
             </el-form-item>
             <el-form-item label="网络代理">
-              <div class="form-row">
-                <el-switch v-model="useProxy" size="small" />
-                <span class="mx-1" style="font-size:12px;color:var(--el-text-color-secondary)">使用代理</span>
+              <div class="form-row" style="flex-wrap:wrap;gap:6px">
+                <el-switch v-model="useProxy" size="small" @change="saveProxyCfg" />
+                <span class="mx-1" style="font-size:12px;color:var(--el-text-color-secondary)">
+                  {{ useProxy ? '走下方代理地址' : '走系统代理' }}
+                </span>
+              </div>
+              <div class="tip" style="font-size:11px;line-height:1.4">
+                开关管全部网络请求（抓取 / 扫描 / 修复 / 台标 / EPG / 更新 / AI）
               </div>
             </el-form-item>
             <el-form-item v-if="useProxy" label="代理地址">
-              <el-input v-model="cfgProxy" placeholder="127.0.0.1:10808" />
+              <el-input v-model="cfgProxy" placeholder="127.0.0.1:10808" @change="saveProxyCfg" />
             </el-form-item>
             <el-form-item v-else label="加速源">
-              <el-select v-model="cfgMirror" filterable allow-create>
+              <el-select v-model="cfgMirror" filterable allow-create @change="saveProxyCfg">
                 <el-option v-for="m in mirrorHistory" :key="m" :value="m" :label="m" />
               </el-select>
             </el-form-item>
@@ -2036,6 +2041,34 @@ function pollScrape() {
       }
     } catch { clearInterval(scrapeTimer); scraping.value = false }
   }, 1000)
+}
+
+// 代理 / 加速源是全局配置：后端 scan / repair / channel(台标) / epg / ai / 软件更新 都读同一份。
+// 抓取面板是唯一入口 —— 用户在这里一改就立刻写回 settings，保证全软件行为一致。
+// 语义：开关打开 = 走下面填的代理地址；开关关闭 = 走系统代理（环境变量）。
+async function saveProxyCfg() {
+  const on = useProxy.value
+  const payload = {
+    use_proxy: on,
+    proxy: cfgProxy.value,
+    mirror: on ? '不使用加速' : cfgMirror.value,
+  }
+  try {
+    await settingsStore.saveSettings(payload)
+    ElMessage.success(on ? '已启用代理（全软件生效）' : '已关闭代理（走系统代理）')
+  } catch (e) {
+    ElMessage.error('代理设置保存失败')
+    return
+  }
+  // 用户在加速源下拉框里直接输入的新镜像，写回镜像历史，下次仍可选
+  const m = cfgMirror.value
+  if (!on && m && m !== '不使用加速' && !mirrorHistory.value.includes(m)) {
+    mirrorHistory.value = [...mirrorHistory.value, m]
+    try {
+      const { saveMirrorHistoryBatch } = await import('@/api/export')
+      await saveMirrorHistoryBatch(mirrorHistory.value)
+    } catch { /* 历史写入失败不影响主流程 */ }
+  }
 }
 
 function getScrapeParams() {

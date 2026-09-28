@@ -46,7 +46,9 @@ def epg_load(body: EpgReq, epg_service=Depends(get_epg_service)):
 @router.post("/load-batch")
 def epg_load_batch(body: EpgBatchReq, epg_service=Depends(get_epg_service),
                    settings=Depends(get_settings)):
-    proxy = settings.get("proxy", "") if settings.get("use_proxy", False) else ""
+    # 代理统一由「抓取面板」的 use_proxy 开关门控（2026-09-28 统一入口）
+    from app.utils.network import resolve_proxy
+    proxy = resolve_proxy(settings)
     urls = [(s["url"], proxy) for s in body.sources if s.get("url")]
     if not urls:
         return {"error": "未提供 EPG 源地址"}

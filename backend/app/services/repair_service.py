@@ -525,7 +525,9 @@ class RepairService:
             classified[kind].append(ch)
 
         fetched_channels = []
-        proxy = self._settings.get("proxy", "") or None
+        # 代理统一由「抓取面板」的 use_proxy 开关门控（2026-09-28 统一入口）
+        from app.utils.network import resolve_proxy
+        proxy = resolve_proxy(self._settings) or None
         for parent in classified["parent"]:
             url = parent["url"]
             self.log_callback(f"正在抓取母链: {url}")
