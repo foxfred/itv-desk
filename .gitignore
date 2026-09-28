@@ -55,6 +55,8 @@ __pycache__/
 
 # 个人/内部文件，禁止发布到远程仓库
 AGENTS.md
+HANDOFF.md
+IPTV订阅源清单.md
 ELECTRON_MIGRATION.md
 方案书-*.md
 *.spec
