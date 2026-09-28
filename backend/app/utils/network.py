@@ -344,7 +344,8 @@ def _rm_quiet(path):
 
 
 def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
-                    headers=None, stop_event=None, min_size=None, chunk_size=256 * 1024):
+                    headers=None, stop_event=None, min_size=None, chunk_size=256 * 1024,
+                    progress_cb=None):
     """下载二进制文件到 dest_path（流式写文件，不解码）。
     优先 requests（支持 socks5/http 代理 + verify=False），无 requests 时回退 urllib。
     复用 _build_proxy_list 同时尝试 http:// 与 socks5:// 候选；
@@ -383,6 +384,10 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                 with _req.get(url, headers=headers, timeout=timeout,
                               proxies=proxies, stream=True, verify=False) as resp:
                     resp.raise_for_status()
+                    try:
+                        _total = int(resp.headers.get("Content-Length") or 0)
+                    except Exception:
+                        _total = 0
                     size = 0
                     with open(dest_path, "wb") as f:
                         for chunk in resp.iter_content(chunk_size=chunk_size):
@@ -393,6 +398,11 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                             if chunk:
                                 f.write(chunk)
                                 size += len(chunk)
+                                if progress_cb:
+                                    try:
+                                        progress_cb(size, _total)
+                                    except Exception:
+                                        pass
                     if min_size and size < min_size:
                         _rm_quiet(dest_path)
                         return False, size, f"下载不完整（{size} < {min_size}），疑似中途被掐断"
@@ -420,6 +430,10 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                 with opener.open(req, timeout=timeout, context=ssl_ctx) as resp:
                     if resp.status != 200:
                         return False, 0, f"HTTP {resp.status}"
+                    try:
+                        _total = int(resp.headers.get("Content-Length") or 0)
+                    except Exception:
+                        _total = 0
                     size = 0
                     with open(dest_path, "wb") as f:
                         while True:
@@ -435,6 +449,11 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                                 break
                             f.write(chunk)
                             size += len(chunk)
+                            if progress_cb:
+                                try:
+                                    progress_cb(size, _total)
+                                except Exception:
+                                    pass
                     if min_size and size < min_size:
                         _rm_quiet(dest_path)
                         return False, size, f"下载不完整（{size} < {min_size}），疑似中途被掐断"

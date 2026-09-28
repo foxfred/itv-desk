@@ -1,6 +1,7 @@
 import os
 import json
 import sys
+import threading
 import urllib.request
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -124,6 +125,28 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
+# 下载进度状态（供前端轮询显示百分比）
+# 2026-09-28：前端 axios 默认 30s 超时，而 110MB 更新包实测需 40s+，导致
+# 「下载失败: timeout of 30000ms exceeded」。现前端单独放宽超时，并轮询本状态显示进度，
+# 避免用户以为程序卡死。
+_dl_lock = threading.Lock()
+_dl_state = {
+    "running": False, "done": 0, "total": 0, "percent": 0,
+    "filename": "", "error": None, "finished": False,
+}
+
+
+def _set_dl_state(**kw):
+    with _dl_lock:
+        _dl_state.update(kw)
+
+
+@router.get("/download-progress")
+def download_progress():
+    with _dl_lock:
+        return dict(_dl_state)
+
+
 @router.post("/download-update")
 def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), settings=Depends(get_settings)):
     if not body.url:
@@ -138,17 +161,28 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
         # 代理统一由 network.resolve_proxy 解析：开关打开用填的地址，关闭走系统代理。
         proxy = network.resolve_proxy(settings) or None
         min_size = int(body.size) if body.size and int(body.size) > 0 else None
+        _set_dl_state(running=True, done=0, total=min_size or 0, percent=0,
+                      filename=fn, error=None, finished=False)
+
+        def _progress(done, total):
+            t = total or min_size or 0
+            _set_dl_state(done=done, total=t,
+                          percent=int(done * 100 / t) if t else 0)
+
         ok, size, err = network.download_binary(
             body.url, proxy=proxy, dest_path=dest,
             timeout=120, max_retries=3, min_size=min_size,
+            progress_cb=_progress,
         )
         if not ok:
             _rm_quiet(dest)
+            _set_dl_state(running=False, finished=True, error=str(err))
             raise HTTPException(500, f"下载失败: {err}")
     except HTTPException:
         raise
     except Exception as e:
         _rm_quiet(dest)
+        _set_dl_state(running=False, finished=True, error=str(e))
         raise HTTPException(500, f"下载失败: {e}")
 
     actual = os.path.getsize(dest)
@@ -156,11 +190,16 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
         _rm_quiet(dest)
         got_mb = round(actual / 1048576, 1)
         want_mb = round(int(body.size) / 1048576, 1)
+        _set_dl_state(running=False, finished=True, error="下载不完整")
         raise HTTPException(500, f"更新包下载不完整（{got_mb}MB / {want_mb}MB），已删除残包，请重试")
     if body.sha256:
+        _set_dl_state(percent=100, done=actual, total=actual)
         if _sha256_file(dest).lower() != str(body.sha256).strip().lower():
             _rm_quiet(dest)
+            _set_dl_state(running=False, finished=True, error="校验失败")
             raise HTTPException(500, "更新包校验失败（文件损坏），已删除，请重试下载")
+    _set_dl_state(running=False, finished=True, percent=100,
+                  done=actual, total=actual, error=None)
     return {"ok": True, "path": dest, "size": actual}
 
 

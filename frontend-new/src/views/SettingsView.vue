@@ -79,7 +79,7 @@
                    <p v-if="updateInfo.notes" class="ur-notes">{{ updateInfo.notes }}</p>
                    <div class="ur-actions">
                      <el-button v-if="updateInfo.packages.length && !updateInfo.is_installing" type="success" size="small" @click="doDownloadUpdate" :loading="downloading">
-                       {{ downloadPaths.length ? '重新下载更新包' : '下载更新包' }}
+                       {{ downloading ? `下载中 ${dlProgress}%` : (downloadPaths.length ? '重新下载更新包' : '下载更新包') }}
                      </el-button>
                      <el-button
                        v-if="downloadPaths.length && !updateInfo.is_installing"
@@ -909,6 +909,7 @@ const curVersion = ref('1.0.0')
 const checking = ref(false)
 const updateInfo = reactive({ has_update: false, latest: '', notes: '', packages: [], is_installing: false })
 const downloading = ref(false)
+const dlProgress = ref(0)
 const downloadPaths = ref([])  
 const downloadPkgs = ref([])   
 const encFile = ref(null)
@@ -1429,9 +1430,19 @@ function isFolderPkg(pkg) {
 async function doDownloadUpdate() {
   if (!updateInfo.packages.length) return
   downloading.value = true
+  dlProgress.value = 0
   downloadPaths.value = []
   downloadPkgs.value = []
+  // 后端是同步下载，需另一路请求轮询进度显示百分比
+  let timer = null
   try {
+    timer = setInterval(async () => {
+      try {
+        const { data } = await appApi.downloadProgress()
+        const p = Number(data?.percent)
+        if (!Number.isNaN(p)) dlProgress.value = Math.min(99, p)
+      } catch { /* 轮询失败忽略，不影响下载本身 */ }
+    }, 700)
     const folder = updateInfo.packages.filter(isFolderPkg)
     const list = folder.length ? folder : updateInfo.packages
     for (const pkg of list) {
@@ -1439,12 +1450,15 @@ async function doDownloadUpdate() {
       downloadPaths.value.push(data.path)
       downloadPkgs.value.push(pkg)
     }
+    dlProgress.value = 100
     const mb = Math.round((downloadPkgs.value.reduce((s, p) => s + (Number(p.size) || 0), 0) / 1048576) * 10) / 10
     ElMessage.success(`已下载并校验更新包${mb ? `（${mb}MB）` : ''}，可以点「立即更新并重启」`)
   } catch (e) {
     downloadPaths.value = []
     downloadPkgs.value = []
     ElMessage.error('下载失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    if (timer) clearInterval(timer)
   }
   downloading.value = false
 }
