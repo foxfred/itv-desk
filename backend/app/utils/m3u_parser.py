@@ -150,23 +150,60 @@ class Parser:
                     channels.append({"name": name, "url": l, "group": group})
                     name = group = ""
         else:
+            current_genre = ""
             for l in lines:
                 l = l.strip()
+                if "#genre#" in l and not l.startswith("#EXTINF"):
+                    segs = [q.strip() for q in l.split(",")]
+                    remain = [q for q in segs if q and q != "#genre#"]
+                    current_genre = remain[0] if remain else ""
+                    continue
                 if "," in l and ("http://" in l or "https://" in l or "rtmp://" in l or "rtsp://" in l):
                     p = l.split(",", 1)
                     name = Parser.standardize_name(p[0].strip())
                     if name and p[-1].strip():
-                        channels.append({"name": name, "url": p[-1].strip(), "group": ""})
-        return channels
+                        channels.append({"name": name, "url": p[-1].strip(), "group": current_genre})
+        return [c for c in channels if not _is_noise_channel(c.get("name"), c.get("url"))]
+
+
+# 明显非频道的噪音条目（占位 / 公告 / 免责声明），避免污染频道库
+# 2026-09-28 新增：kakaxi-1 等源在「更新时间,#genre#」分组下放了
+# 「时间戳,http://.../Disclaimer.mp4」占位条目，会被当频道入库。
+_NOISE_NAME_RE = re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}([\sT]+\d{1,2}:\d{2}(:\d{2})?)?$')
+_NOISE_NAMES = {"更新时间", "更新时间戳", "公告", "免责声明", "免责声明视频"}
+
+
+def _is_noise_channel(name, url):
+    """判断是否为噪音条目：纯时间戳名 / 免责声明视频 / 公告占位。"""
+    n = str(name or "").strip()
+    u = str(url or "").strip().lower()
+    if not n:
+        return True
+    if _NOISE_NAME_RE.match(n):
+        return True
+    if "disclaimer" in u:
+        return True
+    if n in _NOISE_NAMES:
+        return True
+    return False
 
 
 def extract_channels(raw_text):
     lines = raw_text.splitlines()
     channels = []
     i = 0
+    current_genre = ""  # TVBox 风格分组上下文（「分组名,#genre#」）
     while i < len(lines):
         line = lines[i].strip()
         if not line:
+            i += 1
+            continue
+        # TVBox / 电视盒子通用分组行： 「分组名,#genre#」 或 「#genre#,分组名」
+        # 例：#genre# 在 iptv.txt / live.txt 里作为分组分隔符，解析时须转成 group
+        if "#genre#" in line and not line.startswith("#EXTINF"):
+            segs = [p.strip() for p in line.split(",")]
+            remain = [p for p in segs if p and p != "#genre#"]
+            current_genre = remain[0] if remain else ""
             i += 1
             continue
         if line.startswith("#EXTINF:"):
@@ -198,7 +235,7 @@ def extract_channels(raw_text):
                     channels.append({
                         "name": name,
                         "url": url,
-                        "group": group,
+                        "group": group or current_genre,
                         "logo": logo,
                         "tag": tag,
                         "is_fake_live": is_fake_live,
@@ -227,7 +264,7 @@ def extract_channels(raw_text):
             channels.append({
                 "name": name,
                 "url": url_clean,
-                "group": Config.get_setting("default_group_name", "自动分组"),
+                "group": current_genre or Config.get_setting("default_group_name", "自动分组"),
                 "logo": "",
                 "url_note": url_note,
                 "raw_extinf": f'#EXTINF:-1 group-title="{Config.get_setting("default_group_name", "自动分组")}",{name}',
@@ -250,7 +287,7 @@ def extract_channels(raw_text):
                 channels.append({
                     "name": name_line.strip(),
                     "url": url_clean,
-                    "group": Config.get_setting("default_group_name", "自动分组"),
+                    "group": current_genre or Config.get_setting("default_group_name", "自动分组"),
                     "logo": "",
                     "url_note": url_note,
                     "raw_extinf": f'#EXTINF:-1 group-title="{Config.get_setting("default_group_name", "自动分组")}",{name_line.strip()}',
@@ -272,7 +309,7 @@ def extract_channels(raw_text):
                     channels.append({
                         "name": prev,
                         "url": url_clean,
-                        "group": Config.get_setting("default_group_name", "自动分组"),
+                        "group": current_genre or Config.get_setting("default_group_name", "自动分组"),
                         "logo": "",
                         "url_note": url_note,
                         "raw_extinf": f'#EXTINF:-1 group-title="{Config.get_setting("default_group_name", "自动分组")}",{prev}',
@@ -281,7 +318,7 @@ def extract_channels(raw_text):
             i += 1
             continue
         i += 1
-    return channels
+    return [c for c in channels if not _is_noise_channel(c.get("name"), c.get("url"))]
 
 
 def _write_m3u_channel(f, ch, with_tvg_name=False):

@@ -38,6 +38,37 @@ class ScraperEngine:
             return format_github_raw_url(url, "")
         return format_github_raw_url(url, mirror)
 
+    def _mirror_chain(self, url, mirror, limit=4):
+        """构造候选 URL 链：用户指定镜像 → 直连 → 内置镜像历史（自动 fallback）。
+
+        2026-09-28 新增：raw.githubusercontent.com 在国内直连不稳，原先只有
+        「镜像失败→回退直连」单向兜底，缺「直连失败→自动试镜像」，导致订阅源
+        大量拉取失败。这里改为候选链自动协商：逐个尝试，第一个成功即用。
+        非 github 系 URL 不追加镜像候选，避免白白多发请求。
+        """
+        chain = []
+        if mirror and mirror != "不使用加速":
+            chain.append(format_github_raw_url(url, mirror))
+        chain.append(format_github_raw_url(url, ""))
+        low = (url or "").lower()
+        # 仅 github.com / raw.githubusercontent.com 可套镜像；*.github.io（Pages）不套
+        if "raw.githubusercontent.com" in low or "github.com" in low:
+            try:
+                hist = Config.get_setting("mirror_history", []) or []
+            except Exception:
+                hist = []
+            for m in hist:
+                m = str(m or "").strip()
+                if not m or m == "不使用加速" or m == mirror:
+                    continue
+                chain.append(format_github_raw_url(url, m))
+        out, seen = [], set()
+        for c in chain:
+            if c and c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out[:limit]
+
     def _throttle(self, min_interval):
         if min_interval <= 0:
             return
@@ -54,31 +85,28 @@ class ScraperEngine:
         return {"name": netloc, "url": url, "group": "", "tag": "", "logo": ""}
 
     def _fetch(self, url, proxy, mirror, timeout, retries, budget):
-        sources = []
-        dl = self._apply_mirror(url, mirror)
-        if dl != url:
-            sources.append(dl)
-        sources.append(url)
+        sources = self._mirror_chain(url, mirror) or [url]
         last_err = "下载失败"
-        max_attempts = 1 + max(0, retries)
-        for attempt in range(max_attempts):
+        for idx, src in enumerate(sources):
             if self.stop and self.stop.is_set():
                 return "", "用户中断"
-            src = sources[min(attempt, len(sources) - 1)]
             self._throttle(self._min_interval)
             content, err = download_url(
                 src, proxy=proxy or None, timeout=timeout, max_retries=1, stop_event=self.stop
             )
             if not err and content:
+                if idx > 0:
+                    try:
+                        _host = urlparse(src).netloc
+                    except Exception:
+                        _host = src[:40]
+                    self.log(f"  自动切换线路成功（第 {idx + 1} 条候选）: {_host}")
                 return content, None
             last_err = err or "下载失败"
-            if attempt < max_attempts - 1:
-                if budget["left"] > 0:
-                    budget["left"] -= 1
-                    backoff = min(0.5 * (2 ** attempt), 5.0)
-                    time.sleep(backoff)
-                else:
-                    break
+            if budget.get("left", 0) > 0:
+                budget["left"] -= 1
+            else:
+                break
         return "", last_err
 
     def _extract_variants(self, m3u_content, base_url):

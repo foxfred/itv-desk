@@ -112,25 +112,40 @@
     </el-dialog>
 
     <!-- 预置源弹窗 -->
-    <el-dialog v-model="showPresets" title="预置订阅源" width="560px" destroy-on-close>
+    <el-dialog v-model="showPresets" title="预置订阅源" width="660px" destroy-on-close>
       <el-alert type="info" :closable="false" show-icon class="role-alert">
-        <template #title>勾选后一键导入，导入完成自动更新拉取频道。已存在的源会自动跳过。</template>
+        <template #title>按类别分组，勾选后一键导入，导入完成自动更新拉取频道。已存在的源会自动跳过。</template>
       </el-alert>
-      <el-table :data="presets" v-loading="loadingPresets" size="small" border>
-        <el-table-column width="50" align="center">
-          <template #default="{ row }">
-            <el-checkbox v-model="row._checked" :disabled="row.added" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="140" />
-        <el-table-column prop="url" label="地址" min-width="260" show-overflow-tooltip />
-        <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.added" type="success" size="small">已添加</el-tag>
-            <el-tag v-else type="info" size="small">未添加</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div v-loading="loadingPresets" class="preset-body">
+        <el-collapse v-model="presetActiveGroups">
+          <el-collapse-item v-for="grp in presetGroups" :key="grp.name" :name="grp.name">
+            <template #title>
+              <span class="preset-group-title">{{ grp.name }}</span>
+              <el-tag size="small" type="info" effect="plain" class="preset-group-tag">
+                {{ grp.items.length }} 个
+              </el-tag>
+              <el-tag v-if="grp.addedCount" size="small" type="success" effect="plain" class="preset-group-tag">
+                已添加 {{ grp.addedCount }}
+              </el-tag>
+            </template>
+            <el-table :data="grp.items" size="small" border>
+              <el-table-column width="46" align="center">
+                <template #default="{ row }">
+                  <el-checkbox v-model="row._checked" :disabled="row.added" />
+                </template>
+              </el-table-column>
+              <el-table-column prop="name" label="名称" min-width="190" />
+              <el-table-column prop="url" label="地址" min-width="230" show-overflow-tooltip />
+              <el-table-column label="状态" width="86" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.added" type="success" size="small">已添加</el-tag>
+                  <el-tag v-else type="info" size="small">未添加</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
       <template #footer>
         <el-button @click="showPresets = false">取消</el-button>
         <el-button type="primary" @click="doImportPresets" :loading="importing">导入并更新</el-button>
@@ -140,7 +155,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as subApi from '@/api/subscriptions'
 import { getHistory, saveUrlHistory } from '@/api/export'
@@ -158,6 +173,22 @@ const showPresets = ref(false)
 const loadingPresets = ref(false)
 const importing = ref(false)
 const presets = ref([])
+const presetActiveGroups = ref([])
+
+// 预置源按 category 分组（保持后端 PRESET_SOURCES 的类别顺序）
+const presetGroups = computed(() => {
+  const map = new Map()
+  for (const p of presets.value) {
+    const key = p.category || '其他'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(p)
+  }
+  return [...map.entries()].map(([name, items]) => ({
+    name,
+    items,
+    addedCount: items.filter(i => i.added).length,
+  }))
+})
 
 const form = reactive({
   name: '',
@@ -272,6 +303,7 @@ async function openPresets() {
   try {
     const { data } = await subApi.listPresets()
     presets.value = (data || []).map(p => ({ ...p, _checked: !p.added }))
+    presetActiveGroups.value = presetGroups.value.map(g => g.name)  // 默认展开全部类别
   } catch { ElMessage.error('获取预置源失败') }
   loadingPresets.value = false
 }
@@ -343,6 +375,17 @@ function pushUrlHistory(u) {
 }
 .role-alert {
   margin-bottom: 12px;
+}
+.preset-body {
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.preset-group-title {
+  font-weight: 600;
+}
+.preset-group-tag {
+  margin-left: 8px;
 }
 .form-tip {
   font-size: 11px;

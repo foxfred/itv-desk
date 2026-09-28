@@ -6,12 +6,39 @@ from datetime import datetime
 
 AUTO_DISABLE_FAILS = 3
 
-# 预置订阅源（2026-09-17 实测可用的 #EXTM3U 母链，死链不进此列表）
+# 预置订阅源（2026-09-28 全量复检：均为实测 HTTP 200 且含 #EXTINF 的可用母链，死链不进此列表）
+# category 供前端按类别分组展示；列表顺序即分组展示顺序。
 PRESET_SOURCES = [
-    {"name": "iptv-org 中国频道", "url": "https://iptv-org.github.io/iptv/countries/cn.m3u"},
-    {"name": "Free-TV 精选", "url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"},
-    {"name": "Guovin iptv-api 聚合", "url": "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u"},
-    {"name": "myIPTV 每日更新", "url": "https://raw.githubusercontent.com/suxuang/myIPTV/main/ipv4.m3u"},
+    # —— 综合聚合（全球 / 自动采集测速） ——
+    {"name": "iptv-org 中国频道（官方分类）", "category": "综合聚合",
+     "url": "https://iptv-org.github.io/iptv/countries/cn.m3u"},
+    {"name": "iptv-org 中文频道全集（含港澳台）", "category": "综合聚合",
+     "url": "https://iptv-org.github.io/iptv/languages/zho.m3u"},
+    {"name": "Free-TV 精选（全球免费台）", "category": "综合聚合",
+     "url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"},
+    {"name": "Guovin iptv-api 聚合（自动测速）", "category": "综合聚合",
+     "url": "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u"},
+    # —— 中国大陆专项（央视 / 卫视 / 地方台，均带台标） ——
+    {"name": "myIPTV 典藏版（卫视最全）", "category": "中国大陆专项",
+     "url": "https://raw.githubusercontent.com/suxuang/myIPTV/main/ipv4.m3u"},
+    {"name": "CCSH 多平台聚合（频道最多）", "category": "中国大陆专项",
+     "url": "https://raw.githubusercontent.com/CCSH/IPTV/main/live_platforms.m3u"},
+    {"name": "Collect-IPTV 优选（4 小时更新）", "category": "中国大陆专项",
+     "url": "https://raw.githubusercontent.com/zilong7728/Collect-IPTV/main/best_sorted.m3u"},
+    {"name": "ChinaIPTV 央视卫视全量", "category": "中国大陆专项",
+     "url": "https://raw.githubusercontent.com/hujingguang/ChinaIPTV/main/cnTV1_ALL.m3u8"},
+    {"name": "YanG-1989 高清源", "category": "中国大陆专项",
+     "url": "https://raw.githubusercontent.com/YanG-1989/m3u/main/Gather.m3u"},
+    {"name": "vbskycn IPTV 综合源", "category": "中国大陆专项",
+     "url": "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.m3u"},
+    # —— 中国港澳台 ——
+    {"name": "ChinaIPTV 中国香港频道", "category": "中国港澳台",
+     "url": "https://raw.githubusercontent.com/hujingguang/ChinaIPTV/main/HongKong.m3u8"},
+    {"name": "ChinaIPTV 中国台湾频道", "category": "中国港澳台",
+     "url": "https://raw.githubusercontent.com/hujingguang/ChinaIPTV/main/TaiWan.m3u8"},
+    # —— 每日检测优选（只保留当日有效源） ——
+    {"name": "best-fan 每日检测", "category": "每日检测优选",
+     "url": "https://raw.githubusercontent.com/best-fan/iptv-sources/main/cn_all.m3u8"},
 ]
 
 
