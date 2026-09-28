@@ -212,6 +212,9 @@
           <el-button size="small" type="primary" plain :loading="nfRunning" @click="openNamefix">名称校正</el-button>
           <span v-if="nfRunning" class="filter-info">校正 {{ nfDone }}/{{ nfTotal }}</span>
           <el-button size="small" type="primary" plain :loading="aiRunning" @click="openAiGroup">AI 智能分组</el-button>
+          <el-button size="small" type="primary" plain :loading="aiNfRunning" @click="openAiNamefix">AI 智能清洗</el-button>
+          <el-button size="small" type="primary" plain @click="openAiBox">AI 工具箱</el-button>
+          <el-button v-if="aiHitNames.length" size="small" text @click="aiHitNames = []">清除智能命中筛选（{{ aiHitNames.length }}）</el-button>
           <el-button size="small" text style="margin-left:auto" @click="showColumnSettings = true">列设置</el-button>
         </div>
 
@@ -239,6 +242,69 @@
             <el-button @click="showAiGroup = false">取消</el-button>
             <el-button type="primary" :disabled="!aiRows.length" :loading="aiApplying" @click="applyAiGroup">
               应用到 {{ aiRows.length }} 个频道
+            </el-button>
+          </template>
+        </el-dialog>
+
+        <!-- AI 智能清洗 -->
+        <el-dialog v-model="showAiNamefix" title="AI 智能清洗（频道名）" width="720px" append-to-body>
+          <el-alert v-if="!aiNfReady" type="warning" :closable="false" show-icon style="margin-bottom:10px"
+                    title="尚未启用或未填写 AI 模型，请先到「设置 → AI 智能」配置 API 地址与 Key" />
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <span class="filter-info">分析条数</span>
+            <el-input-number v-model="aiNfLimit" :min="10" :max="400" :step="50" size="small" />
+            <el-input v-model="aiNfExtra" size="small" style="flex:1"
+                      placeholder="附加要求（可选），例如：去掉所有「频道」两个字" />
+            <el-button size="small" type="primary" :loading="aiNfRunning" @click="runAiNamefix">开始分析</el-button>
+          </div>
+          <div v-if="aiNfSummary" class="filter-info" style="margin-bottom:8px">{{ aiNfSummary }}</div>
+          <el-table :data="aiNfRows" height="340" size="small" v-loading="aiNfRunning">
+            <el-table-column prop="name" label="原名" min-width="240" show-overflow-tooltip />
+            <el-table-column label="清洗后（可改）" width="240">
+              <template #default="{ row }">
+                <el-input v-model="row.newname" size="small" />
+              </template>
+            </el-table-column>
+          </el-table>
+          <template #footer>
+            <el-button @click="showAiNamefix = false">取消</el-button>
+            <el-button type="primary" :disabled="!aiNfRows.length" :loading="aiNfApplying" @click="applyAiNamefix">
+              应用到 {{ aiNfRows.length }} 个频道
+            </el-button>
+          </template>
+        </el-dialog>
+
+        <!-- AI 工具箱：13 项 AI 能力统一入口 -->
+        <el-dialog v-model="showAiBox" title="AI 工具箱" width="820px" append-to-body>
+          <el-alert v-if="!aiBoxReady" type="warning" :closable="false" show-icon style="margin-bottom:10px"
+                    title="尚未启用或未填写 AI 模型，请先到「设置 → AI 智能」配置 API 地址与 Key" />
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+            <el-select v-model="boxKind" size="small" style="width:190px">
+              <el-option v-for="k in boxKinds" :key="k.value" :label="k.label" :value="k.value" />
+            </el-select>
+            <el-input v-if="boxNeedText" v-model="boxText" size="small" style="flex:1;min-width:220px"
+                      :placeholder="boxPlaceholder" />
+            <el-input-number v-if="boxNeedLimit" v-model="boxLimit" :min="10" :max="300" :step="50" size="small" />
+            <el-button size="small" type="primary" :loading="boxRunning" @click="runAiBox">运行</el-button>
+          </div>
+          <el-input v-if="boxKind === 'epgsum'" v-model="boxText2" type="textarea" :rows="3"
+                    placeholder="节目列表，每行一条（如 07:00 新闻联播）" style="margin-bottom:8px" />
+          <div v-if="boxSummary" class="filter-info" style="margin-bottom:8px">{{ boxSummary }}</div>
+          <el-table v-if="boxRows.length" :data="boxRows" height="320" size="small" v-loading="boxRunning">
+            <el-table-column v-for="c in boxCols" :key="c.prop" :prop="c.prop" :label="c.label"
+                             :min-width="c.width || 160" show-overflow-tooltip />
+          </el-table>
+          <pre v-else-if="boxTextOut" class="ai-box-pre">{{ boxTextOut }}</pre>
+          <template #footer>
+            <el-button @click="showAiBox = false">关闭</el-button>
+            <el-button v-if="boxKind === 'search' && boxRows.length" type="primary" @click="applyBoxHit">
+              只看命中（{{ boxRows.length }}）
+            </el-button>
+            <el-button v-if="boxKind === 'tags' && boxRows.length" type="primary" :loading="boxApplying" @click="applyBoxTags">
+              应用到 {{ boxRows.length }} 个频道
+            </el-button>
+            <el-button v-if="boxKind === 'nl' && boxActions.length" type="primary" @click="applyBoxNl">
+              执行 {{ boxActions.length }} 步
             </el-button>
           </template>
         </el-dialog>
@@ -745,6 +811,7 @@ import * as channelApi from '@/api/channels'
 import * as scrapeApi from '@/api/scrape'
 import * as checkApi from '@/api/check'
 import * as aiApi from '@/api/ai'
+import request from '@/api/request'
 import * as exportApi from '@/api/export'
 import * as configApi from '@/api/config'
 import * as epgApi from '@/api/epg'
@@ -855,6 +922,10 @@ const filtered = computed(() => {
   if (filterStack.value) list = list.filter(c => c.stack === filterStack.value)
   if (hideDead.value) list = list.filter(c => !(c.health && c.health.dead))
   if (favoriteOnly.value) list = list.filter(c => isFavRow(c))
+  if (aiHitNames.value.length) {
+    const hit = new Set(aiHitNames.value)
+    list = list.filter(c => hit.has(c.name))
+  }
   const kw = searchKw.value.trim().toLowerCase()
   if (kw) list = list.filter(c => [c.name, c.group, c.url, c.tag].some(v => String(v || '').toLowerCase().includes(kw)))
   const sp = sortState.prop, so = sortState.order
@@ -1223,7 +1294,190 @@ async function startNamefix() {
 
 function onNfSelect(rows) { nfSelected.value = rows }
 
-// ---- AI 智能分组 ----
+// ---- AI 工具箱（13 项能力统一入口） ----
+const showAiBox = ref(false)
+const aiBoxReady = ref(false)
+const boxKind = ref('tags')
+const boxText = ref('')
+const boxText2 = ref('')
+const boxLimit = ref(120)
+const boxRunning = ref(false)
+const boxApplying = ref(false)
+const boxSummary = ref('')
+const boxTextOut = ref('')
+const boxRows = ref([])
+const boxCols = ref([])
+const boxActions = ref([])
+const boxMapping = ref({})
+
+const boxKinds = [
+  { value: 'tags', label: '频道打标与分级' },
+  { value: 'search', label: '模糊搜索（同义词）', ph: '搜索词，如：中央一台' },
+  { value: 'clean', label: '名称清洗裁决', ph: '' },
+  { value: 'rank', label: '多源择优排序', ph: '频道名' },
+  { value: 'verify', label: '源真实性核验', ph: '频道名（需已抓帧）' },
+  { value: 'diagnose', label: '播放故障诊断', ph: '' },
+  { value: 'epg', label: 'EPG 补齐建议', ph: '' },
+  { value: 'epgsum', label: '节目单摘要', ph: '频道名' },
+  { value: 'nl', label: '自然语言操作', ph: '如：把体育类频道重新检测一遍' },
+  { value: 'garbled', label: '乱码智能还原', ph: '粘贴乱码文本' },
+  { value: 'audit', label: '订阅源体检', ph: '订阅源地址（可留空，默认体检当前库）' },
+  { value: 'wall', label: '频道墙智能排布', ph: '' },
+  { value: 'exportdesc', label: '导出描述生成', ph: '' },
+]
+
+const boxNeedText = computed(() => boxKinds.some(k => k.value === boxKind.value && k.ph !== undefined))
+const boxNeedLimit = computed(() => ['tags', 'wall', 'epg', 'clean', 'audit', 'exportdesc'].includes(boxKind.value))
+const boxPlaceholder = computed(() => (boxKinds.find(k => k.value === boxKind.value) || {}).ph || '')
+
+function openAiBox() {
+  showAiBox.value = true
+  aiApi.getAiConfig().then(({ data }) => {
+    aiBoxReady.value = !!(data && data.ai_enabled && (data.ai_api_key_set || data.ai_api_key))
+  }).catch(() => { aiBoxReady.value = false })
+}
+
+async function runAiBox() {
+  boxRunning.value = true
+  boxSummary.value = ''
+  boxTextOut.value = ''
+  boxRows.value = []
+  boxActions.value = []
+  try {
+    const k = boxKind.value
+    if (k === 'tags') {
+      const { data } = await aiApi.tagChannels({ apply: false, limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || '打标失败'); return }
+      boxMapping.value = data.mapping || {}
+      boxRows.value = Object.entries(data.mapping || {}).map(([name, tags]) => ({ name, tags: (tags || []).join('、') }))
+      boxCols.value = [{ prop: 'name', label: '频道', width: 300 }, { prop: 'tags', label: '标签', width: 300 }]
+      boxSummary.value = `模型为 ${data.count || 0} 个频道打了标签，可点「应用」写入 tag 体系`
+    } else if (k === 'search') {
+      const { data } = await aiApi.searchExpand({ query: boxText.value, limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || '搜索失败'); return }
+      boxRows.value = (data.matched || []).map(n => ({ name: n }))
+      boxCols.value = [{ prop: 'name', label: '命中频道', width: 400 }]
+      boxSummary.value = `命中 ${data.count || 0} 个${(data.keywords || []).length ? '，扩展关键词：' + (data.keywords || []).join('、') : ''}`
+    } else if (k === 'clean') {
+      const { data } = await aiApi.cleanNames({ limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || '裁决失败'); return }
+      boxMapping.value = data.mapping || {}
+      boxRows.value = Object.entries(data.mapping || {}).map(([name, v]) => {
+        const d = (data.detail || {})[name] || {}
+        return { name, fixed: v, confidence: d.confidence ?? '-', reason: d.reason || '' }
+      })
+      boxCols.value = [{ prop: 'name', label: '原名', width: 200 }, { prop: 'fixed', label: '建议名', width: 180 },
+        { prop: 'confidence', label: '置信度', width: 100 }, { prop: 'reason', label: '理由', width: 240 }]
+      boxSummary.value = `模型裁决 ${data.count || 0} 条（结果可直接对照，在「AI 智能清洗」里应用改名）`
+    } else if (k === 'rank') {
+      const { data } = await aiApi.rankSources({ name: boxText.value })
+      if (!data.ok) { ElMessage.error(data.error || '排序失败'); return }
+      const reason = data.reason || {}
+      boxRows.value = (data.order || []).map((u, i) => ({ idx: i + 1, url: u, reason: reason[u] || '' }))
+      boxCols.value = [{ prop: 'idx', label: '#', width: 60 }, { prop: 'url', label: '源地址', width: 400 },
+        { prop: 'reason', label: '理由', width: 220 }]
+      boxSummary.value = `按稳定性推荐排序，共 ${boxRows.value.length} 个源`
+    } else if (k === 'verify') {
+      const { data } = await aiApi.verifySource({ name: boxText.value })
+      if (!data.ok) { ElMessage.error(data.error || '核验失败'); return }
+      const m = { yes: '相符', no: '不符（疑似挂羊头卖狗肉）', unsure: '信息不足' }
+      boxTextOut.value = `核验结果：${m[data.verdict] || data.verdict}\n理由：${data.reason || '—'}`
+      boxSummary.value = '视觉模型判断画面与频道名是否相符'
+    } else if (k === 'diagnose') {
+      const { data } = await aiApi.diagnose({ lines: 200 })
+      if (!data.ok) { ElMessage.error(data.error || '诊断失败'); return }
+      boxTextOut.value = `可能原因：${data.cause || '—'}\n\n${data.detail || ''}\n\n建议：\n` +
+        ((data.suggestions || []).map((s, i) => `${i + 1}. ${s}`).join('\n') || '—')
+      boxSummary.value = '基于 app.log 尾部与检测信息的诊断结论'
+    } else if (k === 'epg') {
+      const { data } = await aiApi.epgSuggest({ limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || 'EPG 建议失败'); return }
+      boxRows.value = Object.entries(data.mapping || {}).map(([name, v]) => ({ name, type: v.type, keyword: v.keyword }))
+      boxCols.value = [{ prop: 'name', label: '频道', width: 260 }, { prop: 'type', label: 'EPG 类型', width: 120 },
+        { prop: 'keyword', label: '检索关键词', width: 220 }]
+      boxSummary.value = `共 ${data.count || 0} 个频道的 EPG 补齐建议`
+    } else if (k === 'epgsum') {
+      const progs = boxText2.value.split('\n').map(s => s.trim()).filter(Boolean)
+      const { data } = await aiApi.epgSummary({ name: boxText.value, programs: progs })
+      if (!data.ok) { ElMessage.error(data.error || '摘要失败'); return }
+      boxTextOut.value = data.summary || '—'
+      boxSummary.value = '节目单中文摘要'
+    } else if (k === 'nl') {
+      const { data } = await aiApi.nlPlan({ text: boxText.value })
+      if (!data.ok) { ElMessage.error(data.error || '解析失败'); return }
+      boxActions.value = data.actions || []
+      boxRows.value = (data.actions || []).map((a, i) => ({ idx: i + 1, api: a.api, desc: a.desc }))
+      boxCols.value = [{ prop: 'idx', label: '#', width: 60 }, { prop: 'api', label: '接口', width: 260 },
+        { prop: 'desc', label: '说明', width: 260 }]
+      boxSummary.value = `意图：${data.intent || '—'}\n模型提示：${data.reply || '—'}`
+    } else if (k === 'garbled') {
+      const { data } = await aiApi.garbled({ text: boxText.value })
+      if (!data.ok) { ElMessage.error(data.error || '判断失败'); return }
+      boxTextOut.value = `判断编码：${data.encoding || 'unknown'}${data.confidence != null ? '（置信度 ' + data.confidence + '）' : ''}\n\n还原：${data.fixed || '—'}`
+      boxSummary.value = '乱码成因判断与还原'
+    } else if (k === 'audit') {
+      const { data } = await aiApi.auditSubscription({ url: boxText.value, limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || '体检失败'); return }
+      boxTextOut.value = `健康分：${data.score != null ? data.score : '—'}\n\n问题：\n` +
+        ((data.issues || []).map(s => '• ' + s).join('\n') || '—') + '\n\n建议：\n' +
+        ((data.suggestions || []).map(s => '• ' + s).join('\n') || '—')
+      boxSummary.value = '订阅源结构与命名体检'
+    } else if (k === 'wall') {
+      const { data } = await aiApi.wallOrder({ limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || '排布失败'); return }
+      boxRows.value = (data.order || []).map((n, i) => ({ idx: i + 1, name: n }))
+      boxCols.value = [{ prop: 'idx', label: '#', width: 60 }, { prop: 'name', label: '频道', width: 300 }]
+      boxSummary.value = `建议上墙顺序（${data.reason || ''}）`
+    } else if (k === 'exportdesc') {
+      const { data } = await aiApi.exportDesc({ limit: boxLimit.value })
+      if (!data.ok) { ElMessage.error(data.error || '生成失败'); return }
+      boxRows.value = Object.entries(data.mapping || {}).map(([g, d]) => ({ name: g, desc: d }))
+      boxCols.value = [{ prop: 'name', label: '分组', width: 200 }, { prop: 'desc', label: '说明', width: 420 }]
+      boxSummary.value = `已生成 ${data.count || 0} 个分组说明，可复制进导出文件`
+    }
+  } catch (e) {
+    ElMessage.error('运行失败，请检查后端服务与 AI 配置')
+  }
+  boxRunning.value = false
+}
+
+async function applyBoxTags() {
+  boxApplying.value = true
+  try {
+    const { data } = await aiApi.tagChannels({ apply: true, mapping: boxMapping.value })
+    if (!data.ok) { ElMessage.error(data.error || '应用失败') } else {
+      ElMessage.success(`已为 ${data.applied || 0} 个频道写入标签`)
+      showAiBox.value = false
+      await store.refresh()
+    }
+  } catch { ElMessage.error('应用失败') }
+  boxApplying.value = false
+}
+
+function applyBoxHit() {
+  aiHitNames.value = boxRows.value.map(r => r.name)
+  showAiBox.value = false
+  ElMessage.success(`已按智能命中筛选（${aiHitNames.value.length} 个）`)
+}
+
+async function applyBoxNl() {
+  if (!boxActions.value.length) return
+  try {
+    await ElMessageBox.confirm('将按顺序执行模型解析出的操作，确认执行？', '确认执行', { type: 'warning' })
+  } catch { return }
+  let ok = 0
+  for (const a of boxActions.value) {
+    try {
+      await request({ url: a.api, method: String(a.method || 'POST').toLowerCase(),
+        data: a.params || {} })
+      ok++
+    } catch { ElMessage.error('执行失败：' + a.api) }
+  }
+  ElMessage.success(`已执行 ${ok}/${boxActions.value.length} 步`)
+  showAiBox.value = false
+  await store.refresh()
+}
+const aiHitNames = ref([])
 const showAiGroup = ref(false)
 const aiRunning = ref(false)
 const aiApplying = ref(false)
@@ -1236,7 +1490,7 @@ const aiReady = ref(false)
 function openAiGroup() {
   showAiGroup.value = true
   aiApi.getAiConfig().then(({ data }) => {
-    aiReady.value = !!(data && data.ai_enabled && data.ai_api_key)
+    aiReady.value = !!(data && data.ai_enabled && (data.ai_api_key_set || data.ai_api_key))
   }).catch(() => { aiReady.value = false })
 }
 
@@ -1279,6 +1533,71 @@ async function applyAiGroup() {
     ElMessage.error('应用失败')
   }
   aiApplying.value = false
+}
+
+// ---- AI 智能清洗（频道名） ----
+const showAiNamefix = ref(false)
+const aiNfRunning = ref(false)
+const aiNfApplying = ref(false)
+const aiNfLimit = ref(200)
+const aiNfExtra = ref('')
+const aiNfRows = ref([])
+const aiNfSummary = ref('')
+const aiNfReady = ref(false)
+
+function openAiNamefix() {
+  showAiNamefix.value = true
+  aiApi.getAiConfig().then(({ data }) => {
+    aiNfReady.value = !!(data && data.ai_enabled && (data.ai_api_key_set || data.ai_api_key))
+  }).catch(() => { aiNfReady.value = false })
+}
+
+async function runAiNamefix() {
+  aiNfRunning.value = true
+  aiNfSummary.value = ''
+  try {
+    const { data } = await aiApi.namefixChannels({ apply: false, limit: aiNfLimit.value, extra: aiNfExtra.value })
+    if (!data.ok) {
+      aiNfRows.value = []
+      ElMessage.error(data.error || '分析失败')
+    } else {
+      aiNfRows.value = Object.entries(data.mapping || {}).map(([name, newname]) => ({ name, newname }))
+      aiNfSummary.value = data.msg || `模型建议清洗 ${data.count} 个频道名，应用前可逐条修改`
+    }
+  } catch (e) {
+    aiNfRows.value = []
+    ElMessage.error('分析失败，请检查后端服务与 AI 配置')
+  }
+  aiNfRunning.value = false
+}
+
+async function applyAiNamefix() {
+  const mapping = {}
+  for (const r of aiNfRows.value) {
+    if (r.name && r.newname && r.newname !== r.name) mapping[r.name] = String(r.newname).trim()
+  }
+  if (!Object.keys(mapping).length) return ElMessage.warning('没有可应用的清洗结果')
+  try {
+    await ElMessageBox.confirm(
+      `将把 ${Object.keys(mapping).length} 个频道名按清洗结果改名。\n` +
+      `改名前会自动备份频道数据，之后可在「频道管理 → 名称校正」里整批撤销。`,
+      '确认应用', { type: 'warning', confirmButtonText: '确认应用' })
+  } catch { return }
+  aiNfApplying.value = true
+  try {
+    const { data } = await aiApi.namefixChannels({ apply: true, mapping })
+    if (!data.ok) {
+      ElMessage.error(data.error || '应用失败')
+    } else {
+      ElMessage.success(`已清洗 ${data.applied} 个频道名` +
+        (data.failed?.length ? `，失败 ${data.failed.length} 个` : '') + '，可到名称校正里撤销')
+      showAiNamefix.value = false
+      await store.refresh()
+    }
+  } catch (e) {
+    ElMessage.error('应用失败')
+  }
+  aiNfApplying.value = false
 }
 
 async function applySelected() {
@@ -2387,6 +2706,19 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
   flex-shrink: 0;
 }
 .filter-info { font-size: 12px; color: var(--el-text-color-secondary); }
+
+.ai-box-pre {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12px;
+  line-height: 1.7;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0;
+}
 
 .pager { flex-shrink: 0; margin-top: 8px; }
 

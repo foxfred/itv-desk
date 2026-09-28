@@ -774,8 +774,50 @@
               <el-input v-model="form.ai_prompt_extra" type="textarea" :rows="3" style="max-width:460px"
                         placeholder="例如：体育类频道统一归到「体育」，港澳台频道归到「港澳台」" />
             </el-form-item>
+            <el-divider>视觉模型（源核验 / 画面识别）</el-divider>
+            <el-form-item label="启用视觉模型">
+              <el-switch v-model="form.ai_vision_enabled" />
+              <span class="tip">用于「源真实性核验」等看图任务；不填则回退旧的名称校正视觉配置</span>
+            </el-form-item>
+            <el-form-item label="视觉 API 地址">
+              <el-input v-model="form.ai_vision_base_url" placeholder="留空则复用上方文本模型地址"
+                        style="max-width:460px" />
+            </el-form-item>
+            <el-form-item label="视觉 API Key">
+              <el-input v-model="form.ai_vision_api_key" show-password
+                        placeholder="留空则复用上方 Key；显示 **** 表示保持不变" style="max-width:460px" />
+            </el-form-item>
+            <el-form-item label="视觉模型">
+              <el-input v-model="form.ai_vision_model" placeholder="如 glm-4v-flash / qwen-vl-plus"
+                        style="max-width:280px" />
+            </el-form-item>
+            <el-form-item label="视觉超时">
+              <el-input-number v-model="form.ai_vision_timeout" :min="10" :max="180" :step="5" />
+              <span class="unit">秒</span>
+            </el-form-item>
+            <el-divider>用量与缓存</el-divider>
+            <el-form-item label="每日 token 上限">
+              <el-input-number v-model="form.ai_daily_token_limit" :min="0" :max="100000000" :step="10000" />
+              <span class="tip">0 = 不限制；达到上限后 AI 调用会被拒绝</span>
+            </el-form-item>
+            <el-form-item label="结果缓存">
+              <el-switch v-model="form.ai_cache_enabled" />
+              <span class="tip">同名频道不重复请求，直接省 token</span>
+            </el-form-item>
+            <el-form-item label="今日用量">
+              <span class="tip">{{ aiUsageText }}</span>
+              <el-button size="small" style="margin-left:10px" @click="loadAiUsage">刷新</el-button>
+              <el-button size="small" @click="doResetUsage">清零</el-button>
+            </el-form-item>
+            <el-form-item label="缓存条目">
+              <span class="tip">{{ aiCacheText }}</span>
+              <el-button size="small" style="margin-left:10px" @click="doClearCache">清空缓存</el-button>
+            </el-form-item>
             <el-form-item label=" ">
-              <span class="tip">保存后即时生效。换 Key 后建议先点「测试连接」确认可用，再到频道列表用「AI 智能分组」。</span>
+              <span class="tip">不愿把数据发到云端？把 API 地址填成本地模型即可全离线：Ollama 用 http://127.0.0.1:11434/v1 ，LM Studio 用 http://127.0.0.1:1234/v1 ，模型名填本地模型名即可。</span>
+            </el-form-item>
+            <el-form-item label=" ">
+              <span class="tip">保存后即时生效。换 Key 后建议先点「测试连接」确认可用，再到频道列表用「AI 智能分组 / AI 智能清洗 / AI 工具箱」。</span>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -892,6 +934,37 @@ const aiModels = ref([])
 const aiFetching = ref(false)
 const aiTesting = ref(false)
 const aiStat = ref('')
+const aiUsageText = ref('—')
+const aiCacheText = ref('—')
+
+async function loadAiUsage() {
+  try {
+    const { data } = await aiApi.getUsage()
+    const lim = data.limit ? `，上限 ${data.limit}（剩余 ${data.remaining}）` : '，未设上限'
+    aiUsageText.value = `今日 ${data.requests || 0} 次请求，共 ${data.total_tokens || 0} tokens` +
+      `（输入 ${data.prompt_tokens || 0} / 输出 ${data.completion_tokens || 0}）${lim}`
+  } catch { aiUsageText.value = '用量读取失败' }
+  try {
+    const { data } = await aiApi.getCacheStats()
+    aiCacheText.value = `已缓存 ${data.entries || 0} 条（${data.enabled ? '缓存已开启' : '缓存已关闭'}）`
+  } catch { aiCacheText.value = '缓存状态读取失败' }
+}
+
+async function doResetUsage() {
+  try {
+    await aiApi.resetUsage()
+    ElMessage.success('今日用量已清零')
+    loadAiUsage()
+  } catch { ElMessage.error('清零失败') }
+}
+
+async function doClearCache() {
+  try {
+    const { data } = await aiApi.clearCache()
+    ElMessage.success(`缓存已清空（原 ${data.entries || 0} 条）`)
+    loadAiUsage()
+  } catch { ElMessage.error('清空失败') }
+}
 
 async function fetchAiModels() {
   aiFetching.value = true
@@ -1075,6 +1148,13 @@ const form = reactive({
   ai_max_tokens: 2048,
   ai_use_proxy: false,
   ai_prompt_extra: '',
+  ai_vision_enabled: false,
+  ai_vision_base_url: '',
+  ai_vision_api_key: '',
+  ai_vision_model: '',
+  ai_vision_timeout: 45,
+  ai_daily_token_limit: 0,
+  ai_cache_enabled: true,
   hdhr_enabled: false,
   hdhr_device_id: '',
   hdhr_tuner_count: 3,
@@ -1198,6 +1278,7 @@ const columnVisibility = ref(allCols.map(c => c.key))
 onMounted(async () => {
   await settingsStore.fetchSettings()
   refreshHdhrStatus()
+  loadAiUsage()
   try {
     const { data } = await getChannels()
     groupNames.value = [...new Set((data || []).map(c => c.group || '未分组'))].sort()

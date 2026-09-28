@@ -42,6 +42,16 @@ def remove_sub(url: str = Query(...), sub_service=Depends(get_subscription_servi
     return sub_service.remove(url)
 
 
+@router.get("/presets")
+def list_presets(sub_service=Depends(get_subscription_service)):
+    return sub_service.presets()
+
+
+@router.post("/import-presets")
+def import_presets(sub_service=Depends(get_subscription_service)):
+    return {"results": sub_service.import_presets()}
+
+
 @router.post("/toggle")
 def toggle_sub(body: SubToggleReq, sub_service=Depends(get_subscription_service)):
     return sub_service.set_enabled(body.url, body.enabled)

@@ -477,13 +477,30 @@ class NamefixService:
         ok, err = self._grab(url, p, width, offset)
         return (p, True, "") if ok else (None, False, err)
 
+    def _vision_conf(self, s=None):
+        """视觉槽位：优先 ai_vision_*（AI 底座统一配置），回退旧 namefix_vision_*。"""
+        s = dict(s) if s else self._settings()
+        enabled = bool(s.get("ai_vision_enabled")) or bool(s.get("namefix_vision_enabled"))
+        base = (s.get("ai_vision_base_url") or "").strip()
+        model = (s.get("ai_vision_model") or "").strip()
+        key = (s.get("ai_vision_api_key") or "").strip()
+        timeout = int(s.get("ai_vision_timeout") or 0)
+        if not (base or model or key):
+            base = (s.get("namefix_vision_base") or "").strip()
+            model = (s.get("namefix_vision_model") or "").strip()
+            key = (s.get("namefix_vision_key") or "").strip()
+            timeout = timeout or int(s.get("namefix_vision_timeout") or 45)
+        return {"enabled": enabled, "base": base, "model": model, "key": key,
+                "timeout": timeout or 45}
+
     def vision_ask(self, frame_path, override=None):
         s = dict(override) if override else self._settings()
-        if not s.get("namefix_vision_enabled"):
+        if override is not None:
+            s.setdefault("namefix_vision_enabled", True)
+        v = self._vision_conf(s)
+        if not v["enabled"]:
             return None, "视觉兜底未启用"
-        base = (s.get("namefix_vision_base") or "").strip()
-        model = (s.get("namefix_vision_model") or "").strip()
-        key = (s.get("namefix_vision_key") or "").strip()
+        base, model, key = v["base"], v["model"], v["key"]
         if not base or not model or not key:
             return None, "视觉接口未配置完整（地址/模型/Key）"
         try:
@@ -502,7 +519,7 @@ class NamefixService:
                 base, data=json.dumps(body).encode("utf-8"),
                 headers={"Content-Type": "application/json",
                          "Authorization": "Bearer " + key})
-            timeout = int(s.get("namefix_vision_timeout") or 45)
+            timeout = v["timeout"]
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 d = json.loads(r.read().decode("utf-8"))
             txt = ((d.get("choices") or [{}])[0].get("message", {}) or {}).get("content", "")
@@ -515,8 +532,9 @@ class NamefixService:
 
     def vision_test(self):
         s = self._settings()
-        if not (s.get("namefix_vision_key") or "").strip():
-            return {"ok": False, "error": "未填写视觉接口 Key"}
+        v = self._vision_conf(s)
+        if not v["key"]:
+            return {"ok": False, "error": "未填写视觉接口 Key（设置 → AI 智能 → 视觉模型）"}
         frame = None
         for fn in sorted(os.listdir(self.shot_dir)) if os.path.isdir(self.shot_dir) else []:
             if fn.lower().endswith((".jpg", ".png")):

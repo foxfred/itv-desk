@@ -6,3 +6,5 @@ export const removeSub = (url) => request.delete('/api/subscriptions', { params:
 export const toggleSub = (url, enabled) => request.post('/api/subscriptions/toggle', { url, enabled })
 export const updateAll = () => request.post('/api/subscriptions/update')
 export const updateOne = (url) => request.post('/api/subscriptions/update-one', { url })
+export const listPresets = () => request.get('/api/subscriptions/presets')
+export const importPresets = () => request.post('/api/subscriptions/import-presets')

@@ -6,6 +6,14 @@ from datetime import datetime
 
 AUTO_DISABLE_FAILS = 3
 
+# 预置订阅源（2026-09-17 实测可用的 #EXTM3U 母链，死链不进此列表）
+PRESET_SOURCES = [
+    {"name": "iptv-org 中国频道", "url": "https://iptv-org.github.io/iptv/countries/cn.m3u"},
+    {"name": "Free-TV 精选", "url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"},
+    {"name": "Guovin iptv-api 聚合", "url": "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u"},
+    {"name": "myIPTV 每日更新", "url": "https://raw.githubusercontent.com/suxuang/myIPTV/main/ipv4.m3u"},
+]
+
 
 def _extract_tvg_urls(text):
     if not text:
@@ -90,6 +98,24 @@ class SubscriptionService:
                 return {"error": "未找到订阅源"}
             self._save()
         return {"ok": True}
+
+    def presets(self):
+        with self._lock:
+            added = {s["url"] for s in self.subs}
+        return [dict(p, added=p["url"] in added) for p in PRESET_SOURCES]
+
+    def import_presets(self):
+        results = []
+        for p in PRESET_SOURCES:
+            with self._lock:
+                exists = any(s["url"] == p["url"] for s in self.subs)
+            if exists:
+                results.append({"url": p["url"], "name": p["name"], "status": "exists"})
+                continue
+            r = self.add(p["url"], p["name"])
+            results.append({"url": p["url"], "name": p["name"],
+                            "status": "ok" if r.get("ok") else "error"})
+        return results
 
     def set_enabled(self, url, enabled):
         with self._lock:

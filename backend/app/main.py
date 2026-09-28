@@ -121,7 +121,7 @@ screenshot_service = ScreenshotService(log_callback=log, data_dir=DATA_DIR)
 namefix_service = NamefixService(log_callback=log, data_dir=DATA_DIR)
 stats_service = StatsService(log_callback=log, data_dir=DATA_DIR)
 record_service = RecordService(log_callback=log, data_dir=DATA_DIR)
-ai_service = AIService(log_callback=log, settings_provider=lambda: settings)
+ai_service = AIService(log_callback=log, settings_provider=lambda: settings, data_dir=DATA_DIR)
 hdhr_service = HdHomeRunService(channel_service, log_callback=log,
                                 settings_provider=lambda: settings, data_dir=DATA_DIR)
 

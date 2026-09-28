@@ -239,7 +239,24 @@ onMounted(async () => {
   await store.fetchIfNeeded()
   await loadShots()
   loading.value = false
+  autoCaptureIfNeeded()
 })
+
+// 首开自动抓帧：可见频道缺图过半（至少 8 张）时后台补抓，不弹提示
+function autoCaptureIfNeeded() {
+  if (shotRunning.value) return
+  const pending = visible.value.filter(c => c.url && !shotOf(c))
+  if (pending.length < 8 || pending.length * 2 < visible.value.length) return
+  const urls = pending.map(c => c.url)
+  shotApi.captureShotBatch({ urls, only_missing: false }).then(({ data }) => {
+    if (data && data.started) {
+      shotRunning.value = true
+      shotDone.value = 0
+      shotTotal.value = data.total || pending.length
+      pollShots()
+    }
+  }).catch(() => {})
+}
 </script>
 
 <style scoped>

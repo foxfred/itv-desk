@@ -6,6 +6,9 @@
         <el-button size="small" type="primary" @click="showAdd = true">
           <el-icon><Plus /></el-icon>添加订阅源
         </el-button>
+        <el-button size="small" @click="openPresets">
+          <el-icon><MagicStick /></el-icon>预置源
+        </el-button>
         <el-button size="small" type="success" @click="doUpdateAll" :loading="updatingAll" :disabled="!subs.length">
           <el-icon><Refresh /></el-icon>全部更新
         </el-button>
@@ -107,6 +110,32 @@
         <el-button type="primary" @click="doAdd" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 预置源弹窗 -->
+    <el-dialog v-model="showPresets" title="预置订阅源" width="560px" destroy-on-close>
+      <el-alert type="info" :closable="false" show-icon class="role-alert">
+        <template #title>勾选后一键导入，导入完成自动更新拉取频道。已存在的源会自动跳过。</template>
+      </el-alert>
+      <el-table :data="presets" v-loading="loadingPresets" size="small" border>
+        <el-table-column width="50" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-model="row._checked" :disabled="row.added" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column prop="url" label="地址" min-width="260" show-overflow-tooltip />
+        <el-table-column label="状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.added" type="success" size="small">已添加</el-tag>
+            <el-tag v-else type="info" size="small">未添加</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="showPresets = false">取消</el-button>
+        <el-button type="primary" @click="doImportPresets" :loading="importing">导入并更新</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -125,6 +154,10 @@ const editingSub = ref(null)
 const formRef = ref()
 const subs = ref([])
 const urlHistory = ref([])
+const showPresets = ref(false)
+const loadingPresets = ref(false)
+const importing = ref(false)
+const presets = ref([])
 
 const form = reactive({
   name: '',
@@ -231,6 +264,32 @@ async function doUpdateAll() {
     }
   } catch { ElMessage.error('全部更新失败') }
   updatingAll.value = false
+}
+
+async function openPresets() {
+  showPresets.value = true
+  loadingPresets.value = true
+  try {
+    const { data } = await subApi.listPresets()
+    presets.value = (data || []).map(p => ({ ...p, _checked: !p.added }))
+  } catch { ElMessage.error('获取预置源失败') }
+  loadingPresets.value = false
+}
+
+async function doImportPresets() {
+  const picked = presets.value.filter(p => p._checked && !p.added)
+  if (!picked.length) { ElMessage.warning('没有勾选可导入的源'); return }
+  importing.value = true
+  try {
+    const { data } = await subApi.importPresets()
+    const ok = (data?.results || []).filter(r => r.status === 'ok').length
+    const exists = (data?.results || []).filter(r => r.status === 'exists').length
+    ElMessage.success(`导入完成：新增 ${ok} 个${exists ? `，跳过已存在 ${exists} 个` : ''}，开始更新…`)
+    showPresets.value = false
+    loadList()
+    doUpdateAll()
+  } catch { ElMessage.error('导入失败') }
+  importing.value = false
 }
 
 onMounted(() => { loadList(); loadUrlHistory() })
