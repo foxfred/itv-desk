@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
+from app.utils import network
+
 router = APIRouter(prefix="/api/app", tags=["app"])
 
 from app.version import APP_VERSION
@@ -45,15 +47,20 @@ class CheckUpdateReq(BaseModel):
 
 
 def _build_opener(settings=None):
+    """构造 urllib opener。代理逻辑（2026-09-28 修）：
+    - 必须 use_proxy=True 才读 settings.proxy，避免「开了代理但填错」导致下载失败
+    - proxy 字段保留 http:// 与 socks5:// 前缀；无前缀按 http:// 拼（兼容旧配置）
+    """
     proxies = {}
-    if settings:
+    if settings and settings.get("use_proxy", False):
         p = settings.get("proxy", "")
         if p and p != "不使用加速":
-            if not p.startswith("http"):
+            p = str(p).strip()
+            if "://" not in p:
                 p = "http://" + p
             proxies = {"http": p, "https": p}
     if not proxies:
-        for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        for k in ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"):
             v = os.environ.get(k)
             if v:
                 proxies[k.lower().replace("_proxy", "")] = v
@@ -129,15 +136,23 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
         fn = body.filename or os.path.basename(body.url.split("?")[0]) or "update_package"
         fn = os.path.basename(fn)
         dest = os.path.join(data_dir, "update_staging", fn)
-        _rm_quiet(dest)
-        opener = _build_opener(settings)
-        req = urllib.request.Request(body.url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
-        with opener.open(req, timeout=600) as resp, open(dest, "wb") as f:
-            while True:
-                chunk = resp.read(1024 * 1024)
-                if not chunk:
-                    break
-                f.write(chunk)
+        # 2026-09-28：改走网络层下载（支持 socks5 + 重试 + 流式写文件 + verify=False），
+        # 并严格受 use_proxy 开关门控 —— 避免「开了代理但填错」反而连不上。
+        proxy = None
+        if settings.get("use_proxy", False):
+            p = str(settings.get("proxy", "")).strip()
+            if p and p != "不使用加速":
+                proxy = p  # _build_proxy_list 会自动 http:// + socks5:// 都试
+        min_size = int(body.size) if body.size and int(body.size) > 0 else None
+        ok, size, err = network.download_binary(
+            body.url, proxy=proxy, dest_path=dest,
+            timeout=120, max_retries=3, min_size=min_size,
+        )
+        if not ok:
+            _rm_quiet(dest)
+            raise HTTPException(500, f"下载失败: {err}")
+    except HTTPException:
+        raise
     except Exception as e:
         _rm_quiet(dest)
         raise HTTPException(500, f"下载失败: {e}")
