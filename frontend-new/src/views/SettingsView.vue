@@ -401,29 +401,12 @@
             </el-form-item>
 
             <el-divider>视觉模型兜底（可选）</el-divider>
-            <el-form-item label="启用兜底">
-              <el-switch v-model="form.namefix_vision_enabled" />
+            <el-form-item label=" ">
               <div class="tip">
                 画面里一个字都没有时（纯图形台标），本地文字识别无能为力，交给视觉模型认台标。<br>
-                关闭则这类频道只标记「未能判定」，不影响其他频道。
+                <strong>视觉模型的地址 / 模型名 / Key 已合并到「AI 智能 → 视觉模型」那一处</strong>，填一次即可，这里不再单独填写。<br>
+                只要 AI 视觉模型配好了，频道名校正会自动用它认台标；没配则这类频道只标记「未能判定」，不影响其他频道。
               </div>
-            </el-form-item>
-            <el-form-item label="接口地址">
-              <el-input v-model="form.namefix_vision_base" style="width:430px"
-                        placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions" />
-              <div class="tip">OpenAI 兼容格式即可（/chat/completions）。</div>
-            </el-form-item>
-            <el-form-item label="模型名">
-              <el-input v-model="form.namefix_vision_model" style="width:250px" placeholder="glm-4v-flash" />
-            </el-form-item>
-            <el-form-item label="API Key">
-              <el-input v-model="form.namefix_vision_key" style="width:430px" show-password
-                        placeholder="留空则不启用兜底" />
-            </el-form-item>
-            <el-form-item label="连通性测试">
-              <el-button type="primary" text :loading="visionTesting" @click="testVision">测试识别</el-button>
-              <span v-if="visionTestMsg" class="tip" style="margin-left:8px">{{ visionTestMsg }}</span>
-              <div class="tip">用已抓到的画面帧试调一次视觉接口，确认地址/模型/Key 配对了。</div>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -437,7 +420,7 @@
                   v-for="t in PRESET_THEMES" :key="t.color"
                   class="theme-item"
                   :class="{ active: currentTheme === t.color }"
-                  @click="setTheme(t.color)"
+                  @click="onPickTheme(t)"
                 >
                   <div class="theme-color" :style="{ background: t.color }" />
                   <span>{{ t.name }}</span>
@@ -763,7 +746,7 @@
             <el-divider>视觉模型（源核验 / 画面识别）</el-divider>
             <el-form-item label="启用视觉模型">
               <el-switch v-model="form.ai_vision_enabled" />
-              <span class="tip">用于「源真实性核验」等看图任务；不填则回退旧的名称校正视觉配置</span>
+              <span class="tip">这是全软件唯一的视觉模型配置：既用于「源真实性核验」等看图任务，也供频道名校正认纯图形台标用</span>
             </el-form-item>
             <el-form-item label="视觉 API 地址">
               <el-input v-model="form.ai_vision_base_url" placeholder="留空则复用上方文本模型地址"
@@ -780,6 +763,11 @@
             <el-form-item label="视觉超时">
               <el-input-number v-model="form.ai_vision_timeout" :min="10" :max="180" :step="5" />
               <span class="unit">秒</span>
+            </el-form-item>
+            <el-form-item label="连通性测试">
+              <el-button type="primary" text :loading="visionTesting" @click="testVision">测试识别</el-button>
+              <span v-if="visionTestMsg" class="tip" style="margin-left:8px">{{ visionTestMsg }}</span>
+              <div class="tip">用已抓到的画面帧试调一次视觉接口，确认地址/模型/Key 配对了。</div>
             </el-form-item>
             <el-divider>用量与缓存</el-divider>
             <el-form-item label="每日 token 上限">
@@ -1095,6 +1083,9 @@ const form = reactive({
   startup_delay_ms: 0,
   stats_card_position: '顶部',
   stats_card_visible: true,
+  theme: '#409EFF',
+  theme_mode: '浅色',
+  theme_preset: '默认蓝',
   subscription_auto_update_interval: 0,
   suffix_list: 'm3u,m3u8,txt',
   unknown_group_name: '未分组',
@@ -1244,7 +1235,23 @@ async function copyGw(url) {
 
 watch(darkMode, (val) => {
   setDarkMode(val)
+  form.theme_mode = val ? '深色' : '浅色'
 })
+
+// 主题三键持久化（2026-09-29）：settings.json 是真相源（可随备份迁移），
+// localStorage 只负责「启动瞬间就有正确主题」。两者在这里同步写，避免切换主题后备份里还是旧的。
+async function onPickTheme(t) {
+  setTheme(t.color)
+  form.theme = t.color
+  form.theme_preset = t.name
+  try { await settingsStore.saveSettings({ theme: t.color, theme_preset: t.name }) } catch { /* ignore */ }
+}
+
+async function onSkinApplied(skinName) {
+  form.theme = currentTheme.value
+  form.theme_preset = skinName
+  try { await settingsStore.saveSettings({ theme: currentTheme.value, theme_preset: skinName }) } catch { /* ignore */ }
+}
 
 const allCols = [
   { key: 'name', defLabel: '频道' },
@@ -1282,6 +1289,16 @@ onMounted(async () => {
     const { data } = await appApi.getAppVersion()
     if (data && data.version) curVersion.value = data.version
   } catch { /* ignore */ }
+  // 主题三键：settings 是真相源；老用户（settings 里 theme 仍是旧的「浅色」字符串）则用当前状态回填一次，
+  // 保证升级后主题不变，之后就以 settings 为准（可随备份迁移）。
+  if (typeof s?.theme === 'string' && (s.theme.startsWith('#') || s.theme === '__custom__')) {
+    setTheme(s.theme)
+    setDarkMode(s.theme_mode === '深色')
+  } else {
+    form.theme = currentTheme.value
+    form.theme_mode = isDark.value ? '深色' : '浅色'
+    form.theme_preset = getBuiltinSkinName() || '默认蓝'
+  }
   darkMode.value = isDark.value
     try {
     const { getHistory } = await import('@/api/export')
@@ -1594,7 +1611,11 @@ async function importEncrypted(file, pass) {
 }
 
 function onCustomColor(val) {
-  if (val && val.startsWith('#')) setTheme(val)
+  if (val && val.startsWith('#')) {
+    setTheme(val)
+    form.theme = val
+    settingsStore.saveSettings({ theme: val, theme_preset: '自定义' }).catch(() => { /* ignore */ })
+  }
 }
 
 const visionTesting = ref(false)
@@ -1649,6 +1670,7 @@ async function onApplyBuiltinSkin(skin) {
   try {
     await loadBuiltinSkin(skin.file)
     builtinSkin.value = skin.file
+    await onSkinApplied(skin.name)
     ElMessage.success(`已应用「${skin.name}」皮肤`)
   } catch {
     ElMessage.error('应用皮肤失败')
