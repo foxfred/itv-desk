@@ -278,24 +278,34 @@ class AIService:
         return h
 
     @staticmethod
-    def _proxies(c):
+    def _proxies(c, url=None):
         # 统一走 network.resolve_proxy（2026-09-28 统一入口）：开关打开用填的地址，关闭返回 {} 走系统代理
-        from app.utils.network import resolve_proxy
+        from app.utils.network import resolve_proxy, is_local_url
+        # 本机/内网地址（如本地 AI 网关 http://127.0.0.1:8799）必须绕开代理，
+        # 否则代理会把 127.0.0.1 解析成"代理所在那台机器"，表现为「开代理就连不上」。
+        if url and is_local_url(url):
+            return {}
         p = resolve_proxy(c)
         if p:
             url = p if "://" in p else "http://" + p
             return {"http": url, "https": url}
         return {}
 
-    def _session(self, c):
+    def _session(self, c, url=None):
         """代理规则（2026-09-28 统一）：
         开关打开 → 走「抓取面板」里填的代理地址；
         开关关闭 → 走系统代理（HTTP_PROXY / HTTPS_PROXY 环境变量）。
+        本机/内网地址（url 传入时判定）一律直连，不受上面两条影响。
         """
         s = requests.Session()
-        proxies = self._proxies(c)
+        proxies = self._proxies(c, url)
         s.proxies = proxies
-        s.trust_env = not proxies  # 未指定代理时跟随系统环境变量
+        # 本地地址要连系统代理也一起屏蔽（否则 trust_env=True 会把它捡回来）
+        local = False
+        if url:
+            from app.utils.network import is_local_url
+            local = is_local_url(url)
+        s.trust_env = (not proxies) and (not local)
         s.headers.update(self._headers(c.get("key")))
         return s
 
@@ -303,7 +313,7 @@ class AIService:
         c = self.resolve(base_url, api_key)
         url = c["base"].rstrip("/") + "/models"
         try:
-            with self._session(c) as s:
+            with self._session(c, url) as s:
                 r = s.get(url, timeout=min(max(c["timeout"], 10), 40))
         except Exception as e:
             return {"ok": False, "error": "请求失败：%s" % str(e)[:180], "url": url}
@@ -444,9 +454,9 @@ class AIService:
             payload["response_format"] = {"type": "json_object"}
         url = v["base"].rstrip("/") + "/chat/completions"
         try:
-            r = requests.post(url, headers=self._headers(v["key"]), json=payload,
-                              timeout=max(int(v.get("timeout") or 45), 10),
-                              proxies=self._proxies(v))
+            with self._session(v, url) as s:
+                r = s.post(url, json=payload,
+                           timeout=max(int(v.get("timeout") or 45), 10))
         except Exception as e:
             return {"ok": False, "error": "请求失败：%s" % str(e)[:220]}
         if r.status_code != 200:
@@ -466,8 +476,8 @@ class AIService:
     def _post(self, url, c, payload):
         """POST /chat/completions; returns Response or an error dict."""
         try:
-            return requests.post(url, headers=self._headers(c["key"]), json=payload,
-                                 timeout=max(c["timeout"], 10), proxies=self._proxies(c))
+            with self._session(c, url) as s:
+                return s.post(url, json=payload, timeout=max(c["timeout"], 10))
         except Exception as e:
             return {"ok": False, "error": "请求失败：%s" % str(e)[:220], "url": url}
 

@@ -86,18 +86,103 @@ def _build_proxy_list(proxy):
     return [f"http://{p}", f"socks5://{p}"]
 
 
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]",
+                   "0:0:0:0:0:0:0:1"}
+
+
+def _url_host(url):
+    s = str(url or "").strip()
+    try:
+        from urllib.parse import urlparse
+        h = urlparse(s).hostname
+        if not h:
+            # 兼容不带 scheme 的写法（如 "127.0.0.1:8799/v1"）
+            h = urlparse("//" + s).hostname
+        return (h or "").lower()
+    except Exception:
+        return ""
+
+
+def is_local_url(url):
+    """目标是否指向本机回环 / 局域网地址。
+
+    这类地址**必须绕开代理**：代理（尤其远程代理）会把 `127.0.0.1` 解析成
+    "代理所在那台机器" 的回环，或直接拒绝 CONNECT 到回环地址，表现为
+    「开了代理就连不上、关了代理就正常」——本机 AI 网关、内网 IPTV 源都会中招。
+    这也是浏览器 / curl 里 NO_PROXY 的同一套逻辑。
+    """
+    h = _url_host(url)
+    if not h:
+        return False
+    if h in _LOOPBACK_HOSTS:
+        return True
+    if h.startswith("127."):
+        return True
+    # 私有网段：10/8、192.168/16、172.16~31/16（内网 IPTV、局域网 NAS 等）
+    if h.startswith("10.") or h.startswith("192.168."):
+        return True
+    if h.startswith("172."):
+        try:
+            if 16 <= int(h.split(".")[1]) <= 31:
+                return True
+        except Exception:
+            pass
+    if h.endswith(".local") or h.endswith(".localhost") or h.endswith(".lan"):
+        return True
+    return False
+
+
+def proxy_for_url(url, settings, key="proxy"):
+    """带「本机/内网自动绕行」的代理解析：本地地址一律返回 ""（直连）。"""
+    if is_local_url(url):
+        return ""
+    return resolve_proxy(settings, key)
+
+
+def _no_proxy_opener(ssl_ctx=None):
+    """一个完全不走代理的 opener（连环境变量代理也不读）。
+
+    注意：`OpenerDirector.open()` **不接受 context 参数**（只有 `urlopen()` 接受），
+    所以要自定义 SSL 上下文必须通过 `HTTPSHandler(context=...)` 挂进 opener。
+    历史坑：老代码写 `build_opener(...).open(req, timeout=..., context=ctx)`，
+    直接 TypeError 并被 `except: pass` 吞掉 → 表现为「开了代理就什么都连不上」。
+    """
+    handlers = [urllib.request.ProxyHandler({})]
+    if ssl_ctx is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=ssl_ctx))
+    return urllib.request.build_opener(*handlers)
+
+
+def _proxy_opener(proxy_dict, ssl_ctx=None):
+    """指定代理的 opener（同样用 HTTPSHandler 挂 SSL 上下文）。"""
+    handlers = [urllib.request.ProxyHandler(proxy_dict or {})]
+    if ssl_ctx is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=ssl_ctx))
+    return urllib.request.build_opener(*handlers)
+
+
 def _request_download(url, proxy_url, timeout, chunk_size, headers, stop_event):
     import requests
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    proxies = None
+    # 本机/内网地址强制直连（连环境变量代理也不走）
+    local = is_local_url(url)
+    if local:
+        proxy_url = None
+
+    sess = requests.Session()
     if proxy_url:
-        proxies = {"http": proxy_url, "https": proxy_url}
+        sess.proxies = {"http": proxy_url, "https": proxy_url}
+        sess.trust_env = False
+    elif local:
+        sess.proxies = {}
+        sess.trust_env = False
+    # 其余情况：保持原语义（跟随系统代理环境变量）
 
     try:
-        resp = requests.get(url, headers=headers, timeout=timeout, proxies=proxies,
-                            verify=False, stream=True)
+        resp = sess.get(url, headers=headers, timeout=timeout,
+                        verify=False, stream=True)
         chunks = []
         for chunk in resp.iter_content(chunk_size=chunk_size):
             if stop_event and stop_event.is_set():
@@ -113,37 +198,39 @@ def _request_download(url, proxy_url, timeout, chunk_size, headers, stop_event):
         return raw.decode('utf-8', errors='ignore'), None
     except Exception as e:
         return "", str(e)
+    finally:
+        try:
+            sess.close()
+        except Exception:
+            pass
 
 
 def _urllib_download(url, proxies, timeout, chunk_size, headers, stop_event):
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
+    local = is_local_url(url)
+    if local:
+        proxies = None
     try:
         req = urllib.request.Request(url, headers=headers)
         if proxies:
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
-            with opener.open(req, timeout=timeout, context=ssl_ctx) as r:
-                chunks = []
-                while True:
-                    if stop_event and stop_event.is_set():
-                        return "", "用户中断"
-                    chunk = r.read(chunk_size)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                raw = b''.join(chunks)
+            opener = _proxy_opener(proxies, ssl_ctx)
+        elif local:
+            opener = _no_proxy_opener(ssl_ctx)
         else:
-            with urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx) as r:
-                chunks = []
-                while True:
-                    if stop_event and stop_event.is_set():
-                        return "", "用户中断"
-                    chunk = r.read(chunk_size)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                raw = b''.join(chunks)
+            opener = urllib.request.build_opener(
+                urllib.request.HTTPSHandler(context=ssl_ctx))
+        with opener.open(req, timeout=timeout) as r:
+            chunks = []
+            while True:
+                if stop_event and stop_event.is_set():
+                    return "", "用户中断"
+                chunk = r.read(chunk_size)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            raw = b''.join(chunks)
         if raw[:2] == b'\x1f\x8b':
             raw = gzip.decompress(raw)
         return raw.decode('utf-8', errors='ignore'), None
@@ -161,6 +248,8 @@ def download_url(url, proxy=None, timeout=None, max_retries=None, headers=None, 
         headers = {"User-Agent": Config.get_setting("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")}
 
     proxy_list = _build_proxy_list(proxy)
+    if is_local_url(url):
+        proxy_list = []  # 本机/内网地址直连，不走任何代理
     have_requests = False
     try:
         import requests
@@ -240,6 +329,9 @@ def http_probe_channel(url, timeout=5, retries=1, proxy=None):
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
     ua = Config.get_setting("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    local = is_local_url(url)
+    if local:
+        proxy = None  # 本机/内网地址直连，不走任何代理
     proxies = {"http": proxy, "https": proxy} if proxy else None
 
     def _classify(code, content):
@@ -256,8 +348,9 @@ def http_probe_channel(url, timeout=5, retries=1, proxy=None):
             headers.update(extra_headers)
         req = urllib.request.Request(url, method=method, headers=headers)
         if proxies:
-            return urllib.request.build_opener(urllib.request.ProxyHandler(proxies)).open(
-                req, timeout=timeout, context=ssl_ctx)
+            return _proxy_opener(proxies, ssl_ctx).open(req, timeout=timeout)
+        if local:
+            return _no_proxy_opener(ssl_ctx).open(req, timeout=timeout)
         return urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx)
 
     last_elapsed = 0
@@ -358,6 +451,8 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
         return False, 0, "缺少目标路径"
 
     proxy_list = _build_proxy_list(proxy)  # http + socks5 候选
+    if is_local_url(url):
+        proxy_list = []  # 本机/内网地址直连，不走任何代理
 
     have_requests = False
     try:
@@ -379,10 +474,19 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
         if have_requests:
             import requests as _req
             import requests.exceptions as _rqe
-            proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+            local = is_local_url(url)
+            if local:
+                proxy_url = None
+            sess = _req.Session()
+            if proxy_url:
+                sess.proxies = {"http": proxy_url, "https": proxy_url}
+                sess.trust_env = False
+            elif local:
+                sess.proxies = {}
+                sess.trust_env = False
             try:
-                with _req.get(url, headers=headers, timeout=timeout,
-                              proxies=proxies, stream=True, verify=False) as resp:
+                with sess.get(url, headers=headers, timeout=timeout,
+                              stream=True, verify=False) as resp:
                     resp.raise_for_status()
                     try:
                         _total = int(resp.headers.get("Content-Length") or 0)
@@ -415,6 +519,8 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                 return False, 0, f"{type(e).__name__}: {e}"
         else:
             # urllib 兜底（仅 http 代理；socks5 跳过避免报错）
+            if is_local_url(url):
+                proxy_url = None
             if proxy_url and proxy_url.lower().startswith("socks"):
                 return False, 0, "当前环境缺少 requests/PySocks，无法使用 socks5 代理"
             ssl_ctx = ssl.create_default_context()
@@ -423,11 +529,13 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
             req = urllib.request.Request(url, headers=headers)
             try:
                 if proxy_url:
-                    opener = urllib.request.build_opener(
-                        urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+                    opener = _proxy_opener({"http": proxy_url, "https": proxy_url}, ssl_ctx)
+                elif is_local_url(url):
+                    opener = _no_proxy_opener(ssl_ctx)
                 else:
-                    opener = urllib.request.build_opener()
-                with opener.open(req, timeout=timeout, context=ssl_ctx) as resp:
+                    opener = urllib.request.build_opener(
+                        urllib.request.HTTPSHandler(context=ssl_ctx))
+                with opener.open(req, timeout=timeout) as resp:
                     if resp.status != 200:
                         return False, 0, f"HTTP {resp.status}"
                     try:

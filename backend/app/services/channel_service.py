@@ -638,11 +638,22 @@ class ChannelService:
     @staticmethod
     def _fetch_logo_bytes(url, proxy, timeout):
         import requests
+        from app.utils.network import is_local_url
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        local = is_local_url(url)
+        if local:
+            proxy = None
         proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else {}
+        sess = requests.Session()
+        if proxies:
+            sess.proxies = proxies
+            sess.trust_env = False
+        elif local:
+            sess.proxies = {}
+            sess.trust_env = False
         cap = 2 * 1024 * 1024
         try:
-            r = requests.get(url, headers=headers, proxies=proxies, timeout=timeout, stream=True)
+            r = sess.get(url, headers=headers, timeout=timeout, stream=True)
             if r.status_code != 200:
                 return None, f"HTTP {r.status_code}"
             data = b""
@@ -667,6 +678,11 @@ class ChannelService:
             return data, None
         except Exception as e:
             return None, str(e)[:120]
+        finally:
+            try:
+                sess.close()
+            except Exception:
+                pass
 
     def _save_online_logo(self, source_id, nk, data, logos_dir):
         try:

@@ -47,11 +47,14 @@ class CheckUpdateReq(BaseModel):
     url: Optional[str] = None
 
 
-def _build_opener(settings=None):
+def _build_opener(settings=None, url=None):
     """构造 urllib opener。代理统一走 network.resolve_proxy（2026-09-28 统一入口）：
+    - 目标为本机/内网地址 → 完全直连（连系统代理环境变量也不走）
     - 开关打开 → 用抓取面板填的代理地址（保留 http:// / socks5:// 前缀）
     - 开关关闭 → 走系统代理环境变量
     """
+    if url and network.is_local_url(url):
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}))
     proxies = {}
     p = network.resolve_proxy(settings)
     if p:
@@ -74,7 +77,7 @@ def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
     DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/foxfred/itv-desk/master/release/update.json"
     url = (body.url if body else None) or settings.get("update_url", "") or DEFAULT_UPDATE_URL
     try:
-        opener = _build_opener(settings)
+        opener = _build_opener(settings, url)
         req = urllib.request.Request(url, headers={"User-Agent": "IPTV-Core-Updater/1.0"})
         with opener.open(req, timeout=20) as resp:
             manifest = json.loads(resp.read().decode("utf-8"))

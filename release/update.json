@@ -1,12 +1,12 @@
 {
-  "version": "3.2.6",
-  "notes": "ITV Desk v3.2.6：AI 接口连接修复 + 错误提示智能化。① API 地址容错：以前很多人会把「API 地址」填成完整 chat 路径（http://host:port/v1/chat/completions），而软件会再拼一次 /chat/completions，请求变成 /v1/chat/completions/chat/completions 必 404；现在会自动剥掉末尾的 /chat/completions（含 /completions、含尾斜杠、不区分大小写），填完整路径也能直接跑。② 模型名错误一眼看明白：当 chat 接口返回 model_not_found、或中文网关报「没有任何已启用厂商声明模型」时，软件会自动拉一次 /v1/models 把该端点可用模型列表（前 25 个 + 总数）附在错误里，用户立刻知道端点真正有哪些模型、应改成哪一个。③ 视觉 / 文本频道名修复只改 AI 调用层：后端 ai_service.py 的 _norm_base + _looks_like_model_not_found / _model_not_found_hint + chat / chat_vision 错误处理；前端零改动、配置零迁移、不清空现有设置。更新方式：点「检查更新」→「下载更新包」→「立即更新并重启」，程序会自动关闭、覆盖当前程序目录并重新打开，不需要选安装路径、也不需要手动解压。频道、设置、台标、截图、缓存等数据不在更新包内，不会被覆盖。",
+  "version": "3.2.7",
+  "notes": "ITV Desk v3.2.7：修复「开了代理就连不上」。① 原因：代理开关打开后，连本机地址（127.0.0.1 上的 AI 网关、软件自身后端）和局域网地址也被塞进了代理；代理会去它自己那台机器上找 127.0.0.1，自然找不到 → 表现就是关了代理一切正常、开了代理全都连不上。② 修复：本机回环地址（localhost / 127.x / ::1）和局域网地址（10.x、172.16~31.x、192.168.x、*.local）现在一律直连、绝不走代理；公网地址照常走代理。浏览器和 curl 里的 NO_PROXY 就是这个道理。覆盖范围：AI 文本与视觉调用、频道检测、订阅 / EPG / 抓取下载、台标抓取、检查更新、下载更新包。③ 顺带修掉一个老问题：频道检测在开启代理时会静默失败（内部调用方式有误、异常被吞掉），现在一并修好。④ 你之前填的代理地址、AI 地址都不用改，更新完直接把代理开关打开即可。更新方式：点「检查更新」→「下载更新包」→「立即更新并重启」，程序会自动关闭、覆盖当前程序目录并重新打开。频道、设置、台标、截图、缓存等数据不在更新包内，不会被覆盖。",
   "packages": [
     {
-      "name": "ITV-Desk-3.2.6-folder.zip",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.6/ITV-Desk-3.2.6-folder.zip",
-      "sha256": "d3a9561ff7eb11b69af704b59c96c1e07c498ad0c5971eec2b8e3fdc4eb534ff",
-      "size": 115444440,
+      "name": "ITV-Desk-3.2.7-folder.zip",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.7/ITV-Desk-3.2.7-folder.zip",
+      "sha256": "PENDING_CI_BACKFILL",
+      "size": 0,
       "role": "folder"
     }
   ]
