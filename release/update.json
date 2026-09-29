@@ -5,8 +5,8 @@
     {
       "name": "ITV-Desk-3.2.6-folder.zip",
       "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.6/ITV-Desk-3.2.6-folder.zip",
-      "sha256": "PENDING_CI_BACKFILL",
-      "size": 0,
+      "sha256": "d3a9561ff7eb11b69af704b59c96c1e07c498ad0c5971eec2b8e3fdc4eb534ff",
+      "size": 115444440,
       "role": "folder"
     }
   ]
