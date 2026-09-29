@@ -73,3 +73,5 @@ _diag*.txt
 _diag*.py
 _lockcheck.txt
 _make_zip.py
+ai_usage.json
+ai_cache.json

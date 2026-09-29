@@ -1,12 +1,12 @@
 {
-  "version": "3.2.5",
-  "notes": "ITV Desk v3.2.5：设置页去重与瘦身。① 视觉模型两处合一：以前「频道名校正」和「AI 智能」两页各有一套视觉模型配置（地址 / 模型名 / Key 要各填一遍），现在只在「设置 → AI 智能 → 视觉模型」填一次，频道名校正自动共用，原位置改成指引文字，「连通性测试」按钮也挪了过去。已经填过的旧配置仍然有效，不会被清空。② 主题设置真正生效：主题色、深色模式、皮肤以前只存在浏览器里，导出或备份设置时主题会丢；现在会一起存进设置文件，备份能带上，换台电脑也能恢复。你当前正在用的主题不会变。③ 清掉 157 个没人用的设置项（界面微调遗留的空配置，前后端都从不读取），设置文件更干净，运行不受影响。更新方式：点「检查更新」→「下载更新包」→「立即更新并重启」，程序会自动关闭、覆盖当前程序目录并重新打开，不需要选安装路径、也不需要手动解压。频道、设置、台标、截图、缓存等数据不在更新包内，不会被覆盖。",
+  "version": "3.2.6",
+  "notes": "ITV Desk v3.2.6：AI 接口连接修复 + 错误提示智能化。① API 地址容错：以前很多人会把「API 地址」填成完整 chat 路径（http://host:port/v1/chat/completions），而软件会再拼一次 /chat/completions，请求变成 /v1/chat/completions/chat/completions 必 404；现在会自动剥掉末尾的 /chat/completions（含 /completions、含尾斜杠、不区分大小写），填完整路径也能直接跑。② 模型名错误一眼看明白：当 chat 接口返回 model_not_found、或中文网关报「没有任何已启用厂商声明模型」时，软件会自动拉一次 /v1/models 把该端点可用模型列表（前 25 个 + 总数）附在错误里，用户立刻知道端点真正有哪些模型、应改成哪一个。③ 视觉 / 文本频道名修复只改 AI 调用层：后端 ai_service.py 的 _norm_base + _looks_like_model_not_found / _model_not_found_hint + chat / chat_vision 错误处理；前端零改动、配置零迁移、不清空现有设置。更新方式：点「检查更新」→「下载更新包」→「立即更新并重启」，程序会自动关闭、覆盖当前程序目录并重新打开，不需要选安装路径、也不需要手动解压。频道、设置、台标、截图、缓存等数据不在更新包内，不会被覆盖。",
   "packages": [
     {
-      "name": "ITV-Desk-3.2.5-folder.zip",
-      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.5/ITV-Desk-3.2.5-folder.zip",
-      "sha256": "c99912411b30fbef7087d4b334960c0f075aa8fe5ffe5211d1d4512656e74cc0",
-      "size": 115443400,
+      "name": "ITV-Desk-3.2.6-folder.zip",
+      "url": "https://github.com/foxfred/itv-desk/releases/download/v3.2.6/ITV-Desk-3.2.6-folder.zip",
+      "sha256": "PENDING_CI_BACKFILL",
+      "size": 0,
       "role": "folder"
     }
   ]

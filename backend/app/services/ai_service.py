@@ -106,6 +106,14 @@ _EXPORT_SYSTEM = (
 
 def _norm_base(base):
     b = str(base or "").strip().rstrip("/")
+    # 容错：用户经常把 base_url 填成完整 chat 路径（".../v1/chat/completions"），
+    # 服务会自动再拼 /chat/completions，导致 ".../chat/completions/chat/completions" 404。
+    # 自动剥掉末尾的 chat/completions（不区分大小写、有/无尾斜杠）。
+    low = b.lower()
+    for suf in ("/chat/completions", "/completions"):
+        if low.endswith(suf):
+            b = b[: -len(suf)].rstrip("/")
+            break
     return b or DEFAULT_BASE
 
 
@@ -319,6 +327,42 @@ class AIService:
             return {"ok": False, "error": "接口未返回任何模型", "url": url}
         return {"ok": True, "models": models, "count": len(models), "url": url}
 
+    @staticmethod
+    def _looks_like_model_not_found(text):
+        """各种上游对"模型不存在"的不同说法（中英文），统一识别。"""
+        s = (text or "").lower()
+        if any(k in s for k in ("model_not_found", "model not found",
+                                "no available channel for model",
+                                "the model does not exist",
+                                "unknown model", "invalid model",
+                                "model not support", "model not supported",
+                                "model unavailable")):
+            return True
+        # 中文兜底（各家网关/聚合站会换说法）
+        if any(k in (text or "") for k in ("没有任何已启用厂商声明模型",
+                                          "模型不存在", "未知模型", "不支持的模型",
+                                          "model不存在")):
+            return True
+        return False
+
+    def _model_not_found_hint(self, c, err_text):
+        """chat/completions 报 model_not_found 时，自动拉一次 /v1/models 列出可用模型。
+        返回追加到错误消息末尾的中文提示；失败/无列表则返回空。
+        """
+        if not self._looks_like_model_not_found(err_text):
+            return ""
+        try:
+            r = self.list_models(base_url=c.get("base"), api_key=c.get("key"))
+        except Exception:
+            return ""
+        if not r.get("ok") or not r.get("models"):
+            return ""
+        avail = r["models"]
+        show = avail[:25]
+        more = "" if len(avail) <= 25 else "…（还有 %d 个未列出，请点「获取模型列表」看全部）" % (len(avail) - 25)
+        return "　该端点可用模型（共 %d 个，已按字母排序，取前 25）：%s%s。请在「设置 → AI 智能」把模型名改成其中之一，或点「获取模型列表」直接选。" % (
+            len(avail), "、".join(show), more)
+
     def chat(self, messages, base_url=None, api_key=None, model=None,
              temperature=None, max_tokens=None, json_mode=False):
         c = self.resolve(base_url, api_key, model)
@@ -347,7 +391,10 @@ class AIService:
             if isinstance(r, dict):
                 return r
         if r.status_code != 200:
-            return {"ok": False, "error": "HTTP %d：%s" % (r.status_code, (r.text or "")[:300]), "url": url}
+            err_text = r.text or ""
+            err = "HTTP %d：%s" % (r.status_code, err_text[:300])
+            err += self._model_not_found_hint(c, err_text)
+            return {"ok": False, "error": err, "url": url}
         try:
             data = r.json()
         except Exception:
@@ -403,7 +450,10 @@ class AIService:
         except Exception as e:
             return {"ok": False, "error": "请求失败：%s" % str(e)[:220]}
         if r.status_code != 200:
-            return {"ok": False, "error": "HTTP %d：%s" % (r.status_code, (r.text or "")[:300])}
+            err_text = r.text or ""
+            err = "HTTP %d：%s" % (r.status_code, err_text[:300])
+            err += self._model_not_found_hint(v, err_text)
+            return {"ok": False, "error": err}
         try:
             data = r.json()
             content = data["choices"][0]["message"]["content"]
