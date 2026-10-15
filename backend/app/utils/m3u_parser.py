@@ -1,7 +1,7 @@
 import io
 import re
 from urllib.parse import urlparse
-from app.utils.network import normalize_url
+
 from app.config import Config
 
 
@@ -91,7 +91,7 @@ class Parser:
 
     @staticmethod
     def detect_geo_and_stack(n, u):
-        n_u, u_u = str(n).upper(), str(u).upper()
+        n_u, _u_u = str(n).upper(), str(u).upper()
         g = "中国"
         if any(k in n_u for k in ["HBO", "CNN", "BBC", "DISCOVERY"]):
             g = "欧美"
@@ -106,23 +106,9 @@ class Parser:
                 s = "IPv6"
             elif re.search(r'//\[[0-9a-fA-F:]+\]', u):
                 s = "IPv6"
-        except:
+        except Exception:
             pass
         return g, s
-
-    @staticmethod
-    def is_live_stream(u, cc):
-        u_u = str(u).upper()
-        video_exts = [".M3U8", ".M3U", ".TS", "/TS/", ".MP4", ".FLV", ".MKV", ".AVI", ".MOV", ".WMV"]
-        if any(k in u_u for k in video_exts):
-            return True
-        if any(k in u_u for k in ["M3U8?", "PLAY?", "LIVE", "STREAM"]):
-            return True
-        if any(k in cc for k in ["#EXTM3U", "#EXTINF", "MPEGTS", "FLV", "FTYPMP4"]):
-            return True
-        if "FTYP" in cc and "MP4" in cc:
-            return True
-        return False
 
     @staticmethod
     def parse_local_file(txt):

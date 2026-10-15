@@ -3,10 +3,10 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
-from app.utils.network import http_probe_channel, download_url, format_github_raw_url
-from app.utils.m3u_parser import extract_channels, export_playlist, Parser
-from app.utils.helpers import find_logo
 
+from app.utils.helpers import find_logo
+from app.utils.m3u_parser import export_playlist, extract_channels
+from app.utils.network import download_url, format_github_raw_url, http_probe_channel
 
 _GARBLED_CHARS = re.compile(r'[\u00c0-\u00ff]')
 
@@ -687,10 +687,10 @@ class RepairService:
             url = channel["url"]
             start = time.time()
             try:
-                online, code, elapsed, res = http_probe_channel(
+                online, _code, elapsed, res = http_probe_channel(
                     url, timeout=repair_timeout, retries=repair_retries)
             except Exception:
-                online, code, elapsed, res = False, None, int((time.time() - start) * 1000), "-"
+                online, _code, elapsed, res = False, None, int((time.time() - start) * 1000), "-"
             if online:
                 channel["status"] = "在线"
             else:

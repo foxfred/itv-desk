@@ -1,8 +1,8 @@
 import os
-import json
 import threading
 from datetime import datetime, timedelta
 
+from app.config import FileManager
 from app.services.channel_service import _cue_rank, _ms_num
 
 _LATENCY_BUCKETS = [
@@ -91,23 +91,13 @@ class StatsService:
         } for c in bad[:limit]]
 
     def _load(self):
-        try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-        return {}
+        return FileManager.read_json(self.path, default={}, expect=dict)
 
     def _save(self, data):
-        try:
-            tmp = self.path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=1, sort_keys=True)
-            os.replace(tmp, self.path)
-        except Exception as e:
-            self.log(f"健康快照保存失败：{e}")
+        ok, err = FileManager.write_json_atomic(
+            self.path, data, indent=1, sort_keys=True)
+        if not ok:
+            self.log(f"健康快照保存失败：{err}")
 
     def snapshot(self, channel_service, force=False):
         snap = self._snapshot_from_pool(channel_service)

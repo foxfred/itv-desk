@@ -1,7 +1,5 @@
-import sys
-import os
-import threading
 import logging
+import threading
 
 from app.services.scraper_engine import ScraperEngine
 
@@ -76,11 +74,15 @@ class ScrapeService:
                     pass
             self.log_callback("抓取任务结束")
 
-    def run_scrape(self, url, start, end, suffix_list, proxy, mirror):
+    def _start_worker(self, tasks, suffix_list, proxy, mirror):
+        """启动抓取 worker 线程；已在跑则拒绝。
+
+        `run_scrape`（单个 URL）与 `run_scrape_batch`（URL 列表）仅在
+        「如何把入参拼成 tasks」上有差别，其余「查重 → 起线程 → 返回」完全一致。
+        """
         with self._lock:
             if self._state["running"]:
                 return False, "已有抓取在进行中"
-        tasks = [(url, start, end)]
         threading.Thread(
             target=self._scrape_worker,
             args=(tasks, suffix_list, proxy, mirror),
@@ -88,17 +90,11 @@ class ScrapeService:
         ).start()
         return True, None
 
+    def run_scrape(self, url, start, end, suffix_list, proxy, mirror):
+        return self._start_worker([(url, start, end)], suffix_list, proxy, mirror)
+
     def run_scrape_batch(self, urls, suffix_list, proxy, mirror):
-        with self._lock:
-            if self._state["running"]:
-                return False, "已有抓取在进行中"
-        tasks = [(url, 1, 1) for url in urls]
-        threading.Thread(
-            target=self._scrape_worker,
-            args=(tasks, suffix_list, proxy, mirror),
-            daemon=True
-        ).start()
-        return True, None
+        return self._start_worker([(url, 1, 1) for url in urls], suffix_list, proxy, mirror)
 
     def get_status(self):
         return self.state

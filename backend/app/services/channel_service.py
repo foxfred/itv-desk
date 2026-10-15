@@ -1,16 +1,17 @@
+import concurrent.futures
+import json
 import os
 import re
 import threading
-import json
 import time
-import uuid
 import urllib.parse
-import concurrent.futures
+import uuid
 from datetime import datetime, timezone
-from app.utils.network import normalize_url, format_github_raw_url
-from app.utils.m3u_parser import Parser
-from app.services.channel_store import ChannelStore
+
 from app.config import Config
+from app.services.channel_store import ChannelStore
+from app.utils.m3u_parser import Parser
+from app.utils.network import format_github_raw_url, normalize_url
 
 
 def _new_health():
@@ -163,7 +164,7 @@ class ChannelService:
                     group = Parser.get_channel_group(ch["name"], custom_rules, foreign_name)
                 else:
                     group = ch.get("group", "") or Parser.get_channel_group(ch["name"], custom_rules, foreign_name)
-                from app.main import tag_db, fake_live_db
+                from app.main import fake_live_db, tag_db
                 primary = ch["url"]
                 self.pool.insert(0, {
                     "checked": False,
@@ -272,32 +273,12 @@ class ChannelService:
                     return True
             return False
 
-    def set_check_all(self, state):
-        with self.lock:
-            for ch in self.pool:
-                ch["checked"] = state
-
-    def set_check_ids(self, ids, state):
-        with self.lock:
-            idset = set(ids)
-            for ch in self.pool:
-                if ch["id"] in idset:
-                    ch["checked"] = state
-
     def get_stats(self):
         with self.lock:
             total = len(self.pool)
             online = sum(1 for ch in self.pool if ch["status"] == "在线")
             offline = sum(1 for ch in self.pool if ch["status"] == "离线")
             return total, online, offline
-
-    def count_unchecked(self):
-        with self.lock:
-            return sum(1 for ch in self.pool if ch.get("status", "未检查") == "未检查")
-
-    def get_unchecked(self):
-        with self.lock:
-            return [ch for ch in self.pool if ch.get("status", "未检查") == "未检查"]
 
     def count(self):
         try:
@@ -384,16 +365,6 @@ class ChannelService:
             h["decode_unsupported"] = _decode_fail > 0 and _decode_fail >= h["consecutive_fail"]
             return dict(h)
 
-    def get_health_summary(self):
-        with self.lock:
-            total = len(self.pool)
-            dead = sum(1 for ch in self.pool if ch.get("health", {}).get("dead"))
-            scored = [ch["health"]["score"] for ch in self.pool
-                      if isinstance(ch.get("health", {}).get("score"), (int, float))]
-            avg = (sum(scored) / len(scored)) if scored else None
-            return {"total": total, "dead": dead, "avg_score": avg,
-                    "scored": len(scored)}
-
     @staticmethod
     def _norm_url_key(u):
         if not u:
@@ -405,8 +376,7 @@ class ChannelService:
             if sep in s:
                 s = s.split(sep, 1)[0]
         s = s.rstrip("/")
-        if s.startswith("www."):
-            s = s[4:]
+        s = s.removeprefix("www.")
         return s
 
     def _norm_name_key(self, n):
@@ -460,7 +430,6 @@ class ChannelService:
             split_count = 0
             for ch in self.pool:
                 srcs = _normalize_sources(ch)
-                from app.main import tag_db, fake_live_db
                 is_multi = (ch.get("sources") and len(ch.get("sources")) > 1) or bool(ch.get("source_groups"))
                 if not is_multi:
                     expanded.append(_strip_multi_fields(ch))
@@ -502,7 +471,7 @@ class ChannelService:
 
     def match_logos(self, logos_dir=None):
         if not logos_dir:
-            from app.main import DATA_DIR
+            from app.paths import DATA_DIR
             logos_dir = os.path.join(DATA_DIR, "logos")
         if not os.path.isdir(logos_dir):
             return {"scanned": 0, "matched": 0, "logos_dir": logos_dir}
@@ -554,7 +523,7 @@ class ChannelService:
 
     def _load_github_index_cache(self):
         try:
-            from app.main import DATA_DIR
+            from app.paths import DATA_DIR
             p = os.path.join(DATA_DIR, self._ONLINE_INDEX_FILE)
             if os.path.isfile(p):
                 with open(p, "r", encoding="utf-8") as f:
@@ -565,7 +534,7 @@ class ChannelService:
 
     def _save_github_index_cache(self, cache):
         try:
-            from app.main import DATA_DIR
+            from app.paths import DATA_DIR
             p = os.path.join(DATA_DIR, self._ONLINE_INDEX_FILE)
             with open(p, "w", encoding="utf-8") as f:
                 json.dump(cache, f, ensure_ascii=False)
@@ -638,6 +607,7 @@ class ChannelService:
     @staticmethod
     def _fetch_logo_bytes(url, proxy, timeout):
         import requests
+
         from app.utils.network import is_local_url
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         local = is_local_url(url)
@@ -723,7 +693,7 @@ class ChannelService:
         if status is None:
             return
         try:
-            from app.main import DATA_DIR
+            from app.paths import DATA_DIR
             mirror = (settings or {}).get("mirror", "不使用加速")
             # 代理统一由「抓取面板」的 use_proxy 开关门控（2026-09-28 统一入口）
             from app.utils.network import resolve_proxy
@@ -773,7 +743,7 @@ class ChannelService:
                             url = l
                     if not url:
                         continue
-                    data, err = self._fetch_logo_bytes(url, proxy, 8)
+                    data, _err = self._fetch_logo_bytes(url, proxy, 8)
                     if data:
                         rel = self._save_online_logo(s["id"], nk, data, logos_dir)
                         if rel:

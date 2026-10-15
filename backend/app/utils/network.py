@@ -1,11 +1,13 @@
+import gzip
 import re
-import time
 import ssl
 import threading
-import gzip
-import urllib.request
+import time
 import urllib.error
+import urllib.request
+
 from app.config import Config
+from app.utils.helpers import rm_quiet
 
 
 def normalize_url(url):
@@ -64,17 +66,6 @@ def build_link_pattern(suffix_list):
     )
 
 
-def _normalize_proxy(proxy):
-    if not proxy:
-        return None
-    p = str(proxy).strip()
-    if not p:
-        return None
-    if "://" in p:
-        return p
-    return None
-
-
 def _build_proxy_list(proxy):
     if not proxy:
         return []
@@ -130,13 +121,6 @@ def is_local_url(url):
     if h.endswith(".local") or h.endswith(".localhost") or h.endswith(".lan"):
         return True
     return False
-
-
-def proxy_for_url(url, settings, key="proxy"):
-    """带「本机/内网自动绕行」的代理解析：本地地址一律返回 ""（直连）。"""
-    if is_local_url(url):
-        return ""
-    return resolve_proxy(settings, key)
 
 
 def _no_proxy_opener(ssl_ctx=None):
@@ -252,7 +236,7 @@ def download_url(url, proxy=None, timeout=None, max_retries=None, headers=None, 
         proxy_list = []  # 本机/内网地址直连，不走任何代理
     have_requests = False
     try:
-        import requests
+        import requests  # noqa: F401  (能力探测：探测是否安装 requests)
         have_requests = True
     except ImportError:
         pass
@@ -268,19 +252,22 @@ def download_url(url, proxy=None, timeout=None, max_retries=None, headers=None, 
                 return "", "用户中断"
             result = [None, None]
 
-            def target():
+            # 关键：proxy_url / result 必须按「默认参数」绑定进闭包，不能靠闭包
+            # 捕获循环变量。否则下一轮循环改写 proxy_url 时，上一轮还在跑的线程
+            # 会读到新值，把结果写进已经作废的槽位（脏数据 + 结果错配）。
+            def target(_proxy_url=proxy_url, _result=result):
                 if have_requests:
-                    text, err = _request_download(url, proxy_url, timeout, chunk_size, headers, stop_event)
+                    text, err = _request_download(url, _proxy_url, timeout, chunk_size, headers, stop_event)
                 else:
-                    if proxy_url and proxy_url.lower().startswith("socks"):
-                        result[1] = "当前环境缺少 requests/PySocks，无法使用 socks5 代理"
+                    if _proxy_url and _proxy_url.lower().startswith("socks"):
+                        _result[1] = "当前环境缺少 requests/PySocks，无法使用 socks5 代理"
                         return
-                    p = proxy_url if proxy_url else None
+                    p = _proxy_url if _proxy_url else None
                     proxies = None
                     if p:
                         proxies = {"http": p, "https": p}
                     text, err = _urllib_download(url, proxies, timeout, chunk_size, headers, stop_event)
-                result[0], result[1] = text, err
+                _result[0], _result[1] = text, err
 
             thread = threading.Thread(target=target, daemon=True)
             thread.start()
@@ -300,6 +287,9 @@ def download_url(url, proxy=None, timeout=None, max_retries=None, headers=None, 
 
             if thread.is_alive():
                 last_err = "下载超时"
+                # 超时后该线程仍会写 result（虽然已与本轮解绑，但没必要让它继续跑）。
+                # 这是一个 daemon 线程，join 一小会儿即可，避免它堆积 / 卡在 socket 上。
+                thread.join(timeout=0.1)
                 continue
 
             if result[1]:
@@ -320,10 +310,10 @@ def download_url(url, proxy=None, timeout=None, max_retries=None, headers=None, 
 
 
 def http_probe_channel(url, timeout=5, retries=1, proxy=None):
-    import urllib.request
-    import urllib.error
     import ssl
     import time
+    import urllib.error
+    import urllib.request
 
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
@@ -427,13 +417,17 @@ def resolve_proxy(settings, key="proxy"):
     return p
 
 
-def _rm_quiet(path):
+def global_proxy():
+    """按「抓取面板」的 use_proxy 开关解析代理地址（读取当前设置文件）。
+
+    订阅定时更新、EPG 定时刷新两条后台链路都需要「拿最新设置里的代理」，
+    原先各自在 service 里写了一份完全相同的实现。此处收敛为唯一定义。
+    """
+    from app.config import Config
     try:
-        import os
-        if path and os.path.isfile(path):
-            os.remove(path)
+        return resolve_proxy(Config.load_settings())
     except Exception:
-        pass
+        return ""
 
 
 def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
@@ -467,7 +461,7 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
 
     last_err = "未尝试"
     last_size = 0
-    _rm_quiet(dest_path)
+    rm_quiet(dest_path)
 
     def _attempt(proxy_url):
         """单次尝试；返回 (ok, size, err)。"""
@@ -497,7 +491,7 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                         for chunk in resp.iter_content(chunk_size=chunk_size):
                             if stop_event and stop_event.is_set():
                                 resp.close()
-                                _rm_quiet(dest_path)
+                                rm_quiet(dest_path)
                                 return False, 0, "用户中断"
                             if chunk:
                                 f.write(chunk)
@@ -508,14 +502,14 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                                     except Exception:
                                         pass
                     if min_size and size < min_size:
-                        _rm_quiet(dest_path)
+                        rm_quiet(dest_path)
                         return False, size, f"下载不完整（{size} < {min_size}），疑似中途被掐断"
                     return True, size, None
             except _rqe.SSLError as e:
-                _rm_quiet(dest_path)
+                rm_quiet(dest_path)
                 return False, 0, f"SSL 错误: {e}"
             except Exception as e:
-                _rm_quiet(dest_path)
+                rm_quiet(dest_path)
                 return False, 0, f"{type(e).__name__}: {e}"
         else:
             # urllib 兜底（仅 http 代理；socks5 跳过避免报错）
@@ -546,12 +540,12 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                     with open(dest_path, "wb") as f:
                         while True:
                             if stop_event and stop_event.is_set():
-                                _rm_quiet(dest_path)
+                                rm_quiet(dest_path)
                                 return False, 0, "用户中断"
                             try:
                                 chunk = resp.read(chunk_size)
                             except Exception as e:
-                                _rm_quiet(dest_path)
+                                rm_quiet(dest_path)
                                 return False, size, f"读取中断: {e}"
                             if not chunk:
                                 break
@@ -563,11 +557,11 @@ def download_binary(url, proxy=None, dest_path=None, timeout=120, max_retries=3,
                                 except Exception:
                                     pass
                     if min_size and size < min_size:
-                        _rm_quiet(dest_path)
+                        rm_quiet(dest_path)
                         return False, size, f"下载不完整（{size} < {min_size}），疑似中途被掐断"
                     return True, size, None
             except Exception as e:
-                _rm_quiet(dest_path)
+                rm_quiet(dest_path)
                 return False, 0, f"{type(e).__name__}: {e}"
 
     for attempt in range(max_retries):

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+
 from app.config import Config
 
 router = APIRouter(prefix="/api", tags=["config"])
@@ -12,8 +13,9 @@ def get_settings():
 
 @router.get("/build-info")
 def build_info():
-    from app.main import _FRONTEND_DIST
     import os
+
+    from app.main import _FRONTEND_DIST
     info_path = os.path.join(_FRONTEND_DIST, "build-info.json") if _FRONTEND_DIST else None
     data = {"version": "unknown", "buildTime": None}
     if info_path and os.path.isfile(info_path):

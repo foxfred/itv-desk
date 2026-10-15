@@ -1,8 +1,8 @@
+import datetime
 import os
 import re
-import threading
 import subprocess
-import datetime
+import threading
 
 _FFMPEG = os.environ.get("IPTV_FFMPEG", "ffmpeg")
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -332,6 +332,3 @@ class RecordService:
             self._purge_dir(s.get("dir"))
         return {"ok": True, "stopped": len(sessions)}
 
-    def stop_all(self):
-        self.stop_record()
-        self.stop_timeshift()

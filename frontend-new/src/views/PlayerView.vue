@@ -948,6 +948,25 @@ function reportPlayHealth(success, error = null, firstFrameMs = null) {
   reportHealth(currentUrl.value, success, error, firstFrameMs).catch(() => {})
 }
 
+// 画中画进出回调：必须用具名函数，才能在 setupHls() 重复调用时先解绑旧监听。
+function onEnterPiP() {
+  pipActive.value = true
+  callNative('hide_window')
+}
+
+function onLeavePiP() {
+  pipActive.value = false
+  callNative('restore_main_window')
+  callNative('show_window')
+}
+
+function unbindPiPListeners() {
+  const v = videoEl.value
+  if (!v) return
+  v.removeEventListener('enterpictureinpicture', onEnterPiP)
+  v.removeEventListener('leavepictureinpicture', onLeavePiP)
+}
+
 async function setupHls() {
   const v = videoEl.value
   if (!v || !currentUrl.value) return
@@ -956,15 +975,13 @@ async function setupHls() {
   miscTimers = []
     if (dashPlayer) { try { dashPlayer.reset() } catch (_) {}; dashPlayer = null }
   const url = currentUrl.value
-    v.addEventListener('enterpictureinpicture', () => {
-    pipActive.value = true
-        callNative('hide_window')
-  })
-  v.addEventListener('leavepictureinpicture', () => {
-    pipActive.value = false
-            callNative('restore_main_window')
-    callNative('show_window')
-  })
+      // 用具名回调 + 先移除再添加：setupHls() 被多处调用（换台、重试、恢复…），
+      // 若每次都用匿名箭头函数注册，旧监听无法移除，会在同一个 <video> 上叠加，
+      // 切台 N 次后一次进画中画会触发 N 次 hide_window/show_window 造成窗口抖动。
+  v.removeEventListener('enterpictureinpicture', onEnterPiP)
+  v.removeEventListener('leavepictureinpicture', onLeavePiP)
+  v.addEventListener('enterpictureinpicture', onEnterPiP)
+  v.addEventListener('leavepictureinpicture', onLeavePiP)
       usingProxy = !!proxyEnabled.value
   healthReported = false
   const src = usingProxy ? buildProxyUrl(url) : url
@@ -1798,6 +1815,7 @@ onUnmounted(() => {
   if (timeshiftActive.value && timeshiftId.value) recordApi.stopTimeshift(timeshiftId.value).catch(() => {})
     if (window.__iptvPlay === playRow) delete window.__iptvPlay
   if (window.__iptvCleanup) delete window.__iptvCleanup
+  unbindPiPListeners()
   window.removeEventListener('keydown', onKeyDown)
     forceStopAll()
   if (pendingTimer) { clearInterval(pendingTimer); pendingTimer = null }

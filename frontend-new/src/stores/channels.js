@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import * as channelApi from '@/api/channels'
 
 export const useChannelStore = defineStore('channels', () => {
@@ -7,11 +7,6 @@ export const useChannelStore = defineStore('channels', () => {
   const stats = ref({ total: 0, online: 0, offline: 0 })
   const loading = ref(false)
   const loaded = ref(false)
-  const selectedIds = ref(new Set())
-
-  const selectedChannels = computed(() =>
-    channels.value.filter(c => selectedIds.value.has(c.id))
-  )
 
   async function fetchChannels() {
     loading.value = true
@@ -23,7 +18,7 @@ export const useChannelStore = defineStore('channels', () => {
     loading.value = false
   }
 
-    async function fetchIfNeeded() {
+  async function fetchIfNeeded() {
     if (loaded.value) {
       await fetchStats()
       return false
@@ -44,30 +39,8 @@ export const useChannelStore = defineStore('channels', () => {
     await Promise.all([fetchChannels(), fetchStats()])
   }
 
-  function toggleSelect(id) {
-    const s = new Set(selectedIds.value)
-    if (s.has(id)) s.delete(id)
-    else s.add(id)
-    selectedIds.value = s
-  }
-
-  function selectAll() {
-    selectedIds.value = new Set(channels.value.map(c => c.id))
-  }
-
-  function invertSelect() {
-    const all = new Set(channels.value.map(c => c.id))
-    const inv = new Set([...all].filter(id => !selectedIds.value.has(id)))
-    selectedIds.value = inv
-  }
-
-  function clearSelect() {
-    selectedIds.value = new Set()
-  }
-
   return {
-    channels, stats, loading, loaded, selectedIds, selectedChannels,
-    fetchChannels, fetchStats, fetchIfNeeded, refresh,
-    toggleSelect, selectAll, invertSelect, clearSelect
+    channels, stats, loading, loaded,
+    fetchChannels, fetchStats, fetchIfNeeded, refresh
   }
 })

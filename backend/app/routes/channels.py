@@ -1,21 +1,20 @@
-import json
-from fastapi import APIRouter, HTTPException, Query, Depends
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Optional
 
 router = APIRouter(prefix="/api/channels", tags=["channels"])
 
 
 class ChannelUpdate(BaseModel):
-    name: Optional[str] = None
-    url: Optional[str] = None
-    group: Optional[str] = None
-    tag: Optional[str] = None
-    logo: Optional[str] = None
+    name: str | None = None
+    url: str | None = None
+    group: str | None = None
+    tag: str | None = None
+    logo: str | None = None
 
 
 class BatchSelectReq(BaseModel):
-    ids: List[int]
+    ids: list[int]
     state: bool = True
     clear: bool = True
 
@@ -29,12 +28,12 @@ class TagToggleReq(BaseModel):
 
 
 class BatchTagAddReq(BaseModel):
-    ids: List[int]
+    ids: list[int]
     tags: str
 
 
 class BatchTagClearReq(BaseModel):
-    ids: List[int]
+    ids: list[int]
 
 
 class FakeLiveReq(BaseModel):
@@ -42,20 +41,20 @@ class FakeLiveReq(BaseModel):
 
 
 class BatchFakeLiveReq(BaseModel):
-    ids: List[int]
+    ids: list[int]
     is_fake_live: bool
 
 
 class BatchGroupReq(BaseModel):
-    ids: List[int]
+    ids: list[int]
     group: str
 
 
 class HealthReportReq(BaseModel):
     url: str
     success: bool = True
-    error: Optional[str] = None
-    first_frame_ms: Optional[int] = None
+    error: str | None = None
+    first_frame_ms: int | None = None
 
 
 def get_channel_service():
@@ -84,7 +83,7 @@ def get_settings():
 
 
 def _save_cache(channel_service, settings=None):
-    from app.config import FileManager, Config
+    from app.config import FileManager
     try:
         cache_file = (settings or {}).get("cache_file_name", "channels_cache.json")
         with channel_service.lock:
@@ -109,13 +108,6 @@ def search_channels(q: str = Query("", description="名称/分组/标记模糊�
 @router.get("/groups")
 def groups(channel_service=Depends(get_channel_service)):
     return channel_service.get_groups()
-
-
-@router.get("/stats")
-def stats(channel_service=Depends(get_channel_service)):
-    total, online, offline = channel_service.get_stats()
-    unchecked = channel_service.count_unchecked()
-    return {"total": total, "online": online, "offline": offline, "unchecked": unchecked}
 
 
 @router.post("/health")
@@ -161,12 +153,6 @@ def toggle_check(channel_id: int, channel_service=Depends(get_channel_service)):
     return {"ok": True}
 
 
-@router.post("/check-all")
-def set_check_all(state: bool = Query(...), channel_service=Depends(get_channel_service)):
-    channel_service.set_check_all(state)
-    return {"ok": True}
-
-
 @router.post("/select")
 def set_select(body: BatchSelectReq, channel_service=Depends(get_channel_service)):
     with channel_service.lock:
@@ -198,7 +184,7 @@ def delete_channel(channel_id: int, channel_service=Depends(get_channel_service)
 
 
 @router.post("/delete-many")
-def delete_many(ids: List[int], channel_service=Depends(get_channel_service),
+def delete_many(ids: list[int], channel_service=Depends(get_channel_service),
                 log=Depends(get_log), settings=Depends(get_settings)):
     idset = set(ids)
     removed = channel_service.remove_by_filter(lambda ch: ch["id"] in idset)
@@ -395,7 +381,7 @@ def batch_group(body: BatchGroupReq, channel_service=Depends(get_channel_service
 
 
 class MatchLogosReq(BaseModel):
-    logos_dir: Optional[str] = None
+    logos_dir: str | None = None
 
 
 @router.post("/merge-duplicates")
@@ -422,7 +408,7 @@ def match_logos(body: MatchLogosReq, channel_service=Depends(get_channel_service
 
 class OnlineLogosReq(BaseModel):
     only_missing: bool = True
-    sources: Optional[list] = None
+    sources: list | None = None
 
 
 @router.post("/match-logos-online")

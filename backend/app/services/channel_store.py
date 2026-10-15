@@ -1,11 +1,12 @@
-import os
 import sqlite3
 import threading
 
-DEFAULT_DB = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-    "channels.db",
-)
+from app.paths import db_path
+
+# 数据库位置统一由 app/paths.py 决定（认 ITV_DATA_DIR / frozen / 开发态仓库根）。
+# 历史坑：这里曾是四级 dirname 硬编码到仓库根，导致打包后频道库落在 exe 上一级、
+# 与 main.py 认定的数据目录不一致。
+DEFAULT_DB = db_path()
 
 
 class ChannelStore:
@@ -121,15 +122,6 @@ class ChannelStore:
         vals.append(norm_url)
         with self._lock:
             self._conn.execute(f"UPDATE channels SET {','.join(sets)} WHERE norm_url=?", vals)
-            self._conn.commit()
-
-    def delete_by_norms(self, norm_urls):
-        if not norm_urls:
-            return
-        with self._lock:
-            self._conn.executemany(
-                "DELETE FROM channels WHERE norm_url=?", [(n,) for n in norm_urls]
-            )
             self._conn.commit()
 
     def count(self):

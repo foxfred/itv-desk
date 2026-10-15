@@ -1,6 +1,6 @@
 import os
+
 from app.utils.m3u_parser import export_playlist
-from app.config import Config
 
 
 class ExportService:

@@ -1,7 +1,5 @@
-import sys
-import os
-import threading
 import logging
+import threading
 
 from app.services.checker_engine import CheckerEngine
 

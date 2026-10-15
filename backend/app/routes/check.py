@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api", tags=["check"])
@@ -7,7 +7,7 @@ router = APIRouter(prefix="/api", tags=["check"])
 
 class CheckReq(BaseModel):
     only_selected: bool = False
-    selected_ids: List[int] = []
+    selected_ids: list[int] = []
     threads: int = 40
     timeout: float = 1.5
     retries: int = 1

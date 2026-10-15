@@ -1,7 +1,8 @@
 import os
 import re
-import json
 import threading
+
+from app.config import FileManager
 
 SEED = {
     "CCTV1": ["央视一套", "央视综合", "中央一台", "中央1台", "央视1套", "CCTV1综合"],
@@ -142,24 +143,19 @@ class AliasService:
             self.map = {k: list(v) for k, v in SEED.items()}
             self._save()
             return
-        try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and data:
-                self.map = {str(k): [str(x) for x in (v or [])] for k, v in data.items()}
-                return
-        except Exception as e:
-            self.log(f"别名库读取失败，回退种子数据：{e}")
+        data = FileManager.read_json(self.path, default=None, expect=dict)
+        if data is None:
+            self.log("别名库读取失败，回退种子数据")
+        if data:
+            self.map = {str(k): [str(x) for x in (v or [])] for k, v in data.items()}
+            return
         self.map = {k: list(v) for k, v in SEED.items()}
 
     def _save(self):
-        try:
-            tmp = self.path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.map, f, ensure_ascii=False, indent=1, sort_keys=True)
-            os.replace(tmp, self.path)
-        except Exception as e:
-            self.log(f"别名库保存失败：{e}")
+        ok, err = FileManager.write_json_atomic(
+            self.path, self.map, indent=1, sort_keys=True)
+        if not ok:
+            self.log(f"别名库保存失败：{err}")
 
     def _rebuild(self):
         idx = {}
@@ -250,13 +246,8 @@ _service_lock = threading.Lock()
 
 
 def _default_data_dir():
-    if os.environ.get("ITV_DATA_DIR"):
-        return os.path.abspath(os.environ["ITV_DATA_DIR"])
-    try:
-        from app.database import DATA_DIR
-        return DATA_DIR
-    except Exception:
-        return os.getcwd()
+    from app.paths import DATA_DIR
+    return DATA_DIR
 
 
 def get_service():

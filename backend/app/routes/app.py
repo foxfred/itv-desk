@@ -1,14 +1,14 @@
-import os
 import json
-import sys
+import os
 import threading
 import urllib.request
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 
+from app.paths import get_data_dir
 from app.utils import network
+from app.utils.helpers import rm_quiet
 
 router = APIRouter(prefix="/api/app", tags=["app"])
 
@@ -18,11 +18,6 @@ from app.version import APP_VERSION
 def get_settings():
     from app.main import settings
     return settings
-
-
-def get_data_dir():
-    from app.main import DATA_DIR
-    return DATA_DIR
 
 
 @router.get("/version")
@@ -44,7 +39,7 @@ def _ver_tuple(v):
 
 
 class CheckUpdateReq(BaseModel):
-    url: Optional[str] = None
+    url: str | None = None
 
 
 def _build_opener(settings=None, url=None):
@@ -106,17 +101,9 @@ def check_update(body: CheckUpdateReq = None, settings=Depends(get_settings)):
 
 class DownloadUpdateReq(BaseModel):
     url: str
-    filename: Optional[str] = None
-    sha256: Optional[str] = None
-    size: Optional[int] = None
-
-
-def _rm_quiet(path):
-    try:
-        if path and os.path.isfile(path):
-            os.remove(path)
-    except Exception:
-        pass
+    filename: str | None = None
+    sha256: str | None = None
+    size: int | None = None
 
 
 def _sha256_file(path):
@@ -172,25 +159,25 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
             _set_dl_state(done=done, total=t,
                           percent=int(done * 100 / t) if t else 0)
 
-        ok, size, err = network.download_binary(
+        ok, _size, err = network.download_binary(
             body.url, proxy=proxy, dest_path=dest,
             timeout=120, max_retries=3, min_size=min_size,
             progress_cb=_progress,
         )
         if not ok:
-            _rm_quiet(dest)
+            rm_quiet(dest)
             _set_dl_state(running=False, finished=True, error=str(err))
             raise HTTPException(500, f"下载失败: {err}")
     except HTTPException:
         raise
     except Exception as e:
-        _rm_quiet(dest)
+        rm_quiet(dest)
         _set_dl_state(running=False, finished=True, error=str(e))
         raise HTTPException(500, f"下载失败: {e}")
 
     actual = os.path.getsize(dest)
     if body.size and int(body.size) > 0 and actual != int(body.size):
-        _rm_quiet(dest)
+        rm_quiet(dest)
         got_mb = round(actual / 1048576, 1)
         want_mb = round(int(body.size) / 1048576, 1)
         _set_dl_state(running=False, finished=True, error="下载不完整")
@@ -198,7 +185,7 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
     if body.sha256:
         _set_dl_state(percent=100, done=actual, total=actual)
         if _sha256_file(dest).lower() != str(body.sha256).strip().lower():
-            _rm_quiet(dest)
+            rm_quiet(dest)
             _set_dl_state(running=False, finished=True, error="校验失败")
             raise HTTPException(500, "更新包校验失败（文件损坏），已删除，请重试下载")
     _set_dl_state(running=False, finished=True, percent=100,
@@ -207,8 +194,8 @@ def download_update(body: DownloadUpdateReq, data_dir=Depends(get_data_dir), set
 
 
 class ApplyUpdateReq(BaseModel):
-    zip_paths: Optional[list] = None
-    zip_path: Optional[str] = None
+    zip_paths: list | None = None
+    zip_path: str | None = None
 
 
 @router.post("/apply-update")

@@ -42,7 +42,7 @@ PIP_INDEX = os.environ.get("ITV_PIP_INDEX", "https://pypi.tuna.tsinghua.edu.cn/s
 PYTHON_EXE = os.path.join(OUT_DIR, "python.exe")
 
 VERIFY_CODE = (
-    "import fastapi, uvicorn, sqlalchemy, aiosqlite, bs4, lxml, aiohttp, "
+    "import fastapi, uvicorn, sqlalchemy, aiosqlite, "
     "requests, socks, cv2, onnxruntime, rapidocr_onnxruntime, PIL; "
     "print('IMPORTS OK')"
 )

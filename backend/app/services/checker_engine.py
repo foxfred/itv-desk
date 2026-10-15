@@ -1,10 +1,11 @@
-import time
 import re
 import socket
-import urllib.request
+import time
 import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urljoin, urlparse
+
 from app.utils.helpers import is_url_blacklisted, is_url_whitelisted
 
 
@@ -24,7 +25,7 @@ class CheckerEngine:
 
     _AD_KW = re.compile(
         r'(?:^|[/_\-\.])(ads?|adv|advert|adverts|advertise|guanggao|preroll|promo|tvc)(?:[/_\-\.]|$)',
-        re.I
+        re.IGNORECASE
     )
 
     def __init__(self, manager, ui_callback, progress_callback, status_callback, stop_event):
@@ -357,7 +358,7 @@ class CheckerEngine:
                 res, quality = self._detect_resolution(url, timeout)
                 return (ch["id"], "在线", proto_name, "在线", ms, res, quality, stack, None)
 
-            except (socket.timeout, ConnectionRefusedError, OSError):
+            except (TimeoutError, ConnectionRefusedError, OSError):
                 if attempt < retries - 1:
                     time.sleep(0.5)
                     continue

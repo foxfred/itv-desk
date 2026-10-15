@@ -16,7 +16,7 @@ class HdHomeRunService:
     def __init__(self, channel_service, log_callback=None, settings_provider=None, data_dir=None):
         self.channel_service = channel_service
         self.log = log_callback or (lambda m: None)
-        self.settings_provider = settings_provider or (lambda: {})
+        self.settings_provider = settings_provider or (dict)
         self.data_dir = data_dir
         self._lock = threading.Lock()
         self._tuners = {}
@@ -69,9 +69,6 @@ class HdHomeRunService:
         seed = ("itvdesk:" + os.path.abspath(self.data_dir or os.getcwd())).encode("utf-8")
         h = hashlib.md5(seed).hexdigest().upper()
         return (h[:8]) if h[:2].isalpha() else ("A" + h[:7])
-
-    def device_id_int(self):
-        return int(self.device_id(), 16)
 
     # ---------- 频道 -> lineup ----------
 
@@ -190,7 +187,7 @@ class HdHomeRunService:
         while not self._ssdp_stop.is_set():
             try:
                 data, addr = sock.recvfrom(2048)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except Exception:
                 break
@@ -309,7 +306,3 @@ def get_service():
     return _hdhr_service
 
 
-def init_service(channel_service, log_callback=None, settings_provider=None, data_dir=None):
-    global _hdhr_service
-    _hdhr_service = HdHomeRunService(channel_service, log_callback, settings_provider, data_dir)
-    return _hdhr_service

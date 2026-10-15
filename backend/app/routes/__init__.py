@@ -1,5 +1,16 @@
 from fastapi import APIRouter
-from app.routes import channels, scrape, check, epg, rules, repair, export, config, history
+
+from app.routes import (
+    channels,
+    check,
+    config,
+    epg,
+    export,
+    history,
+    repair,
+    rules,
+    scrape,
+)
 
 api_router = APIRouter()
 

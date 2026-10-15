@@ -1,9 +1,9 @@
-import os
-import json
-import time
 import hashlib
-import threading
+import os
 import subprocess
+import threading
+
+from app.config import FileManager
 
 _FFMPEG = os.environ.get("IPTV_FFMPEG", "ffmpeg")
 _UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -31,23 +31,10 @@ class ScreenshotService:
         self.index = self._load_index()
 
     def _load_index(self):
-        try:
-            with open(self.index_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-        return {}
+        return FileManager.read_json(self.index_file, default={}, expect=dict)
 
     def _save_index(self):
-        try:
-            tmp = self.index_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.index, f, ensure_ascii=False, indent=1)
-            os.replace(tmp, self.index_file)
-        except Exception:
-            pass
+        FileManager.write_json_atomic(self.index_file, self.index, indent=1)
 
     def list_index(self):
         with self._lock:

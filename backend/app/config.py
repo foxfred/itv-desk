@@ -1,6 +1,6 @@
 import json
 import os
-import sys
+
 
 class FileManager:
     @staticmethod
@@ -27,24 +27,38 @@ class FileManager:
             return False, str(e)
 
     @staticmethod
-    def write_lines(filepath, lines, encoding="utf-8"):
+    def read_json(filepath, default=None, expect=None):
+        """读取 JSON 文件。
+
+        - 文件不存在 / JSON 损坏 / 读取异常 → 返回 `default`，不抛异常
+        - `expect` 传 `dict` 或 `list` 时做类型校验，类型不符同样返回 `default`
+
+        收敛了 ai_service / stats_service / screenshot_service / subscription_service
+        各自实现的「open + json.load + isinstance 校验 + except 兜底」。
+        """
         try:
-            with open(filepath, "w", encoding=encoding) as f:
-                for line in lines:
-                    f.write(line + "\n")
-            return True, None
-        except Exception as e:
-            return False, str(e)
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return default
+        if expect is not None and not isinstance(data, expect):
+            return default
+        return data
 
     @staticmethod
-    def write_json_atomic(filepath, data, indent=2, encoding="utf-8"):
+    def write_json_atomic(filepath, data, indent=2, encoding="utf-8", sort_keys=False):
+        """原子写 JSON：同目录建临时文件 → fsync → os.replace 覆盖。
+
+        返回 `(ok, err)`；调用方自行决定是否记录日志。
+        """
         import tempfile
         try:
             d = os.path.dirname(os.path.abspath(filepath))
             fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
             try:
                 with os.fdopen(fd, "w", encoding=encoding) as f:
-                    json.dump(data, f, ensure_ascii=False, indent=indent)
+                    json.dump(data, f, ensure_ascii=False, indent=indent,
+                              sort_keys=sort_keys)
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp, filepath)
@@ -58,13 +72,6 @@ class FileManager:
         except Exception as e:
             return False, str(e)
 
-    @staticmethod
-    def ensure_dir(dirpath):
-        if not os.path.exists(dirpath):
-            os.makedirs(dirpath)
-        return os.path.exists(dirpath)
-
-
 class Config:
     HISTORY_FILE = "url_history.json"
     REMOTE_HISTORY_FILE = "remote_url_history.json"
@@ -76,26 +83,15 @@ class Config:
     OUTPUT_M3U = "检查整理结果_已去重.m3u"
 
     DEFAULTS = {
-        "auto_load_epg": True,
         "default_epg": "https://epg.163189.xyz/pp.xml",
-        "save_window_geometry": True,
-        "load_cache_on_startup": True,
-        "save_cache_on_exit": True,
-        "auto_correct_after_epg": False,
         "url_history_limit": 20,
         "mirror_history_limit": 20,
         "epg_history_limit": 20,
-        "cache_directory": "scraping_cache",
         "default_export_filename": "检查整理结果_已去重",
         "unknown_group_name": "未分组",
         "default_group_name": "自动分组",
         "json_indent": 2,
-        "default_speed": "1.0x",
-        "auto_check_after_import": False,
-        "auto_export_after_check": False,
-        "startup_delay_ms": 500,
         "cache_file_name": "channels_cache.json",
-        "column_widths_file": "column_widths.json",
         "smart_paste_default_group": "粘贴导入",
         "cache_default_group": "杂项频道",
         "cache_default_geo": "中国",
@@ -105,7 +101,6 @@ class Config:
         "custom_group_rules": [],
         "group_override_by_url": [],
         "use_proxy": False,
-        "default_proxy": "127.0.0.1:10808",
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "download_timeout": 15,
         "download_retries": 2,
@@ -115,8 +110,6 @@ class Config:
         "scraper_min_interval": 0.0,
         "download_chunk_size": 8192,
         "suffix_list": "m3u,m3u8,txt",
-        "default_suffix_list": "m3u,m3u8,txt",
-        "max_connections": 100,
         "mirror_history": ["不使用加速", "ghp.ci", "ghproxy.com", "ghproxy.net", "kkgithub.com", "raw.fastgit.org"],
         "mirror": "不使用加速",
         "proxy": "",
@@ -124,17 +117,6 @@ class Config:
         "check_timeout": 1.5,
         "check_threads": 40,
         "check_retries": 1,
-        "check_hls": True,
-        "probe_watchable": True,
-        "check_auto_interval": 0,
-        "reset_filter_after_check": True,
-        "auto_delete_invalid_after_check": False,
-        "show_quality_column": True,
-        "progress_update_freq": 50,
-        "batch_update_size": 30,
-        "latency_grade_a_threshold": 300,
-        "latency_grade_b_threshold": 800,
-        "checker_batch_size": 10,
         "fake_live_whitelist": [],
         "url_blacklist": [],
         "url_whitelist": [],
@@ -159,37 +141,9 @@ class Config:
         "theme_mode": "浅色",
         "theme": "#409EFF",
         "theme_preset": "默认蓝",
-        "font_size": 13,
-        "window_default_width": 1400,
-        "window_default_height": 820,
-        "window_geometry": "",
-        "left_panel_ratio": 0.28,
-        "left_panel_min_width": 380,
-        "left_panel_max_width": 620,
-        "left_config_ratio": 0.60,
-        "left_config_min_height": 280,
         "stats_card_position": "顶部",
         "stats_card_visible": True,
-        "stats_row_padding_top": 8,
-        "stats_row_padding_bottom": 4,
-        "right_panel_top_spacing": 0,
-        "stats_toolbar_spacing": 6,
-        "progress_bar_height": 18,
-        "progress_frame_height": 28,
-        "row_height": 28,
-        "show_ch_geo": True,
-        "show_ch_stack": True,
-        "show_ch_group": True,
-        "show_ch_tag": True,
-        "show_ch_quality": True,
-        "sort_column": 0,
-        "sort_order": "升序",
-        "default_column_widths": [40, 160, 65, 80, 50, 90, 50, 60, 90, 80, 260],
-        "column_labels": ["#", "频道", "在线状态", "状态", "ms", "分辨率", "质量", "网络栈", "分组", "标记", "地址"],
         "column_visibility": [True, True, True, True, True, True, True, True, True, True, True],
-        "video_min_width": 120,
-        "log_min_width": 80,
-        "lock_splitters": True,
         "player_update_interval_ms": 500,
         "player_hide_controls_delay_ms": 3000,
         "player_seek_step_ms": 5000,
@@ -204,25 +158,9 @@ class Config:
         "default_volume": 75,
         "default_playback_speed": 1.0,
         "color_video_bg": "#000000",
-        "debug_log": False,
-        "debug_log_traceback": True,
-        "log_timestamp": True,
-        "log_max_lines": 5000,
-        "log_auto_clear": 10000,
-        "scrape_page_timeout_multiplier": 2,
-        "scrape_page_timeout_max": 30,
-        "epg_timeout_multiplier": 3,
-        "epg_timeout_max": 15,
-        "epg_download_max_retries": 2,
         "repair_check_timeout": 5,
         "repair_max_retries": 1,
         "repair_max_workers": 10,
-        "repair_hd_size_threshold": 500000,
-        "repair_sd_size_threshold": 100000,
-        "search_debounce_ms": 200,
-        "pending_update_interval_ms": 50,
-        "volume_step": 5,
-        "status_bar_message_timeout_ms": 3000,
         "record_container": "mp4",
         "record_max_minutes": 0,
         "timeshift_minutes": 0,
@@ -266,7 +204,7 @@ class Config:
             return default
         try:
             return json.loads(content)
-        except:
+        except Exception:
             return default
 
     @staticmethod
@@ -275,9 +213,9 @@ class Config:
             if isinstance(data, list):
                 data = data[:max_len]
             content = json.dumps(data, ensure_ascii=False, indent=2)
-            success, err = FileManager.write_text(fname, content)
+            success, _err = FileManager.write_text(fname, content)
             return success
-        except:
+        except Exception:
             return False
 
     SETTINGS_FILE = "settings.json"
@@ -300,8 +238,5 @@ class Config:
 
     @staticmethod
     def get_data_dir():
-        try:
-            from app.main import DATA_DIR
-            return DATA_DIR
-        except ImportError:
-            return os.getcwd()
+        from app.paths import DATA_DIR
+        return DATA_DIR

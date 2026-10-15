@@ -1,11 +1,15 @@
+import gzip
+import json
 import os
 import re
 import threading
 import xml.etree.ElementTree as ET
-import gzip
 from datetime import datetime
-from app.utils.network import download_url
+
+from app.config import Config
 from app.utils.m3u_parser import Parser
+from app.utils.network import download_url, normalize_url
+from app.utils.scheduler import start_periodic, stop_periodic
 
 
 def _natural_key(name):
@@ -33,7 +37,7 @@ def _digits(s):
     return re.findall(r'\d+', s or '')
 
 
-_clean_hd = re.compile(r'[\s\-_]*[HD4K高清超高清标清FHD]*$', re.I)
+_clean_hd = re.compile(r'[\s\-_]*[HD4K高清超高清标清FHD]*$', re.IGNORECASE)
 
 
 class EpgService:
@@ -61,8 +65,9 @@ class EpgService:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.epg_data, f, ensure_ascii=False)
             os.replace(tmp, self.cache_path)
-        except Exception:
-            pass
+        except Exception as e:
+            # 缓存写不进去意味着「重启后 EPG 消失」，属可恢复但需可见的故障。
+            self.log_callback(f"  [EPG] 缓存写入失败: {e}")
 
     def load_cache(self):
         try:
@@ -74,16 +79,16 @@ class EpgService:
                 self.epg_loaded = True
                 self.epg_count = len(self.epg_data)
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            self.log_callback(f"  [EPG] 缓存读取失败（将重新下载）: {e}")
         return False
 
     def save_source(self, url, proxy=""):
         try:
             with open(self.source_path, "w", encoding="utf-8") as f:
                 json.dump({"url": url, "proxy": proxy}, f, ensure_ascii=False)
-        except Exception:
-            pass
+        except Exception as e:
+            self.log_callback(f"  [EPG] 源地址保存失败: {e}")
 
     def load_source(self):
         try:
@@ -97,6 +102,11 @@ class EpgService:
     def load_epg(self, url, proxy=""):
         if self.epg_loading:
             return {"loading": True, "error": "正在加载中"}
+        # 空地址直接拒绝：否则会进入 loading 态并起一个必然失败的下载线程，
+        # 前端拿到 {"loading": true} 后一直转圈，看不到任何错误。
+        if not url or not str(url).strip():
+            return {"error": "未提供 EPG 源地址"}
+        url = str(url).strip()
         self.epg_loading = True
         self.epg_error = None
         self.save_source(url, proxy)
@@ -156,8 +166,7 @@ class EpgService:
                 content = gzip.decompress(content).decode('utf-8', errors='ignore')
             else:
                 content = content.decode('utf-8', errors='ignore')
-        if content.startswith('\ufeff'):
-            content = content[1:]
+        content = content.removeprefix('\ufeff')
         match = re.search(r'<tv\s', content) or re.search(r'<tv[> >]', content)
         if not match:
             return None
@@ -200,7 +209,7 @@ class EpgService:
             parsed = self._parse_xml(content)
             if not parsed:
                 self.epg_error = "未找到有效 EPG 数据"
-                self.log_callback(f"EPG 解析失败: 未找到 <tv 标签")
+                self.log_callback("EPG 解析失败: 未找到 <tv 标签")
                 return
             if not self.epg_data:
                 self.epg_data = parsed
@@ -251,7 +260,6 @@ class EpgService:
         if not self.epg_loaded or not self.epg_data:
             self.log_callback("  [EPG] 请先加载 EPG 数据")
             return {"error": "请先加载 EPG"}
-        from app.config import Config
         _settings = Config.load_settings()
         foreign_name = _settings.get("foreign_group_name", "外国频道")
         custom_rules = _settings.get("custom_group_rules", []) or []
@@ -278,8 +286,10 @@ class EpgService:
                 ]
                 channel_service.store.clear()
                 channel_service.store.upsert_many(rows)
-            except Exception:
-                pass
+            except Exception as e:
+                # 落库失败不能静默：分组已改在内存里，若不记录，
+                # 用户会看到「界面上分组变了、重启后又变回去」而无从排查。
+                self.log_callback(f"  [EPG] 分组持久化失败（仅内存生效）: {e}")
         self.log_callback(f"  [EPG] 更新了 {updated} 个频道的分组")
         return {"updated": updated}
 
@@ -385,12 +395,13 @@ class EpgService:
                 return v
         return None
 
-    def match_channel(self, name):
-        if not self.epg_loaded or not self.epg_data:
-            return {"matched": None, "channel": name, "current": None, "programs": []}
-        info = self._find_info(name)
-        if not info:
-            return {"matched": None, "channel": name, "current": None, "programs": []}
+    def _today_programs(self, info):
+        """解析某频道「今天」的节目单，返回 (节目列表, 当前节目名)。
+
+        节目列表按开始时间升序，每项含 start/stop/title/state/progress/start_ts/stop_ts。
+        `match_channel` 与 `get_programs` 的解析与状态计算逻辑完全一致
+        （仅返回外壳不同），统一由此函数产出，避免两处规则漂移。
+        """
         now = datetime.now()
         day = now.strftime("%Y%m%d")
         current = None
@@ -428,8 +439,23 @@ class EpgService:
                 'title': prog.get('title', ''),
                 'state': state,
                 'progress': progress,
+                'start_ts': int(start.timestamp()),
+                'stop_ts': int(stop.timestamp()) if stop else 0,
             })
         programs.sort(key=lambda p: p['start'])
+        return programs, current
+
+    def match_channel(self, name):
+        if not self.epg_loaded or not self.epg_data:
+            return {"matched": None, "channel": name, "current": None, "programs": []}
+        info = self._find_info(name)
+        if not info:
+            return {"matched": None, "channel": name, "current": None, "programs": []}
+        programs, current = self._today_programs(info)
+        # 匹配接口不向前端暴露时间戳（前端只用 HH:MM 展示）
+        for p in programs:
+            p.pop('start_ts', None)
+            p.pop('stop_ts', None)
         return {"matched": info.get('name', name), "channel": name,
                 "current": current, "programs": programs}
 
@@ -439,54 +465,11 @@ class EpgService:
         info = self._find_info(name)
         if not info:
             return {"programs": [], "channel": name}
-        now = datetime.now()
-        day = now.strftime("%Y%m%d")
-        programs = []
-        for prog in info.get('programs', []):
-            s = prog.get('start', '')
-            if not s:
-                continue
-            try:
-                start = datetime.strptime(s[:14], "%Y%m%d%H%M%S")
-            except Exception:
-                continue
-            if start.strftime("%Y%m%d") != day:
-                continue
-            stop = None
-            if prog.get('stop'):
-                try:
-                    stop = datetime.strptime(prog['stop'][:14], "%Y%m%d%H%M%S")
-                except Exception:
-                    stop = None
-            state = 'upcoming'
-            if stop and now > stop:
-                state = 'ended'
-            elif start <= now and (stop is None or now <= stop):
-                state = 'current'
-            progress = 0
-            if state == 'current' and stop and stop > start:
-                total = (stop - start).total_seconds()
-                if total > 0:
-                    progress = round((now - start).total_seconds() / total * 100)
-            programs.append({
-                'start': start.strftime("%H:%M"),
-                'stop': stop.strftime("%H:%M") if stop else '',
-                'title': prog.get('title', ''),
-                'state': state,
-                'progress': progress,
-                'start_ts': int(start.timestamp()),
-                'stop_ts': int(stop.timestamp()) if stop else 0,
-            })
-        programs.sort(key=lambda p: p['start'])
+        programs, _ = self._today_programs(info)
         return {"programs": programs, "channel": info.get('name', name)}
 
     def start_refresh_scheduler(self, interval_seconds):
-        self.stop_refresh_scheduler()
-        if interval_seconds and interval_seconds > 0:
-            self._stop.clear()
-            self._thread = threading.Thread(target=self._refresh_loop, args=(interval_seconds,), daemon=True)
-            self._thread.start()
-            self.log_callback(f"EPG 定时刷新已开启，间隔 {interval_seconds}s")
+        start_periodic(self, interval_seconds, self._refresh_loop, "EPG 定时刷新")
 
     def _refresh_loop(self, interval_seconds):
         while not self._stop.is_set():
@@ -501,19 +484,8 @@ class EpgService:
 
     def _global_proxy(self):
         """代理统一由「抓取面板」的 use_proxy 开关决定（2026-09-28 统一入口）。"""
-        from app.utils.network import resolve_proxy
-        try:
-            return resolve_proxy(Config.load_settings())
-        except Exception:
-            return ""
+        from app.utils.network import global_proxy
+        return global_proxy()
 
     def stop_refresh_scheduler(self):
-        self._stop.set()
-        self._thread = None
-
-    def refresh_from_source(self):
-        src = self.load_source()
-        if not src or not src.get("url"):
-            return {"error": "没有已保存的 EPG 源，请先加载一次 EPG"}
-        self.load_epg(src["url"], self._global_proxy())
-        return {"loading": True}
+        stop_periodic(self)

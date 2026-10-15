@@ -1,4 +1,5 @@
-from typing import Dict, Any, Optional
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 

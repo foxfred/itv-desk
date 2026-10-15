@@ -1,8 +1,8 @@
+import html
 import os
 import re
-import html
-import socket
 import secrets
+import socket
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse, Response

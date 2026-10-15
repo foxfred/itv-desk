@@ -1,11 +1,11 @@
 import asyncio
 import logging
 import os
-import subprocess
-import urllib.parse
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
+
+from app.utils.flv_proxy import ffmpeg_popen, stream_flv
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +14,14 @@ router = APIRouter(prefix="/api/h264-proxy", tags=["h264-proxy"])
 _FFMPEG = os.environ.get("IPTV_FFMPEG", "ffmpeg")
 
 _CONNECT_TIMEOUT = 15
-_CHUNK_SIZE = 64 * 1024
 
 _PRESET = os.environ.get("IPTV_H264_PRESET", "veryfast")
 _CRF = os.environ.get("IPTV_H264_CRF", "23")
 
 _ALLOWED_SCHEMES = ("http://", "https://")
+
+# 起进程后等待多久再探活；转码启动比纯转封装慢，需留足时间
+_READY_DELAY = 0.5
 
 
 def _is_http_url(url: str) -> bool:
@@ -49,30 +51,6 @@ def _build_ffmpeg_cmd(src_url: str) -> list[str]:
     ]
 
 
-async def _stream_flv(proc: subprocess.Popen) -> bytes:
-    loop = asyncio.get_running_loop()
-    try:
-        while True:
-            chunk = await loop.run_in_executor(None, proc.stdout.read, _CHUNK_SIZE)
-            if not chunk:
-                break
-            yield chunk
-    finally:
-        if proc.poll() is None:
-            try:
-                proc.terminate()
-                try:
-                    await asyncio.wait_for(loop.run_in_executor(None, proc.wait), timeout=3)
-                except Exception:
-                    proc.kill()
-                    try:
-                        await asyncio.wait_for(loop.run_in_executor(None, proc.wait), timeout=2)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-
 @router.get("")
 async def h264_proxy(url: str, request: Request):
     if not url:
@@ -88,15 +66,9 @@ async def h264_proxy(url: str, request: Request):
     logger.info("[h264-proxy] Starting ffmpeg transcode for: %s", url[:120])
 
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        proc = ffmpeg_popen(cmd)
 
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(_READY_DELAY)
         if proc.poll() is not None:
             logger.error("[h264-proxy] ffmpeg exited immediately for %s", url[:100])
             return Response(
@@ -106,7 +78,7 @@ async def h264_proxy(url: str, request: Request):
             )
 
         return StreamingResponse(
-            _stream_flv(proc),
+            stream_flv(proc),
             media_type="video/x-flv",
             headers={
                 "Accept-Ranges": "none",
@@ -125,6 +97,6 @@ async def h264_proxy(url: str, request: Request):
         logger.exception("[h264-proxy] Unexpected error")
         return Response(
             status_code=500,
-            content=f"Internal error: {str(e)}",
+            content=f"Internal error: {e!s}",
             media_type="text/plain",
         )

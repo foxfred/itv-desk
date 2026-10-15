@@ -1,8 +1,11 @@
+import json
 import os
 import re
-import json
 import threading
 from datetime import datetime
+
+from app.config import FileManager
+from app.utils.scheduler import start_periodic, stop_periodic
 
 AUTO_DISABLE_FAILS = 3
 
@@ -47,7 +50,7 @@ def _extract_tvg_urls(text):
         return []
     head = text[:8192]
     urls = []
-    for m in re.finditer(r'(?:url-tvg|x-tvg-url|tvg-url)\s*=\s*"([^"]+)"', head, re.I):
+    for m in re.finditer(r'(?:url-tvg|x-tvg-url|tvg-url)\s*=\s*"([^"]+)"', head, re.IGNORECASE):
         for u in m.group(1).split(','):
             u = u.strip()
             if u.startswith('http') and u not in urls:
@@ -71,31 +74,14 @@ class SubscriptionService:
     def _global_proxy(self):
         """代理统一由「抓取面板」的 use_proxy 开关决定（2026-09-28 统一入口）。
         订阅级的 proxy 字段是旧版遗留（前端已无入口），不再使用。"""
-        from app.utils.network import resolve_proxy
-        from app.config import Config
-        try:
-            return resolve_proxy(Config.load_settings())
-        except Exception:
-            return ""
+        from app.utils.network import global_proxy
+        return global_proxy()
 
     def _load(self):
-        try:
-            with open(self.file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-        except Exception:
-            pass
-        return []
+        return FileManager.read_json(self.file, default=[], expect=list)
 
     def _save(self):
-        try:
-            tmp = self.file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.subs, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self.file)
-        except Exception:
-            pass
+        FileManager.write_json_atomic(self.file, self.subs, indent=2)
 
     def list(self):
         with self._lock:
@@ -234,7 +220,7 @@ class SubscriptionService:
 
     def _auto_register_epg(self, sub):
         url = sub.get("url", "")
-        if not re.search(r'\.(m3u8?|txt)(\?|$)', url, re.I):
+        if not re.search(r'\.(m3u8?|txt)(\?|$)', url, re.IGNORECASE):
             return
         try:
             from app.utils.network import download_url
@@ -273,12 +259,7 @@ class SubscriptionService:
         return []
 
     def start_scheduler(self, interval_seconds):
-        self.stop_scheduler()
-        if interval_seconds and interval_seconds > 0:
-            self._stop.clear()
-            self._thread = threading.Thread(target=self._scheduler_loop, args=(interval_seconds,), daemon=True)
-            self._thread.start()
-            self.log_callback(f"订阅定时更新已开启，间隔 {interval_seconds}s")
+        start_periodic(self, interval_seconds, self._scheduler_loop, "订阅定时更新")
 
     def _scheduler_loop(self, interval_seconds):
         while not self._stop.is_set():
@@ -290,5 +271,4 @@ class SubscriptionService:
                 self.log_callback(f"定时订阅更新出错: {e}")
 
     def stop_scheduler(self):
-        self._stop.set()
-        self._thread = None
+        stop_periodic(self)

@@ -1,6 +1,8 @@
-from typing import List
-from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from app.utils.helpers import save_channels_cache
 
 router = APIRouter(prefix="/api", tags=["scan"])
 
@@ -25,19 +27,9 @@ def get_settings():
     return settings
 
 
-def _save_cache(channel_service, settings):
-    from app.config import FileManager
-    try:
-        cache_file = settings.get("cache_file_name", "channels_cache.json")
-        with channel_service.lock:
-            data = channel_service.pool.copy()
-        FileManager.write_json_atomic(cache_file, data)
-    except Exception:
-        pass
-
 
 class DeriveReq(BaseModel):
-    urls: List[str]
+    urls: list[str]
 
 
 class ScanReq(BaseModel):
@@ -50,7 +42,7 @@ class ScanReq(BaseModel):
 
 
 class ImportReq(BaseModel):
-    results: List[dict]
+    results: list[dict]
 
 
 @router.post("/scan/derive")
@@ -83,6 +75,6 @@ def import_scan_results(body: ImportReq, channel_service=Depends(get_channel_ser
                         log=Depends(get_log), settings=Depends(get_settings)):
     added, dup = scan_service.import_results(channel_service, body.results)
     if added > 0:
-        _save_cache(channel_service, settings)
+        save_channels_cache(settings, channel_service)
         log(f"扫描导入：新增 {added} 个频道")
     return {"added": added, "dup": dup}

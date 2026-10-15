@@ -1,5 +1,5 @@
 import re
-import threading
+
 from app.config import Config
 
 

@@ -59,7 +59,25 @@ async function ensurePortFree(port, timeoutMs = 4000) {
 
 async function killOccupyingPort(port) {
   return new Promise((resolve) => {
-    const cmd = spawn('netstat', ['-ano'], { stdio: ['ignore', 'pipe', 'ignore'] })
+    let settled = false
+    const done = (r) => { if (!settled) { settled = true; resolve(r) } }
+
+    let cmd
+    try {
+      cmd = spawn('netstat', ['-ano'], { stdio: ['ignore', 'pipe', 'ignore'] })
+    } catch (e) {
+      // spawn 本身同步失败（极少见）
+      console.warn('[port] netstat 启动失败:', e?.message)
+      return done({ killed: 0, pids: [], error: String(e?.message || e) })
+    }
+
+    // 不监听 error 的话，netstat 不在 PATH 时（精简系统常见）会变成未捕获异常，
+    // 直接把主进程带崩 —— 这里是启动早期，崩了整个应用就起不来了。
+    cmd.on('error', (e) => {
+      console.warn('[port] netstat 不可用，跳过端口占用检查:', e?.message)
+      done({ killed: 0, pids: [], error: String(e?.message || e) })
+    })
+
     let out = ''
     cmd.stdout.on('data', (d) => out += d.toString())
     cmd.on('exit', () => {
@@ -72,7 +90,7 @@ async function killOccupyingPort(port) {
           if (m) pids.add(parseInt(m[1]))
         }
       }
-      if (pids.size === 0) { resolve({ killed: 0, pids: [] }); return }
+      if (pids.size === 0) { done({ killed: 0, pids: [] }); return }
             const killed = []
       for (const pid of pids) {
         try {
@@ -81,7 +99,7 @@ async function killOccupyingPort(port) {
         } catch (e) {
                   }
       }
-      resolve({ killed: killed.length, pids: killed })
+      done({ killed: killed.length, pids: killed })
     })
   })
 }
@@ -162,7 +180,10 @@ function waitBackend(timeoutMs = 60000) {
 }
 
 
-const REQUIRED_IMPORTS = 'fastapi, uvicorn, sqlalchemy, aiosqlite, bs4, lxml, aiohttp, requests';
+// 预检清单与 backend/requirements.txt、scripts/build_python_runtime.py
+// 以及 .github/workflows/release.yml 的「校验内置运行时」保持一致。
+// （历史问题：四处清单互不一致，删依赖时漏改会留下假失败）
+const REQUIRED_IMPORTS = 'fastapi, uvicorn, sqlalchemy, aiosqlite, requests';
 
 let lastPreflight = null;
 

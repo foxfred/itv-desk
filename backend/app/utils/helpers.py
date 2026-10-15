@@ -1,8 +1,8 @@
-import re
-import os
 import json
-from app.config import Config, FileManager
+import os
+import re
 
+from app.config import FileManager
 
 _LOGO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "logos.json")
 
@@ -73,12 +73,6 @@ def get_logo_db():
     return _LOGO_DB_CACHE
 
 
-def reload_logo_db():
-    global _LOGO_DB_CACHE
-    _LOGO_DB_CACHE = _load_logo_db()
-    return _LOGO_DB_CACHE
-
-
 LOGO_DB = get_logo_db()
 
 
@@ -98,9 +92,6 @@ def find_logo(channel_name):
     return None
 
 
-
-
-
 def url_rule_match(url, patterns):
     if not url or not patterns:
         return False
@@ -112,7 +103,7 @@ def url_rule_match(url, patterns):
             continue
         if len(p) > 2 and p.startswith('/') and p.endswith('/'):
             try:
-                if re.search(p[1:-1], url, re.I):
+                if re.search(p[1:-1], url, re.IGNORECASE):
                     return True
             except re.error:
                 continue
@@ -139,3 +130,31 @@ def is_url_whitelisted(url, settings=None):
         return url_rule_match(url, settings.get("url_whitelist") or [])
     except Exception:
         return False
+
+
+def save_channels_cache(settings, channel_service):
+    """把频道池整体落盘到缓存文件。
+
+    原先在 routes/repair.py、routes/scan.py、routes/scrape.py 各有一份
+    完全相同的实现（仅参数顺序不同），此处收敛为唯一定义。
+    """
+    try:
+        cache_file = (settings or {}).get("cache_file_name", "channels_cache.json")
+        with channel_service.lock:
+            data = channel_service.pool.copy()
+        FileManager.write_json_atomic(cache_file, data)
+    except Exception:
+        pass
+
+
+def rm_quiet(path):
+    """静默删除文件：不存在 / 无权限 / 被占用都当成功。
+
+    原先 routes/app.py 与 utils/network.py 各有一份完全相同的私有副本
+    （`_rm_quiet`），此处收敛为唯一定义。
+    """
+    try:
+        if path and os.path.isfile(path):
+            os.remove(path)
+    except Exception:
+        pass

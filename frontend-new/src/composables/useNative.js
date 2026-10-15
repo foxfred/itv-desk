@@ -29,11 +29,6 @@ export async function callNative(method, ...args) {
   return undefined
 }
 
-export async function toggleNativeFullscreen() {
-  const r = await callNative('toggle_fullscreen')
-  return r !== undefined
-}
-
 export async function saveTextFile(filename, content) {
   const api = getApi()
   if (api && typeof api.save_text === 'function') {

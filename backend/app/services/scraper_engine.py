@@ -1,11 +1,12 @@
 import re
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
-from app.utils.network import download_url, build_link_pattern, format_github_raw_url
-from app.utils.m3u_parser import extract_channels
+
 from app.config import Config
+from app.utils.m3u_parser import extract_channels
+from app.utils.network import build_link_pattern, download_url, format_github_raw_url
 
 
 class ScraperEngine:
@@ -334,9 +335,9 @@ class ScraperEngine:
                     break
                 link = futures[future]
                 try:
-                    result, kind = future.result()
+                    result, _kind = future.result()
                 except Exception:
-                    result, kind = [self._link_channel(link)], "error"
+                    result, _kind = [self._link_channel(link)], "error"
                 with lock:
                     all_channels.extend(result)
                     stats["processed"] += 1
@@ -355,7 +356,7 @@ class ScraperEngine:
 
     def _finish(self, all_channels):
         if all_channels:
-            self.log(f"正在注入频道池...")
+            self.log("正在注入频道池...")
             self.inject(all_channels)
         else:
             self.log("未提取到任何频道")

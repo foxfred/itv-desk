@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urljoin, quote, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 import urllib3
@@ -24,18 +24,6 @@ def _is_safe_target(url: str) -> bool:
     if p.scheme not in ("http", "https"):
         return False
     return True
-
-
-def _looks_private(host: str) -> bool:
-    if host.startswith((
-        "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
-        "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-        "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-    )):
-        return True
-    if host in ("169.254.169.254", "169.254.0.0"):
-        return True
-    return False
 
 
 def _rewrite_manifest(text: str, base_url: str) -> str:

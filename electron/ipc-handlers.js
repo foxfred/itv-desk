@@ -353,13 +353,22 @@ function registerIpcHandlers(ctx) {
         play_external(args) {
       const [url, playerPath] = args;
       if (!playerPath) return false;
+      // spawn 的失败（路径不存在 / 没有执行权限）走的是异步 'error' 事件，
+      // try/catch 抓不到。所以先做存在性检查，避免直接把错误路径交给 spawn。
       try {
-        const child = spawn(playerPath, [url], { detached: true, stdio: 'ignore' });
-        child.unref();
-        return true;
+        if (!fs.existsSync(playerPath)) return false;
+      } catch { return false; }
+      let child;
+      try {
+        child = spawn(playerPath, [url], { detached: true, stdio: 'ignore' });
       } catch {
         return false;
       }
+      // 兜底：即便存在性检查通过，仍可能有竞态/权限问题 —— 必须监听 error，
+      // 否则未处理的 'error' 事件会让主进程直接退出。
+      child.on('error', () => { /* 播放器启动失败：静默，避免拖崩主进程 */ });
+      child.unref();
+      return true;
     },
 
         set_topmost(args, event) {
@@ -400,15 +409,6 @@ function registerIpcHandlers(ctx) {
         close_window(_args, event) {
       const win = senderWindow(event);
       if (win) win.close();
-      return 'OK';
-    },
-
-    move_window(args, event) {
-      const win = senderWindow(event);
-      if (!win) return 'OK';
-      const [dx, dy] = args;
-      const [x, y] = win.getPosition();
-      win.setPosition(x + (dx || 0), y + (dy || 0));
       return 'OK';
     },
 

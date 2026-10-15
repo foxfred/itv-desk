@@ -113,7 +113,7 @@ jobs:
       - name: 校验内置运行时
         run: |
           if (-not (Test-Path "python-runtime/python.exe")) { throw "python-runtime 未生成" }
-          & "python-runtime/python.exe" -c "import fastapi, uvicorn, sqlalchemy, cv2, onnxruntime, rapidocr_onnxruntime, PIL; print('内置运行时依赖校验通过')"
+          & "python-runtime/python.exe" -c "import fastapi, uvicorn, sqlalchemy, aiosqlite, requests, socks, cv2, onnxruntime, rapidocr_onnxruntime, PIL; print('内置运行时依赖校验通过')"
 
       - name: 安装 Electron
         run: |

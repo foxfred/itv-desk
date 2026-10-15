@@ -1,6 +1,5 @@
-import os
-import time
 import socket
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
@@ -41,7 +40,7 @@ class DlnaService:
                 sock.settimeout(max(0.1, remaining))
                 try:
                     data, _addr = sock.recvfrom(4096)
-                except socket.timeout:
+                except TimeoutError:
                     break
                 text = data.decode('utf-8', errors='ignore')
                 location = self._header(text, 'LOCATION')

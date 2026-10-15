@@ -2,17 +2,19 @@ import os
 import shutil
 import subprocess
 import traceback
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import FileResponse, JSONResponse
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List
+
+from app.paths import get_data_dir
 
 router = APIRouter(prefix="/api", tags=["export"])
 
 
 class ExportReq(BaseModel):
     fmt: str = "m3u"
-    ids: List[int] = []
+    ids: list[int] = []
 
 
 def get_export_service():
@@ -50,13 +52,8 @@ def export(body: ExportReq, export_service=Depends(get_export_service),
 
 
 class ExportDirectReq(BaseModel):
-    ids: List[int] = []
+    ids: list[int] = []
     filename: str = ""
-
-
-def get_data_dir():
-    from app.main import DATA_DIR
-    return DATA_DIR
 
 
 @router.post("/export-direct")

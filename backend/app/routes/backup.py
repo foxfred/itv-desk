@@ -1,23 +1,23 @@
-import os
-import json
 import base64
+import json
+import os
 import shutil
-import zipfile
 import tempfile
-from typing import List, Optional
+import zipfile
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Form
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.config import Config
+from app.paths import get_data_dir
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
 try:
     from cryptography.fernet import Fernet
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     _CRYPTO_OK = True
 except Exception:
     _CRYPTO_OK = False
@@ -55,11 +55,6 @@ BACKUP_FILES = [
     "epg_history.json",
     "channels.db",
 ]
-
-
-def get_data_dir():
-    from app.main import DATA_DIR
-    return DATA_DIR
 
 
 def get_channel_service():

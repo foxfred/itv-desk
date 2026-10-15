@@ -7,6 +7,8 @@ import time
 
 import requests
 
+from app.config import FileManager
+
 DEFAULT_BASE = "https://api.deepseek.com/v1"
 DEFAULT_MODEL = "deepseek-chat"
 
@@ -127,7 +129,7 @@ class AIService:
 
     def __init__(self, log_callback=None, settings_provider=None, data_dir=None):
         self.log = log_callback or (lambda m: None)
-        self.settings_provider = settings_provider or (lambda: {})
+        self.settings_provider = settings_provider or (dict)
         self.data_dir = data_dir or "."
 
     def cfg(self):
@@ -177,12 +179,7 @@ class AIService:
         return os.path.join(self.data_dir, "ai_usage.json")
 
     def _load_usage(self):
-        try:
-            with open(self._usage_file, "r", encoding="utf-8") as f:
-                d = json.load(f)
-            return d if isinstance(d, dict) else {}
-        except Exception:
-            return {}
+        return FileManager.read_json(self._usage_file, default={}, expect=dict)
 
     def usage_today(self):
         d = self._load_usage()
@@ -207,13 +204,7 @@ class AIService:
         for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
             rec[k] = int(rec.get(k) or 0) + int(usage.get(k) or 0)
         d = {day: rec}
-        try:
-            tmp = self._usage_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(d, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self._usage_file)
-        except Exception:
-            pass
+        FileManager.write_json_atomic(self._usage_file, d, indent=2)
 
     # ---------- 结果缓存 ----------
     @property
@@ -221,21 +212,10 @@ class AIService:
         return os.path.join(self.data_dir, "ai_cache.json")
 
     def _cache_load(self):
-        try:
-            with open(self._cache_file, "r", encoding="utf-8") as f:
-                d = json.load(f)
-            return d if isinstance(d, dict) else {}
-        except Exception:
-            return {}
+        return FileManager.read_json(self._cache_file, default={}, expect=dict)
 
     def _cache_save(self, d):
-        try:
-            tmp = self._cache_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(d, f, ensure_ascii=False)
-            os.replace(tmp, self._cache_file)
-        except Exception:
-            pass
+        FileManager.write_json_atomic(self._cache_file, d, indent=2)
 
     def _cache_get(self, key):
         if not self.cfg().get("cache_enabled"):
@@ -280,7 +260,7 @@ class AIService:
     @staticmethod
     def _proxies(c, url=None):
         # 统一走 network.resolve_proxy（2026-09-28 统一入口）：开关打开用填的地址，关闭返回 {} 走系统代理
-        from app.utils.network import resolve_proxy, is_local_url
+        from app.utils.network import is_local_url, resolve_proxy
         # 本机/内网地址（如本地 AI 网关 http://127.0.0.1:8799）必须绕开代理，
         # 否则代理会把 127.0.0.1 解析成"代理所在那台机器"，表现为「开代理就连不上」。
         if url and is_local_url(url):

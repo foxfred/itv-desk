@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime
-from sqlalchemy import select, desc
+
+from sqlalchemy import desc, select
+
 from app.database import AsyncSessionLocal, init_db
 from app.models.play_history import PlaybackHistory
 

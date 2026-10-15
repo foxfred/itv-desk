@@ -1,9 +1,11 @@
 import os
 import re
 from urllib.parse import urlparse
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+
+from app.utils.helpers import save_channels_cache
 
 router = APIRouter(prefix="/api", tags=["scrape"])
 
@@ -18,7 +20,7 @@ class ScrapeReq(BaseModel):
 
 
 class BatchScrapeReq(BaseModel):
-    urls: List[str]
+    urls: list[str]
     suffix_list: str = "m3u,m3u8,txt"
     proxy: str = ""
     mirror: str = "不使用加速"
@@ -30,7 +32,7 @@ class ImportUrlReq(BaseModel):
 
 
 class ImportUrlsReq(BaseModel):
-    urls: List[str]
+    urls: list[str]
     proxy: str = ""
 
 
@@ -54,7 +56,7 @@ class ChannelItem(BaseModel):
 
 
 class ImportChannelsReq(BaseModel):
-    channels: List[ChannelItem]
+    channels: list[ChannelItem]
 
 
 def get_scrape_service():
@@ -76,16 +78,6 @@ def get_settings():
     from app.main import settings
     return settings
 
-
-def _save_cache(settings, channel_service):
-    from app.config import FileManager
-    try:
-        cache_file = settings.get("cache_file_name", "channels_cache.json")
-        with channel_service.lock:
-            data = channel_service.pool.copy()
-        FileManager.write_json_atomic(cache_file, data)
-    except Exception:
-        pass
 
 
 def get_check_state():
@@ -139,8 +131,8 @@ def scrape_stop(scrape_service=Depends(get_scrape_service)):
 
 
 def _download_and_inject(url, proxy, channel_service, log):
-    from app.utils.network import download_url
     from app.utils.m3u_parser import Parser, extract_channels
+    from app.utils.network import download_url
     content, err = download_url(url, proxy if proxy else None)
     if err:
         return 0, 0, err
@@ -179,13 +171,12 @@ def import_urls(body: ImportUrlsReq, channel_service=Depends(get_channel_service
 def import_text(body: ImportTextReq, channel_service=Depends(get_channel_service),
                 log=Depends(get_log), settings=Depends(get_settings)):
     from app.utils.m3u_parser import Parser, extract_channels
-    from app.config import FileManager
     parsed = Parser.parse_local_file(body.text)
     if not parsed:
         parsed = extract_channels(body.text)
     added, dup = channel_service.add_channels(parsed, origin="manual")
     if added > 0:
-        _save_cache(settings, channel_service)
+        save_channels_cache(settings, channel_service)
     log(f"导入完成，新增 {added} 个频道，去重 {dup} 个")
     return {"added": added, "dup": dup}
 
@@ -196,7 +187,7 @@ def import_channels(body: ImportChannelsReq, channel_service=Depends(get_channel
     channels = [ch.dict() for ch in body.channels]
     added, dup = channel_service.add_channels(channels, origin="manual")
     if added > 0:
-        _save_cache(settings, channel_service)
+        save_channels_cache(settings, channel_service)
     log(f"导入频道完成，新增 {added} 个，去重 {dup} 个")
     return {"added": added, "dup": dup}
 
@@ -309,7 +300,7 @@ def smart_paste(body: ImportTextReq, channel_service=Depends(get_channel_service
 
     added, dup = channel_service.add_channels(new_channels, origin="manual")
     if added > 0:
-        _save_cache(settings, channel_service)
+        save_channels_cache(settings, channel_service)
     log(f"智能粘贴成功：新增 {added} 个频道（去重 {dup} 条）")
 
     auto_repair = False

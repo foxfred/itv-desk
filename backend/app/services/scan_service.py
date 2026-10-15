@@ -1,10 +1,10 @@
+import ipaddress
 import re
 import time
-import ipaddress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
+
 from app.utils.network import http_probe_channel
-from app.config import Config
 
 
 def _looks_like_ip(host):

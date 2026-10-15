@@ -1,11 +1,11 @@
 import asyncio
 import logging
 import os
-import shlex
-import subprocess
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
+
+from app.utils.flv_proxy import ffmpeg_popen, stream_flv
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +14,13 @@ router = APIRouter(prefix="/api/rtmp-proxy", tags=["rtmp-proxy"])
 _FFMPEG = os.environ.get("IPTV_FFMPEG", "ffmpeg")
 
 _CONNECT_TIMEOUT = 15
-_STREAM_TIMEOUT = 0
 
 _ALLOWED_SCHEMES = ("rtmp://", "rtmps://")
 
+# 起进程后等待多久再探活；纯转封装启动快
+_READY_DELAY = 0.3
+
+# SSRF 防护：禁止把服务端 ffmpeg 指向本机/内网/云元数据地址
 _BLOCKED_PATTERNS = (
     "localhost",
     "127.",
@@ -56,35 +59,6 @@ def _build_ffmpeg_cmd(rtmp_url: str) -> list[str]:
     ]
 
 
-async def _stream_flv(proc: subprocess.Popen) -> bytes:
-    loop = asyncio.get_event_loop()
-    chunk_size = 64 * 1024
-    try:
-        while True:
-            chunk = await loop.run_in_executor(None, proc.stdout.read, chunk_size)
-            if not chunk:
-                break
-            yield chunk
-    finally:
-        if proc.poll() is None:
-            try:
-                proc.terminate()
-                try:
-                    await asyncio.wait_for(
-                        loop.run_in_executor(None, proc.wait), timeout=3
-                    )
-                except (asyncio.TimeoutError, subprocess.TimeoutExpired):
-                    proc.kill()
-                    try:
-                        await asyncio.wait_for(
-                            loop.run_in_executor(None, proc.wait), timeout=2
-                        )
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-
 @router.get("")
 async def rtmp_proxy(url: str, request: Request):
     if not url:
@@ -100,15 +74,9 @@ async def rtmp_proxy(url: str, request: Request):
     logger.info("[rtmp-proxy] Starting ffmpeg for: %s", url[:120])
 
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        proc = ffmpeg_popen(cmd)
 
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(_READY_DELAY)
         if proc.poll() is not None:
             logger.error("[rtmp-proxy] ffmpeg exited immediately")
             return Response(
@@ -118,7 +86,7 @@ async def rtmp_proxy(url: str, request: Request):
             )
 
         return StreamingResponse(
-            _stream_flv(proc),
+            stream_flv(proc),
             media_type="video/x-flv",
             headers={
                 "Accept-Ranges": "none",
@@ -137,6 +105,6 @@ async def rtmp_proxy(url: str, request: Request):
         logger.exception("[rtmp-proxy] Unexpected error")
         return Response(
             status_code=500,
-            content=f"Internal error: {str(e)}",
+            content=f"Internal error: {e!s}",
             media_type="text/plain",
         )

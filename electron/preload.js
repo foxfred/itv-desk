@@ -19,7 +19,6 @@ const METHODS = [
     'maximize_window',   
   'is_maximized',      
   'close_window',      
-  'move_window',       
   'resize_window',     
   'hide_window',       
   'show_window',       

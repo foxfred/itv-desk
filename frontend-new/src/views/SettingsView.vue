@@ -43,25 +43,6 @@
               <div class="tip">每行一个EPG地址，保存后自动同步到抓取区列表</div>
             </el-form-item>
           </el-form>
-          <el-divider>启动</el-divider>
-            <el-form label-width="130px" size="small">
-              <el-form-item label="启动时加载频道缓存">
-                <el-switch v-model="form.load_cache_on_startup" />
-                <span class="tip">启动时自动加载上次保存的频道缓存文件</span>
-              </el-form-item>
-              <el-form-item label="退出时保存频道缓存">
-                <el-switch v-model="form.save_cache_on_exit" />
-                <span class="tip">退出程序时自动保存频道缓存到文件</span>
-              </el-form-item>
-              <el-form-item label="保存窗口位置">
-                <el-switch v-model="form.save_window_geometry" />
-                <span class="tip">退出时保存窗口位置和大小，下次启动恢复</span>
-              </el-form-item>
-              <el-form-item label="启动延迟">
-                <el-input-number v-model="form.startup_delay_ms" :min="0" :max="10000" :step="100" style="width:140px" />
-                <span class="unit">毫秒</span>
-              </el-form-item>
-            </el-form>
           <el-divider>更新</el-divider>
            <el-form label-width="100px" size="small">
              <el-form-item label="当前版本">
@@ -203,14 +184,6 @@
             <el-form-item label="线程数">
               <el-input-number v-model="form.check_threads" :min="1" :max="100" style="width:120px" />
             </el-form-item>
-            <el-form-item label="真实可看性探测">
-              <el-switch v-model="form.probe_watchable" />
-              <span class="tip">开启后检查时拉取媒体片段分析真实可看性（更准确但更慢）；关闭则仅测状态码</span>
-            </el-form-item>
-            <el-form-item label="HLS 流检查">
-              <el-switch v-model="form.check_hls" />
-              <span class="tip">对 HLS 源额外检查主索引和切片可达性</span>
-            </el-form-item>
             </el-form>
           <el-divider>修补与阈值</el-divider>
             <el-form-item label="修补超时">
@@ -222,25 +195,6 @@
             </el-form-item>
             <el-form-item label="修补线程数">
               <el-input-number v-model="form.repair_max_workers" :min="1" :max="50" style="width:120px" />
-            </el-form-item>
-            <el-form-item label="高清阈值">
-              <el-input-number v-model="form.repair_hd_size_threshold" :min="10000" :step="10000" style="width:160px" />
-              <span class="unit">字节</span>
-            </el-form-item>
-            <el-form-item label="标清阈值">
-              <el-input-number v-model="form.repair_sd_size_threshold" :min="10000" :step="10000" style="width:160px" />
-              <span class="unit">字节</span>
-            </el-form-item>
-            <el-form-item label="延迟等级 A 阈值">
-              <el-input-number v-model="form.latency_grade_a_threshold" :min="50" :max="2000" :step="50" style="width:140px" />
-              <span class="unit">毫秒（≤此值=优）</span>
-            </el-form-item>
-            <el-form-item label="延迟等级 B 阈值">
-              <el-input-number v-model="form.latency_grade_b_threshold" :min="100" :max="5000" :step="50" style="width:140px" />
-              <span class="unit">毫秒（≤此值=良）</span>
-            </el-form-item>
-            <el-form-item label="检查批次大小">
-              <el-input-number v-model="form.checker_batch_size" :min="1" :max="50" style="width:120px" />
             </el-form-item>
         </el-tab-pane>
 
@@ -271,14 +225,8 @@
                   <el-option label="IPv6" value="IPv6" />
                 </el-select>
               </el-form-item>
-              <el-form-item label="显示质量列">
-                <el-switch v-model="form.show_quality_column" />
-              </el-form-item>
               <el-form-item label="User-Agent">
                 <el-input v-model="form.user_agent" placeholder="Mozilla/5.0..." style="width:340px" />
-              </el-form-item>
-              <el-form-item label="最大连接数">
-                <el-input-number v-model="form.max_connections" :min="10" :max="500" style="width:120px" />
               </el-form-item>
               <el-form-item label="下载超时">
                 <el-input-number v-model="form.download_timeout" :min="5" :max="120" style="width:120px" />
@@ -287,10 +235,6 @@
               <el-form-item label="下载重试">
                 <el-input-number v-model="form.download_retries" :min="0" :max="5" style="width:120px" />
               </el-form-item>
-              <el-form-item label="启动时自动加载 EPG">
-                <el-switch v-model="form.auto_load_epg" />
-                <span class="tip">启动时自动加载上次保存的 EPG 源</span>
-              </el-form-item>
               <el-form-item label="URL 黑名单">
                 <el-input v-model="urlBlacklistText" type="textarea" :rows="3" style="width:420px"
                   placeholder="每行一条，支持子串或 /正则/。命中则永久排除：导入、检测、导出均过滤" />
@@ -298,10 +242,6 @@
               <el-form-item label="URL 白名单">
                 <el-input v-model="urlWhitelistText" type="textarea" :rows="3" style="width:420px"
                   placeholder="每行一条，支持子串或 /正则/。命中则豁免检测，直接保留为在线" />
-              </el-form-item>
-              <el-form-item label="EPG 加载后自动校正">
-                <el-switch v-model="form.auto_correct_after_epg" />
-                <span class="tip">EPG 加载完成后自动校正频道名</span>
               </el-form-item>
               <el-divider>频道别名库（让「央视五套」能对上「CCTV5」）</el-divider>
               <el-form-item label="别名条目">
@@ -574,22 +514,6 @@
               <el-form-item label="EPG历史上限">
                 <el-input-number v-model="form.epg_history_limit" :min="5" :max="200" style="width:120px" />
               </el-form-item>
-              <el-form-item label="导入后自动检查">
-                <el-switch v-model="form.auto_check_after_import" />
-                <span class="tip">导入/粘贴频道后自动启动可用性检查</span>
-              </el-form-item>
-              <el-form-item label="检查后自动导出">
-                <el-switch v-model="form.auto_export_after_check" />
-                <span class="tip">检查完成后自动导出整理结果</span>
-              </el-form-item>
-              <el-form-item label="检查后自动删除离线">
-                <el-switch v-model="form.auto_delete_invalid_after_check" />
-                <span class="tip">检查完成后自动删除离线频道</span>
-              </el-form-item>
-              <el-form-item label="检查后重置筛选">
-                <el-switch v-model="form.reset_filter_after_check" />
-                <span class="tip">检查完成后自动重置频道列表的筛选条件</span>
-              </el-form-item>
             </el-form>
           <el-divider>自动任务</el-divider>
             <el-form label-width="130px" size="small">
@@ -601,12 +525,8 @@
                 <el-input-number v-model="form.epg_auto_refresh_interval" :min="0" :max="86400" :step="60" style="width:140px" />
                 <span class="unit">秒（0=关闭）</span>
               </el-form-item>
-              <el-form-item label="检查定时任务">
-                <el-input-number v-model="form.check_auto_interval" :min="0" :max="86400" :step="60" style="width:140px" />
-                <span class="unit">秒（0=关闭）</span>
-              </el-form-item>
               <div class="tip" style="margin-left:130px">
-                设置后保存即时生效：后端会按间隔自动增量更新订阅源 / 刷新 EPG 节目单 / 自动检查频道可用性。例如 3600 = 每小时一次。
+                设置后保存即时生效：后端会按间隔自动增量更新订阅源 / 刷新 EPG 节目单。例如 3600 = 每小时一次。
               </div>
             </el-form>
           <el-divider>备份</el-divider>
@@ -1019,19 +939,11 @@ const urlText = ref('')
 const epgText = ref('')
 
 const form = reactive({
-    auto_check_after_import: false,
-  auto_correct_after_epg: false,
-  auto_delete_invalid_after_check: false,
-  auto_export_after_check: false,
   auto_group: true,
-  auto_load_epg: false,
   cache_default_geo: '中国',
   cache_default_group: '杂项频道',
   cache_default_stack: 'IPv4',
   cache_file_name: 'channels_cache.json',
-  check_auto_interval: 0,
-  check_hls: false,
-  checker_batch_size: 50,
   check_retries: 1,
   check_threads: 20,
   check_timeout: 5,
@@ -1049,10 +961,6 @@ const form = reactive({
   external_player: 'vlc',
   external_player_path: '',
   foreign_group_name: '外国频道',
-  latency_grade_a_threshold: 500,
-  latency_grade_b_threshold: 2000,
-  load_cache_on_startup: true,
-  max_connections: 100,
   mirror: '不使用加速',
   mirror_history_limit: 50,
   player_hide_controls_delay_ms: 3000,
@@ -1063,24 +971,16 @@ const form = reactive({
   player_update_interval_ms: 500,
   player_window_topmost: false,
   prefer_external_player: false,
-  probe_watchable: false,
   proxy: '',
   repair_check_timeout: 5,
-  repair_hd_size_threshold: 500000,
   repair_max_retries: 1,
   repair_max_workers: 10,
-  repair_sd_size_threshold: 100000,
-  reset_filter_after_check: false,
-  save_cache_on_exit: true,
-  save_window_geometry: false,
   scan_max_workers: 40,
   scan_timeout: 5,
   scraper_retries: 2,
   scraper_threads: 10,
   scraper_timeout: 20,
-  show_quality_column: false,
   smart_paste_default_group: '粘贴导入',
-  startup_delay_ms: 0,
   stats_card_position: '顶部',
   stats_card_visible: true,
   theme: '#409EFF',
@@ -1362,6 +1262,18 @@ async function resetSettings() {
   } catch { /* ignore */ }
 }
 
+function reportSaveResult(dest, okText) {
+  if (typeof dest === 'string' && !dest.startsWith('ERROR')) {
+    ElMessage.success(okText)
+  } else if (dest === null) {
+    ElMessage.info('取消保存')
+  } else if (dest === undefined) {
+    ElMessage.info('仅桌面版支持保存到本地文件')
+  } else {
+    ElMessage.error('备份保存失败：' + (dest?.error || '未知错误'))
+  }
+}
+
 async function exportBackup() {
   exporting.value = true
   try {
@@ -1372,8 +1284,7 @@ async function exportBackup() {
       return
     }
         const dest = await callNative('save_file_from', data.path, data.filename || 'iptv_backup.zip')
-    if (dest) ElMessage.success('备份已保存')
-    else ElMessage.info('取消保存')
+    reportSaveResult(dest, '备份已保存')
   } catch {
     ElMessage.error('导出备份失败，请检查后端服务')
   }
@@ -1563,8 +1474,7 @@ async function exportEncrypted() {
     const { data } = await exportApi.exportEncryptedBackup(pass)
     if (!data.path) { ElMessage.error('加密导出失败'); exportingEnc.value = false; return }
     const dest = await callNative('save_file_from', data.path, data.filename || 'iptv_backup.enc')
-    if (dest) ElMessage.success('加密备份已保存')
-    else ElMessage.info('取消保存')
+    reportSaveResult(dest, '加密备份已保存')
   } catch (e) {
     ElMessage.error('加密导出失败：' + (e.response?.data?.detail || e.message))
   }

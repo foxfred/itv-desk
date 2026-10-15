@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.services.alias_service import get_service as get_alias_service, SEED
+from app.services.alias_service import get_service as get_alias_service
 
 router = APIRouter(prefix="/api/aliases", tags=["aliases"])
 
@@ -48,8 +48,3 @@ def alias_import(body: ImportReq):
 @router.post("/reset")
 def alias_reset():
     return get_alias_service().reset_seed()
-
-
-@router.get("/seed")
-def alias_seed():
-    return {k: list(v) for k, v in sorted(SEED.items())}

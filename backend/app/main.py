@@ -1,53 +1,79 @@
+import json
 import os
 import sys
-import json
 import threading
 
-#
-if os.environ.get("ITV_DATA_DIR"):
-    DATA_DIR = os.path.abspath(os.environ["ITV_DATA_DIR"])
-    RES_DIR = DATA_DIR
-    if getattr(sys, 'frozen', False):
-        RES_DIR = getattr(sys, '_MEIPASS', DATA_DIR)
-elif getattr(sys, 'frozen', False):
-    RES_DIR = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-    DATA_DIR = os.path.dirname(os.path.abspath(sys.executable))
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    RES_DIR = BASE_DIR
-    DATA_DIR = os.path.dirname(BASE_DIR)
+# 数据目录解析收敛到 app/paths.py 单一口径（详见该模块 docstring）。
+# 先把 backend 包根塞进 sys.path，才能 import app.paths。
+_PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PKG_ROOT not in sys.path:
+    sys.path.insert(0, _PKG_ROOT)
+
+from app.paths import DATA_DIR, RES_DIR
 
 for p in (RES_DIR, DATA_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
+# 数据目录可能尚不存在（首次运行 / 用户把 ITV_DATA_DIR 指到新目录），
+# 不建就会在下面 os.chdir 直接抛 FileNotFoundError，应用起不来。
+if not os.path.isdir(DATA_DIR):
+    os.makedirs(DATA_DIR, exist_ok=True)
 os.chdir(DATA_DIR)
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from app.config import Config, FileManager
+from app.realtime import publish_event
+from app.routes import (
+    ai,
+    aliases,
+    backup,
+    channels,
+    check,
+    config,
+    dlna,
+    epg,
+    export,
+    gateway,
+    h264_proxy,
+    hdhomerun,
+    history,
+    namefix,
+    play_history,
+    realtime,
+    record,
+    repair,
+    rtmp_proxy,
+    scrape,
+    screenshots,
+    stream_proxy,
+    subscriptions,
+)
+from app.routes import app as app_routes
+from app.routes import rules as rules_router
+from app.routes import scan as scan_router
+from app.routes import stats as stats_router
+from app.services.ai_service import AIService
 from app.services.channel_service import ChannelService
-from app.services.scrape_service import ScrapeService
 from app.services.check_service import CheckService
-from app.services.epg_service import EpgService
-from app.services.rule_service import RuleService
-from app.services.repair_service import RepairService
-from app.services.export_service import ExportService
-from app.services.subscription_service import SubscriptionService
 from app.services.dlna_service import DlnaService
-from app.services.scan_service import ScanService
-from app.services.screenshot_service import ScreenshotService
-from app.services.stats_service import StatsService
+from app.services.epg_service import EpgService
+from app.services.export_service import ExportService
+from app.services.hdhomerun_service import HdHomeRunService
 from app.services.namefix_service import NamefixService
 from app.services.record_service import RecordService
-from app.services.ai_service import AIService
-from app.services.hdhomerun_service import HdHomeRunService
-from app.routes import channels, scrape, check, epg, rules as rules_router, repair, export, config, history, play_history, backup, realtime, subscriptions, dlna, stream_proxy, rtmp_proxy, h264_proxy, app as app_routes, scan as scan_router, screenshots, gateway, aliases, stats as stats_router, namefix, record, ai, hdhomerun
-from app.realtime import publish_event
-
+from app.services.repair_service import RepairService
+from app.services.rule_service import RuleService
+from app.services.scan_service import ScanService
+from app.services.scrape_service import ScrapeService
+from app.services.screenshot_service import ScreenshotService
+from app.services.stats_service import StatsService
+from app.services.subscription_service import SubscriptionService
 from app.version import APP_VERSION as _APP_VERSION
+
 app = FastAPI(title="IPTV Core API", version=_APP_VERSION)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
@@ -455,8 +481,8 @@ if _FRONTEND_DIST:
     _index_mtime = os.path.getmtime(os.path.join(_FRONTEND_DIST, "index.html"))
 
     def _serve_index_html():
-        import uuid as _uuid
         import re as _re
+        import uuid as _uuid
         _v = _uuid.uuid4().hex[:12]
         html_path = os.path.join(_FRONTEND_DIST, "index.html")
         with open(html_path, "r", encoding="utf-8") as f:
@@ -489,7 +515,7 @@ if _FRONTEND_DIST:
 
     @app.get("/player.html", include_in_schema=False)
     def serve_player():
-        log(f"[serve_player] 返回 index.html (player)")
+        log("[serve_player] 返回 index.html (player)")
         return _serve_index_html()
 
     @app.get("/favicon.ico", include_in_schema=False)
@@ -521,8 +547,9 @@ if _FRONTEND_DIST:
 
 
 def run_server(host="0.0.0.0", port=8000):
-    import uvicorn
     import traceback
+
+    import uvicorn
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w")
     if sys.stderr is None:

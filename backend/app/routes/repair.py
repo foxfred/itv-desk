@@ -1,9 +1,10 @@
-import os
 import re
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Optional
+
+from app.utils.helpers import save_channels_cache
 
 router = APIRouter(prefix="/api", tags=["repair"])
 
@@ -20,7 +21,7 @@ class FindReplaceReq(BaseModel):
     replace: str = ""
     field: str = "频道名"
     scope: str = "选中"
-    ids: List[int] = []
+    ids: list[int] = []
     case_sensitive: bool = False
 
 
@@ -39,11 +40,6 @@ def get_log():
     return log
 
 
-def get_data_dir():
-    from app.main import DATA_DIR
-    return DATA_DIR
-
-
 @router.post("/repair")
 def repair(body: RepairReq, repair_service=Depends(get_repair_service)):
     try:
@@ -59,16 +55,6 @@ def get_settings():
     from app.main import settings
     return settings
 
-
-def _save_cache(settings, channel_service):
-    from app.config import FileManager
-    try:
-        cache_file = settings.get("cache_file_name", "channels_cache.json")
-        with channel_service.lock:
-            data = channel_service.pool.copy()
-        FileManager.write_json_atomic(cache_file, data)
-    except Exception:
-        pass
 
 
 @router.post("/find-replace")
@@ -93,5 +79,5 @@ def find_replace(body: FindReplaceReq, channel_service=Depends(get_channel_servi
                 ch[key] = new
                 count += 1
     if count > 0:
-        _save_cache(settings, channel_service)
+        save_channels_cache(settings, channel_service)
     return {"count": count}

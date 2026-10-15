@@ -1,6 +1,6 @@
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -9,7 +9,7 @@ class RuleReq(BaseModel):
     frm: str
     to: str
     mode: str = "包含"
-    index: Optional[int] = None
+    index: int | None = None
 
 
 def get_rule_service():

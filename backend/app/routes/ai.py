@@ -1,6 +1,7 @@
+import time
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-import time
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -436,8 +437,9 @@ class DiagnoseReq(BaseModel):
 def ai_diagnose(body: DiagnoseReq, ai=Depends(get_ai)):
     """#9 播放故障诊断：读 app.log 尾部 + 上下文"""
     import os
-    from app import main
-    log_path = os.path.join(getattr(main, "DATA_DIR", "."), "app.log")
+
+    from app.paths import DATA_DIR as _data_dir
+    log_path = os.path.join(_data_dir, "app.log")
     tail = ""
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:

@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from app.models.channel import Base
 from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
+
+from app.models.channel import Base
 
 
 class PlaybackHistory(Base):

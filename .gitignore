@@ -9,6 +9,10 @@ frontend-new/dist/
 frontend-new/dist_*/
 dist_electron/
 dist_electron*/
+
+# 构建期生成的版本信息（vite.config.js 每次 build 都会重写 buildTime，
+# 跟踪它会让工作区永久处于"已修改"状态；它由构建产出，不入库）
+frontend-new/public/build-info.json
 release/*.zip
 
 # 运行期数据（用户本地状态，不入库）

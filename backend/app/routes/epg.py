@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/epg", tags=["epg"])
@@ -7,12 +7,6 @@ router = APIRouter(prefix="/api/epg", tags=["epg"])
 class EpgReq(BaseModel):
     url: str
     proxy: str = ""
-
-
-class EpgSourceReq(BaseModel):
-    url: str
-    proxy: str = ""
-    auto_refresh_interval: int = 0
 
 
 class SearchReq(BaseModel):
@@ -103,23 +97,12 @@ def epg_match(name: str = Query(...), epg_service=Depends(get_epg_service)):
     return epg_service.match_channel(name)
 
 
-@router.post("/set-source")
-def epg_set_source(body: EpgSourceReq, epg_service=Depends(get_epg_service)):
-    epg_service.save_source(body.url, body.proxy)
-    if body.auto_refresh_interval and body.auto_refresh_interval > 0:
-        epg_service.start_refresh_scheduler(body.auto_refresh_interval)
-    return epg_service.load_epg(body.url, body.proxy)
-
-
-@router.post("/refresh")
-def epg_refresh(epg_service=Depends(get_epg_service)):
-    return epg_service.refresh_from_source()
-
 @router.get("/catchup")
 def epg_catchup(name: str = Query(...), start: int = Query(...), stop: int = Query(0),
                 channel_service=Depends(get_channel_service),
                 settings=Depends(get_settings)):
     import datetime as _dt
+
     from app.utils.catchup import build_catchup_url, has_catchup
 
     if not settings.get("catchup_enabled", True):

@@ -1,12 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 export const usePlayerStore = defineStore('player', () => {
       const state = ref('hidden')     // 'hidden' | 'drawer' | 'pip' | 'full'
   const width = ref(480)          
-  const miniWidth = ref(360)     
-      const drawerPos = ref(null)    
-  const pipPos = ref(null)       
 
     const currentChannel = ref(null) 
   const channelList = ref([])      
@@ -56,10 +53,6 @@ export const usePlayerStore = defineStore('player', () => {
     if (['hidden', 'drawer', 'pip', 'full'].includes(s)) state.value = s
   }
 
-  function enterPip() {
-    if (state.value === 'drawer' || state.value === 'full') state.value = 'pip'
-  }
-
   function exitPip() {
     if (state.value === 'pip') state.value = 'drawer'
   }
@@ -73,11 +66,11 @@ export const usePlayerStore = defineStore('player', () => {
 
   return {
     // state
-    state, width, miniWidth, drawerPos, pipPos,
+    state, width,
     currentChannel, channelList, channelIndex,
     currentUrl, currentUrlNote,
     videoInfo,
     // actions
-    open, next, prev, setState, enterPip, exitPip, close,
+    open, next, prev, setState, exitPip, close,
   }
 })
