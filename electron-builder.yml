@@ -22,6 +22,12 @@ extraResources:
       - "!**/__pycache__/**"
       - "!*.pyc"
       - "!**/*.pyc"
+  - from: python-runtime
+    to: python
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
 
 win:
   target:

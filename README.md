@@ -26,9 +26,9 @@
 
 已安装旧版时，可在软件内「设置 → 更新」直接检测升级。
 
-> 本应用的形态是 **Electron 壳 + 系统 Python 跑后端源码**，安装包不含 Python 与后端依赖。
-> 因此升级后若新增了后端依赖，需要手动补一句（见下方「开发」）。
-> 没装也不影响其它功能，只是名称校正会提示「OCR 引擎不可用」。
+> 安装包**已内置 Python 运行时与后端依赖**（随包分发），下载安装后开箱即用，**无需自行安装 Python**。
+> 内置运行时由 `scripts/build_python_runtime.py` 生成，CI 打包时自动构建。
+> 若内置运行时缺失，软件会退回使用系统 PATH 中的 Python（仅开发/调试场景需要）。
 
 ## 开发
 
@@ -67,6 +67,7 @@ Electron + FastAPI + SQLite + Vue 3 + Element Plus
 
 > 每次发版在这里追加一条（版本号 + 日期 + 改了什么），**不要删除本小节**。
 
+- **v3.2.8** (2026-10-15): **安装包内置 Python 运行时 —— 终端用户无需再自行安装 Python**。① **根因**：安装版 / 便携版此前只打包了 Electron 壳、前端产物与后端源码，**不含 Python 解释器与后端依赖**；用户机器上没装 Python 时，后端进程根本无法启动，而 `spawn` 的 `error` 事件又没被监听（ENOENT 被静默吞掉）、也没有启动前预检、错误弹窗里还不带后端 stderr —— 三重掩盖之下，用户只能看到一句笼统的「后端服务在 8000 端口启动超时」，完全看不出真实原因。② **修复**：新增 `scripts/build_python_runtime.py`，把官方 Python 3.12 embeddable 包 + `backend/requirements.txt` 全部依赖（含 OCR 所需的 `opencv-python` / `onnxruntime` / `rapidocr-onnxruntime`）装配成 `python-runtime/`，由 `electron-builder.yml` 的 `extraResources` 打进安装包的 `resources/python/`；`electron/main.js` 新增 `resolvePython()`，按「随包内置运行时 → 环境变量 `IPTVCORE_PYTHON` 显式指定 → 系统 PATH」的顺序解析解释器，**内置运行时优先**。③ **错误提示分场景化**：新增启动前预检（异步 `spawn`，区分「找不到解释器」/「缺依赖」/「其他异常」），并给后端进程挂上 `error` 监听与 stderr 环形缓冲（末 40 行），失败弹窗会明确给出「解释器路径 + 来源（内置 / 环境变量 / 系统 PATH）+ 预检结论 + 后端输出末尾 20 行」，不再是一句「启动超时」。④ **兼容性**：开发态（`npm start`）行为不变，仍可用系统 Python；内置运行时缺失时自动回退系统 PATH（仅开发/调试需要）。⑤ 本版改动：新增 `scripts/build_python_runtime.py`、`electron/main.js`（+161 行）、`electron-builder.yml`、`.gitignore`、`.github/workflows/release.yml`（CI 自动构建运行时并校验），前端零改动、配置零迁移。
 - **v3.2.7** (2026-09-29): **修复「开代理就连不上」——本机/内网地址自动绕开代理**。① **根因**：代理开关一打开，**所有**请求都被塞进代理，包括 `http://127.0.0.1:8799`（本机 AI 网关）、`http://127.0.0.1:8000`（软件自身后端）、局域网 IPTV 源。代理会把 `127.0.0.1` 解析成**代理所在那台机器**的回环地址，或直接拒绝转发回环 → 表现为「关了代理一切正常、开了代理全都连不上」。② **修复**：新增 `network.is_local_url()` / `proxy_for_url()`，回环（`localhost` / `127.0.0.0/8` / `::1`）与私有网段（`10/8`、`172.16~31/16`、`192.168/16`、`*.local` / `*.lan`）**一律直连**，且连系统代理环境变量也一起屏蔽；公网地址仍照常走代理。覆盖全部网络出口：AI 文本与视觉调用、频道检测、订阅/EPG/抓取下载、台标抓取、更新检查、更新包下载。③ **顺带修掉一个老 bug**：`http_probe_channel()`（频道检测）在**开代理时必定失败** —— 它用 `build_opener(...).open(req, timeout=..., context=...)`，而 `OpenerDirector.open()` 根本不接受 `context` 参数，抛的 `TypeError` 被 `except: pass` 吞掉，于是开代理后所有频道都测不出来。现在统一改为 `HTTPSHandler(context=...)` 挂进 opener（`_no_proxy_opener()` / `_proxy_opener()`）。④ 本版只改 `backend/app/utils/network.py`（+ AI 调用、台标抓取、更新检查三处调用点），前端零改动、配置零迁移。
 - **v3.2.6** (2026-09-29): **AI 接口连接修复 + 错误提示智能化**。① **API 地址容错**：此前用户（和一些 AI 助手）会把「API 地址」字段填成完整 chat 路径 `http://host:port/v1/chat/completions`，而软件会再拼一次 `/chat/completions`，导致请求变成 `/v1/chat/completions/chat/completions` → 404。现在 `_norm_base()` 会自动剥掉末尾的 `/chat/completions`（和 `/completions`，含尾斜杠、不区分大小写），用户填完整路径也能直接跑。② **模型名错误友好化**：当 chat/completions 接口返回 `model_not_found` / 「没有任何已启用厂商声明模型」等"模型不存在"信号时，后端会自动再拉一次 `/v1/models`、把该端点可用模型列表（前 25 个 + 总数）附加到错误提示里，用户一眼看到端点真正有哪些模型、应改成哪一个；同时中英文错误模式都覆盖。③ 本版只改 AI 调用层：`backend/app/services/ai_service.py` 的 `_norm_base` + 新增 `_looks_like_model_not_found` / `_model_not_found_hint` + `chat()` / `chat_vision()` 错误处理；前端零改动、配置零迁移。
 - **v3.2.5** (2026-09-29): **设置系统瘦身与去重**。① **视觉模型两处合并为一处**：此前「频道名校正」页的「视觉模型兜底」与「AI 智能」页的「视觉模型」是两套独立配置（地址 / 模型名 / Key 要各填一遍），而两者调用的其实是同一个 OpenAI 兼容视觉端点；现在前端只保留「AI 智能 → 视觉模型」一处，原位置的四个输入框移除、改为指引文案，「连通性测试」按钮一并迁移过去。后端 `namefix_service._vision_conf()` 的兼容逻辑保留 —— 老用户已填的旧配置继续生效（AI 视觉配置优先，留空才回退旧值），**不会被清空**。② **主题设置真正生效、且能随备份迁移**：`theme` / `theme_mode` / `theme_preset` 三个键此前**从未被任何代码读取**（主题实际只存浏览器 localStorage，导出 settings.json 时主题会丢）；现在改预设主题色 / 深色开关 / 内置皮肤 / 自定义颜色都会同步写入 settings.json，打开设置页时以 settings 为真相源恢复，老用户首次打开会用当前主题回填一次（升级后主题不变）。同时把 `theme` 的默认值由「浅色」改为主色值 `#409EFF`，语义对齐。③ **清理 160 个死配置键**：`config_*`(59) / `toolbar_*`(22) / `filter_*`(13) / `search_box_*`(4) / `table_*`(4) 等共 **157 个键**在 `Config.DEFAULTS` 里定义却**前后端从未读取**（主题微调重构后的遗留），连同 3 个重复定义（`color_video_bg` / `default_volume` / `default_playback_speed` 各写了两遍）一并删除，`DEFAULTS` 从 **341 键精简到 181 键**；仅保留确实被读取的 `color_video_bg`、`stats_card_position`、`stats_card_visible`。

@@ -1,6 +1,7 @@
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const { spawn } = require('child_process');
 const net = require('net');
@@ -8,9 +9,29 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 
 const BACKEND_PORT = Number(process.env.IPTVCORE_PORT) || 8000;
 const BASE_URL = `http://127.0.0.1:${BACKEND_PORT}`;
-const PYTHON_EXE = process.env.IPTVCORE_PYTHON || 'python';
 
 const APP_ROOT = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
+
+// 解析 Python 解释器：随包内置运行时优先（用户无需自行安装 Python），
+// 其次环境变量显式指定（开发/调试），最后才退回系统 PATH。
+function resolvePython() {
+  if (process.env.IPTVCORE_PYTHON) {
+    return { exe: process.env.IPTVCORE_PYTHON, source: 'env' };
+  }
+  const win = process.platform === 'win32';
+  const candidates = win
+    ? [path.join(APP_ROOT, 'python', 'python.exe'),
+       path.join(APP_ROOT, 'python-runtime', 'python.exe')]
+    : [path.join(APP_ROOT, 'python', 'bin', 'python3'),
+       path.join(APP_ROOT, 'python-runtime', 'bin', 'python3')];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return { exe: p, source: 'bundled' }; } catch { /* ignore */ }
+  }
+  return { exe: win ? 'python' : 'python3', source: 'system' };
+}
+
+const PYTHON = resolvePython();
+const PYTHON_EXE = PYTHON.exe;
 
 let mainWindow = null;
 let playerWindow = null;
@@ -65,10 +86,26 @@ async function killOccupyingPort(port) {
   })
 }
 
+const STDERR_TAIL_LINES = 40;
+let backendStderrTail = [];
+let backendSpawnError = null;
+
+function pushStderrTail(text) {
+  for (const line of String(text).split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    backendStderrTail.push(line);
+  }
+  if (backendStderrTail.length > STDERR_TAIL_LINES) {
+    backendStderrTail = backendStderrTail.slice(-STDERR_TAIL_LINES);
+  }
+}
+
 function startBackend() {
   const backendMain = path.join(APP_ROOT, 'backend', 'main.py');
-          const DATA_DIR = app.isPackaged ? path.dirname(process.execPath) : APP_ROOT;
-      const FRONTEND_DIR = path.join(APP_ROOT, 'frontend-new', 'dist');
+  const DATA_DIR = app.isPackaged ? path.dirname(process.execPath) : APP_ROOT;
+  const FRONTEND_DIR = path.join(APP_ROOT, 'frontend-new', 'dist');
+  backendSpawnError = null;
+  backendStderrTail = [];
   backendProcess = spawn(PYTHON_EXE, [backendMain], {
     cwd: DATA_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -80,8 +117,17 @@ function startBackend() {
     },
   });
   const tag = '[backend]';
+  // 关键：监听 error，否则解释器不存在（ENOENT）时会被静默吞掉，
+  // 最终只表现为「启动超时」，掩盖真实原因。
+  backendProcess.on('error', (err) => {
+    backendSpawnError = err;
+    console.error(`${tag} 进程启动失败: ${err.code || ''} ${err.message}`);
+  });
   backendProcess.stdout.on('data', (d) => process.stdout.write(`${tag} ${d}`));
-  backendProcess.stderr.on('data', (d) => process.stderr.write(`${tag} ${d}`));
+  backendProcess.stderr.on('data', (d) => {
+    process.stderr.write(`${tag} ${d}`);
+    pushStderrTail(d.toString());
+  });
   backendProcess.on('exit', (code) => {
     console.log(`${tag} exited with code ${code}`);
     backendProcess = null;
@@ -113,6 +159,99 @@ function waitBackend(timeoutMs = 60000) {
     };
     tryOnce();
   });
+}
+
+
+const REQUIRED_IMPORTS = 'fastapi, uvicorn, sqlalchemy, aiosqlite, bs4, lxml, aiohttp, requests';
+
+let lastPreflight = null;
+
+// 启动前预检：区分「找不到解释器」「缺依赖」「其他异常」，避免笼统地报「启动超时」。
+// 用异步 spawn 而非 spawnSync —— spawnSync 在 Windows 上可能抛 EBUSY。
+// 预检只用于改善错误提示，不阻断启动（除非明确找不到解释器）。
+function preflightPython() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (r) => { if (!settled) { settled = true; resolve(r); } };
+    let child;
+    try {
+      child = spawn(PYTHON_EXE, ['-c', `import ${REQUIRED_IMPORTS}`], {
+        windowsHide: true,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
+    } catch (e) {
+      finish({ ok: false, kind: 'spawn-error', detail: e.message });
+      return;
+    }
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.on('error', (e) => {
+      if (e.code === 'ENOENT') {
+        finish({ ok: false, kind: 'no-python', detail: `找不到可执行文件：${PYTHON_EXE}` });
+      } else {
+        finish({ ok: false, kind: 'spawn-error', detail: `${e.code || ''} ${e.message}`.trim() });
+      }
+    });
+    child.on('close', (code) => {
+      if (code === 0) return finish({ ok: true });
+      const tail = stderr.trim().split(/\r?\n/).filter(Boolean).slice(-4).join('\n');
+      finish({ ok: false, kind: 'missing-deps', detail: tail || `退出码 ${code}` });
+    });
+    setTimeout(() => {
+      try { child.kill(); } catch { /* ignore */ }
+      finish({ ok: false, kind: 'spawn-error', detail: '预检超时' });
+    }, 25000);
+  });
+}
+
+function pythonSourceLabel() {
+  if (PYTHON.source === 'bundled') return '随包内置运行时';
+  if (PYTHON.source === 'env') return '环境变量 IPTVCORE_PYTHON 指定';
+  return '系统 PATH 中的 Python';
+}
+
+function showPreflightError(pre) {
+  const head = pre.kind === 'no-python'
+    ? '未找到可用的 Python 解释器，后端服务无法启动。'
+    : pre.kind === 'missing-deps'
+      ? 'Python 解释器可用，但缺少后端所需的依赖库。'
+      : '启动 Python 解释器时发生错误。';
+  const hint = PYTHON.source === 'bundled'
+    ? '安装包内置的运行时可能已损坏，建议重新下载安装本软件。'
+    : '开发/调试环境下请安装 Python 3.12 并执行 pip install -r backend/requirements.txt，'
+      + '或用环境变量 IPTVCORE_PYTHON 指定解释器路径。';
+  const body = [
+    head,
+    '',
+    `解释器：${PYTHON_EXE}`,
+    `来源：${pythonSourceLabel()}`,
+    '',
+    '详情：',
+    pre.detail || '(无)',
+    '',
+    hint,
+  ].join('\n');
+  console.error('[main] 预检失败:', head, pre.detail);
+  dialog.showErrorBox('后端启动失败', body);
+}
+
+function showTimeoutError(err) {
+  const tail = backendStderrTail.slice(-20).join('\n');
+  const body = [
+    `后端服务在 ${BACKEND_PORT} 端口启动超时。`,
+    '',
+    `解释器：${PYTHON_EXE}`,
+    `来源：${pythonSourceLabel()}`,
+  ];
+  if (backendSpawnError) {
+    body.push(`进程错误：${backendSpawnError.code || ''} ${backendSpawnError.message}`);
+  }
+  if (lastPreflight && !lastPreflight.ok) {
+    body.push(`预检结果：${lastPreflight.kind} — ${lastPreflight.detail}`);
+  }
+  body.push('', '后端输出（末尾 20 行）：', tail || '(无输出)');
+  console.error('[main] 后端启动超时:', err.message);
+  dialog.showErrorBox('后端启动失败', body.join('\n'));
 }
 
 
@@ -268,13 +407,21 @@ if (!gotLock) {
         return
       }
     }
+    const pre = await preflightPython();
+    lastPreflight = pre;
+    // 只有「明确找不到解释器」才阻断启动；其余预检异常（如环境导致的 spawn 失败）
+    // 不阻断，交给 waitBackend 判定，避免预检自身的问题挡掉正常流程。
+    if (!pre.ok && pre.kind === 'no-python') {
+      showPreflightError(pre);
+      app.quit();
+      return;
+    }
     startBackend();
     try {
       await waitBackend();
     } catch (e) {
       console.error('[main] 后端启动失败:', e.message);
-      const { dialog } = require('electron');
-      dialog.showErrorBox('后端启动失败', `FastAPI 后端在 ${BACKEND_PORT} 端口启动超时。\n请确认 Python 环境可用：${PYTHON_EXE}`);
+      showTimeoutError(e);
       app.quit();
       return;
     }

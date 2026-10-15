@@ -75,3 +75,7 @@ _lockcheck.txt
 _make_zip.py
 ai_usage.json
 ai_cache.json
+
+# 内置 Python 运行时（scripts/build_python_runtime.py 生成，约 340MB，随包分发不入库）
+python-runtime/
+_build_cache/
