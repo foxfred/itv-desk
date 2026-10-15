@@ -19,6 +19,14 @@ import sys
 import urllib.request
 import zipfile
 
+# Windows CI 的 stdout 可能是 cp1252 等非 UTF-8 代码页，此时 print 中文会抛
+# UnicodeEncodeError（position 15-16），让构建在第一步就失败。这里强制切到 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "python-runtime")
 CACHE_DIR = os.path.join(ROOT, "_build_cache")
