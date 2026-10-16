@@ -53,6 +53,7 @@ _trash_*/
 
 # 工具/IDE 内部目录
 .workbuddy/
+.workbuddy-ai/
 .codebuddy/
 __pycache__/
 *.pyc
